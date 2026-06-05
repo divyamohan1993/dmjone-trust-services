@@ -24,6 +24,8 @@ export const ERROR_CODE = {
   // Signing / log
   SIGNING_FAILED: 'SIGNING_FAILED',
   LOG_APPEND_FAILED: 'LOG_APPEND_FAILED',
+  /** Transient: the transparency/audit head moved under us; caller recomputes + retries. */
+  LOG_CONFLICT: 'LOG_CONFLICT',
   ANCHOR_FAILED: 'ANCHOR_FAILED',
 } as const;
 

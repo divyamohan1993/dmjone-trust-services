@@ -74,7 +74,8 @@ Because ML-DSA covers `pdfSha256`, and `pdfSha256` is the hash of the already-PA
 - **1-bit tamper detection.** Any change to the distributed PDF bytes → `hash(uploaded) ≠ pdfSha256` → `TAMPERED`. Any change to a field → ML-DSA verify fails. Demonstrated live on the verify page (flip-a-bit demo).
 - **Rendering is NOT required to be byte-reproducible.** No verify path re-renders; the system hashes and serves the exact persisted signed bytes. Fonts/images are bundled only for correct appearance + offline rendering. (Chasing deterministic Chromium output — `/CreationDate`, `/ID`, font subsetting — is explicitly out of scope.)
 - **Transparency log.** Append-only hash-chain: `head_n = SHA-256(leaf_n ‖ head_{n-1})`, `leaf_n = SHA-256(canonicalPayload_n)`. Each new head is ML-DSA-signed (Signed Tree Head). 
-- **External anchor (free).** Scheduled job publishes the latest signed head to (a) a public GitHub repo (commit = immutable public timestamp) and (b) OpenTimestamps (Bitcoin anchor). Anyone can prove the set wasn't altered or back-dated.
+- **External anchor (free).** The latest signed head is published (best-effort, per-issue in v1) to (a) a public GitHub repo (commit = immutable public timestamp) and (b) OpenTimestamps (Bitcoin anchor). Anyone can prove the set wasn't altered or back-dated.
+- **Per-cert validity vs. anchor (informational).** A credential's `valid` outcome = ML-DSA signature ✓ ∧ log inclusion ✓ ∧ not revoked. The external anchor is an *additional* tamper-evidence layer (proving the log itself wasn't rewritten/back-dated) and does **not** gate `valid` — anchoring is periodic/best-effort, so a just-issued cert is genuinely valid before its anchor lands. Anchor coverage for a cert = latest published anchor `headSeq ≥ cert.logSeq` (anchoring head N proves every leaf ≤ N via the chain). Surfaced as "anchored" vs "anchor pending".
 - **Key custody.** Signing keys (PAdES X.509 private key + ML-DSA secret key) generated once, **encrypted at rest** (AES-256-GCM, master key from Secret Manager), stored in Secret Manager. Loaded into memory **only in the issuer service**, used **only at issue-time**. The public `verify` service holds **no** private key — only public keys.
 
 ---
@@ -161,9 +162,20 @@ Dependency note: A, D, E depend only on `shared`; B, C depend on A, D, E via int
 
 ---
 
-## 10. Out of scope (v1, YAGNI)
+## 10. Out of scope for v1
 
-Real blockchain · PAdES-LTV / RFC-3161 timestamps · multi-tenant / multi-issuer · licensed-CA DSC · SMS OTP · HTTPS Load Balancer / mTLS · revocation CRL/OCSP (a simple status flag covers revocation in v1).
+### Phase 2 — add once v1 is complete & verified (per user, 2026-06-05)
+- **PAdES-LTV / RFC-3161 timestamps** — extend the (pluggable) HybridSigner with a TSA timestamp + DSS/LTV.
+- **Multi-tenant / multi-issuer** — add a tenant dimension to the data model + auth.
+- **SMS OTP** — add SMS as an additional admin-recovery channel via the OTP-channel abstraction (accepts the per-message cost at that point).
+
+### Deferred indefinitely (cost / not needed)
+- **HTTPS Load Balancer / mTLS** — standing metered cost; WebAuthn already delivers the hardware-key guarantee. (User: "it will just use more money. defer it.")
+- **Real blockchain** — gas/hosting cost; the signed hash-chain + free external anchor covers tamper-evidence.
+- **Licensed-CA DSC** — paid; slots into the pluggable signer when the IT Act §85B presumption is wanted.
+- **Revocation CRL/OCSP** — a status flag covers revocation in v1.
+
+The v1 architecture is built so every Phase-2 item slots in without re-architecture (pluggable signer, OTP-channel abstraction, evolvable data model).
 
 ---
 

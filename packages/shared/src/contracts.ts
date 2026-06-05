@@ -110,6 +110,17 @@ export interface AnchorPublisher {
   publish(head: SignedTreeHead): Promise<AnchorProof>;
 }
 
+/**
+ * Argon2id hashing for the candidate download password. Implemented by crypto
+ * and injected into BOTH issuer (hash at issue-time) and verify (check at
+ * download-time) so the encoding is guaranteed identical. `hash` returns a
+ * self-describing PHC string (params embedded); `verify` is constant-time.
+ */
+export interface PasswordHasher {
+  hash(password: string): Promise<string>;
+  verify(password: string, stored: string): Promise<boolean>;
+}
+
 // ─────────────────────────────── Data (Stream D) ───────────────────────────
 
 export interface CredentialRepository {
@@ -123,10 +134,14 @@ export interface CredentialRepository {
   }>;
 }
 
-/** Chunked signed-PDF storage (Firestore subcollection under the hood). */
+/** What a stored blob represents. A credential has up to two: the signed
+ * certificate, and its §63 certificate-of-authenticity. */
+export type BlobKind = 'certificate' | 'section63';
+
+/** Chunked PDF storage (Firestore subcollection under the hood). */
 export interface BlobStore {
-  put(credentialId: string, bytes: Uint8Array): Promise<void>;
-  get(credentialId: string): Promise<Uint8Array | null>;
+  put(credentialId: string, kind: BlobKind, bytes: Uint8Array): Promise<void>;
+  get(credentialId: string, kind: BlobKind): Promise<Uint8Array | null>;
 }
 
 export interface LogRepository {

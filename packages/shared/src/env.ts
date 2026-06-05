@@ -27,9 +27,9 @@ const baseEnvSchema = z.object({
   ISSUER_CONTACT_PHONE: z.string().default('+91 79799 30293'),
 
   MASTER_ENCRYPTION_KEY: z.string().optional(),
-  ARGON2_MEMORY_KIB: z.coerce.number().int().positive().default(65536),
-  ARGON2_ITERATIONS: z.coerce.number().int().positive().default(3),
-  ARGON2_PARALLELISM: z.coerce.number().int().positive().default(4),
+  ARGON2_MEMORY_KIB: z.coerce.number().int().positive().default(19456),
+  ARGON2_ITERATIONS: z.coerce.number().int().positive().default(2),
+  ARGON2_PARALLELISM: z.coerce.number().int().positive().default(1),
   SESSION_SECRET: z.string().min(16),
   ADMIN_SESSION_TTL_SECONDS: z.coerce.number().int().positive().default(900),
   MAX_AUTH_FAILURES: z.coerce.number().int().positive().default(10),

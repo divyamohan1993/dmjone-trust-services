@@ -1,0 +1,21 @@
+{
+  "name": "@dmjone/e2e",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@dmjone/shared": "workspace:*",
+    "@dmjone/crypto": "workspace:*",
+    "@dmjone/data": "workspace:*",
+    "@dmjone/render": "workspace:*",
+    "@dmjone/verify": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

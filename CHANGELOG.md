@@ -12,3 +12,38 @@ All notable changes to this project are documented here. Format follows
   certificate system (`docs/superpowers/specs/2026-06-05-quantum-certificate-system-design.md`).
 - 2026-06-05: Monorepo skeleton (pnpm workspaces), strict TypeScript base config,
   environment contract (`.env.example`), changelog, README.
+- 2026-06-05: `@dmjone/crypto` cryptography core — ML-DSA-65 + RSA-3072 PAdES key
+  generation, hybrid signer (PAdES PKCS#7 via incremental-update placeholder so
+  the rendered bytes are preserved verbatim, + detached ML-DSA over the shared
+  canonical payload), signature verifier (ML-DSA + standalone PAdES ByteRange
+  integrity check), transparency-log hash chain with Signed Tree Heads (pure
+  `nextHead` + ML-DSA signing), a graceful-degrading external anchor publisher
+  (GitHub contents API + OTS stub), and an Argon2id password hasher
+  (self-describing PHC strings, constant-time verify) for the gated download
+  password. 44 vitest tests; typecheck + tests green.
+- 2026-06-05: `@dmjone/data` persistence — in-memory + Firestore/Secret-Manager
+  families of every repository (credentials, chunked PDF blobs by kind, the
+  transparency log with transactional optimistic-concurrency appends, a
+  hash-chained audit log, anchors, admin, secrets). 41 tests (+6 emulator-gated).
+- 2026-06-05: `@dmjone/render` — pixel-faithful certificate + BSA-2023 §63
+  certificate-of-authenticity rendering via headless Chromium, fonts + images
+  inlined as base64 (zero network), raw-Chromium classic-xref output (PAdES-safe).
+  44 tests incl. real-Chromium integration.
+- 2026-06-05: `@dmjone/verify` — public, keyless verification service: distinct
+  web credential page (SSR'd cryptographic verdict), id/file verification with
+  1-bit tamper detection, enumeration-safe password-gated download, §63 serving,
+  nonce-CSP + full security headers. 52 tests.
+- 2026-06-05: `@dmjone/issuer` — admin/issuing service: WebAuthn passkeys + TOTP
+  + one-time recovery codes (passkey-vs-recovery lockout split), the issuance
+  pipeline (render → hybrid-sign → log-append-with-retry → store → best-effort
+  anchor → audit), super-admin panel, server-rendered admin UI. 49 tests.
+- 2026-06-05: `@dmjone/brand` design tokens; orchestrator composition roots
+  (issuer/verify), AES-256-GCM secret sealing + key provisioning (private keys
+  sealed at rest, public material plain for the keyless verifier).
+- 2026-06-05: Infrastructure — multi-stage Dockerfiles (Chromium issuer /
+  distroless verify), Firestore deny-all rules + indexes, idempotent
+  `autoconfig.sh` + Cloud Build, GitHub Actions CI, and `DEPLOY.md` with the
+  `ghs.googlehosted.com` domain-mapping runbook (asia-east1, scale-to-zero).
+- 2026-06-05: End-to-end test proving the streams compose — real Chromium render
+  → hybrid-sign → verify → byte-exact gated download → flip-a-bit tamper
+  detection → SSR credential page. Full workspace builds clean; 237 tests green.

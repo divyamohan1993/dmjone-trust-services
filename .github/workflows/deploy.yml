@@ -1,0 +1,42 @@
+name: build-images
+
+# Builds the issuer + verify container images and pushes them to the free
+# GitHub Container Registry (ghcr.io). Cloud Run then pulls these public images.
+# Deliberately ₹0: public packages = free unlimited storage, and the images
+# carry NO secrets (keys are generated at runtime + held in Secret Manager).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  images:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - service: issuer
+            dockerfile: infra/Dockerfile.issuer
+          - service: verify
+            dockerfile: infra/Dockerfile.verify
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ghcr.io/${{ github.repository }}/${{ matrix.service }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

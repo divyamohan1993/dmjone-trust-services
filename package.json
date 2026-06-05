@@ -1,0 +1,29 @@
+{
+  "name": "dmjone-trust-services",
+  "version": "0.1.0",
+  "private": true,
+  "description": "dmj.one Trust Services — quantum-verifiable certificate issuing & verification suite",
+  "packageManager": "pnpm@10.30.1",
+  "engines": {
+    "node": ">=22"
+  },
+  "type": "module",
+  "scripts": {
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "test": "pnpm -r --if-present test",
+    "dev:issuer": "pnpm --filter @dmjone/issuer dev",
+    "dev:verify": "pnpm --filter @dmjone/verify dev"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "eslint": "^9.17.0",
+    "prettier": "^3.4.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.18.1",
+    "vitest": "^2.1.8"
+  }
+}

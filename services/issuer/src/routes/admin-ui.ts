@@ -70,8 +70,13 @@ ${provisioned
 </div>`
     : html`<div class="card">
   <h2>Register the administrator passkey</h2>
-  <p>No administrator exists yet. Register the first passkey to bootstrap this issuer. After this,
-  registration is locked to authenticated sessions only.</p>
+  <p>No administrator exists yet. Enter the one-time setup token (from your deployment
+  secrets) and register the first passkey to bootstrap this issuer. After this, registration
+  is locked to authenticated sessions only; the token is required again only after a factory
+  reset.</p>
+  <label for="setup-token">Setup token</label>
+  <input id="setup-token" name="setupToken" type="password" autocomplete="off"
+    spellcheck="false" autocapitalize="off" />
   <label for="pk-label">Passkey label</label>
   <input id="pk-label" name="label" value="primary" autocomplete="off" />
   <p><button type="button" data-action="register">Register administrator passkey</button></p>

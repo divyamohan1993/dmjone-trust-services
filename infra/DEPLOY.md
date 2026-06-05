@@ -88,6 +88,34 @@ gcloud run deploy verify \
   --set-env-vars=SERVICE_ROLE=verify,GCP_PROJECT_ID=dmjone,GCP_REGION=asia-east1,ISSUER_PUBLIC_URL=https://issue.dmj.one,VERIFY_PUBLIC_URL=https://verify.dmj.one
 ```
 
+## 3.5 Secrets + first-admin bootstrap
+
+Two issuer secrets, each its OWN Secret Manager entry (never reuse one for another):
+
+```bash
+printf '%s' "$(openssl rand -base64 32)" | gcloud secrets create master-encryption-key --data-file=-
+printf '%s' "$(openssl rand -base64 24)" | gcloud secrets create admin-setup-token   --data-file=-
+for S in master-encryption-key admin-setup-token; do
+  gcloud secrets add-iam-policy-binding "$S" \
+    --member="serviceAccount:issuer-sa@dmjone.iam.gserviceaccount.com" \
+    --role="roles/secretmanager.secretAccessor"
+done
+```
+Mount them into the issuer (add to its `gcloud run deploy`):
+```
+  --set-secrets=MASTER_ENCRYPTION_KEY=master-encryption-key:latest,ADMIN_SETUP_TOKEN=admin-setup-token:latest  # pragma: allowlist secret
+```
+
+**Bootstrap your admin (once).** The first passkey registration is gated by
+`ADMIN_SETUP_TOKEN` (fail-closed in production — the issuer refuses to bootstrap if
+it's unset). After deploy:
+
+1. `gcloud secrets versions access latest --secret=admin-setup-token` → copy it. <!-- pragma: allowlist secret -->
+2. Open `https://issue.dmj.one`, register your passkey, supplying that token.
+3. The instant your passkey is enrolled the bootstrap window **closes** — adding
+   more passkeys then requires your session. A factory reset re-opens it **only**
+   with a fresh token. This is what enforces "only you can issue."
+
 ## 4. Domain mappings → the CNAMEs you add in Cloudflare
 
 First verify domain ownership once (`gcloud domains verify dmj.one` → follow the TXT step), then:

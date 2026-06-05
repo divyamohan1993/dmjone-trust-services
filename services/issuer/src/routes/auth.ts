@@ -5,10 +5,14 @@
  * Security model:
  *  - Login = passkey OR (recovery code + TOTP). A verified passkey alone mints a
  *    session; TOTP is NOT additionally required after a passkey.
- *  - Registration is gated: allowed only at bootstrap (no admin yet) OR with a
- *    valid admin session (adding keys / post-recovery). Recovery reuses this —
- *    recovery+TOTP mints a `via:'recovery'` session which then authorises the
- *    normal register flow, so there is exactly one register door.
+ *  - Registration is gated: the unprovisioned bootstrap path (first passkey, or
+ *    re-bootstrap after a factory reset / empty restore) requires a valid
+ *    ADMIN_SETUP_TOKEN and is fail-closed in production; the provisioned path
+ *    requires a valid admin session (adding keys / post-recovery). Recovery
+ *    reuses the latter — recovery+TOTP mints a `via:'recovery'` session which
+ *    then authorises the normal register flow, so there is exactly one register
+ *    door. The token closes the land-grab window that recurs whenever passkeys
+ *    hit zero. See evaluateRegistration.
  *  - Brute-force: passkey failures back off only (never permanent); the
  *    guessable recovery+TOTP path backs off AND permanently locks after
  *    MAX_AUTH_FAILURES. The lock is checked BEFORE any Argon2 work.
@@ -30,11 +34,12 @@ import type { IssuerHonoEnv } from '../http/context.js';
 import { clearSession, issueSession, readSession } from '../auth/session.js';
 import {
   emptyAdmin,
+  evaluateRegistration,
   freshAdminId,
   getAdmin,
   isProvisioned,
-  mayRegister,
 } from '../auth/admin-store.js';
+import type { RegistrationGate } from '../auth/admin-store.js';
 import { evaluateLock, recordFailure, recordSuccess } from '../auth/lockout.js';
 import { consumeRecoveryCode, generateRecoveryCodes } from '../auth/recovery.js';
 import { enrollTotp, verifyTotp } from '../auth/totp.js';
@@ -71,6 +76,26 @@ async function audit(
   });
 }
 
+const SETUP_TOKEN_HEADER = 'x-setup-token';
+
+/** Map a denied {@link RegistrationGate} to its uniform AppError. */
+function denyRegistration(gate: Extract<RegistrationGate, { allowed: false }>): AppError {
+  switch (gate.reason) {
+    case 'session_required':
+      // Provisioned account: adding a passkey needs an authenticated session.
+      return new AppError(ERROR_CODE.FORBIDDEN, 'Registration is not open', 403);
+    case 'setup_disabled':
+      // Production with no ADMIN_SETUP_TOKEN configured → fail closed.
+      return new AppError(
+        ERROR_CODE.FORBIDDEN,
+        'Admin setup is disabled (no setup token configured)',
+        403,
+      );
+    case 'bad_setup_token':
+      return new AppError(ERROR_CODE.FORBIDDEN, 'Invalid or missing setup token', 403);
+  }
+}
+
 export function registerAuthRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps): void {
   const auth = new Hono<IssuerHonoEnv>();
 
@@ -88,11 +113,21 @@ export function registerAuthRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps): 
   });
 
   // ──────────────────────── WebAuthn registration ──────────────────────────
+  // BOOTSTRAP GATE: the unprovisioned (first-passkey / post-factory-reset) path
+  // requires a valid ADMIN_SETUP_TOKEN (header `x-setup-token`), and is
+  // fail-closed in production when no token is configured. The provisioned path
+  // stays session-gated. See evaluateRegistration for the full decision table.
   auth.post('/register/options', async (c) => {
     const account = await getAdmin(deps.adminRepo);
     const session = await readSession(c, deps.env);
-    if (!mayRegister(account, !!session)) {
-      throw new AppError(ERROR_CODE.FORBIDDEN, 'Registration is not open', 403);
+    const token = c.req.header(SETUP_TOKEN_HEADER);
+    const gate = evaluateRegistration(deps.env, account, !!session, token);
+    if (!gate.allowed) {
+      await audit(deps, c.get('requestId'), 'admin.register.denied', {
+        stage: 'options',
+        reason: gate.reason,
+      });
+      throw denyRegistration(gate);
     }
     const working = account ?? emptyAdmin(new Date().toISOString());
     const options = await startRegistration(c, deps.env, working, 'passkey');
@@ -102,10 +137,21 @@ export function registerAuthRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps): 
   auth.post('/register/verify', async (c) => {
     const account = await getAdmin(deps.adminRepo);
     const session = await readSession(c, deps.env);
-    if (!mayRegister(account, !!session)) {
-      throw new AppError(ERROR_CODE.FORBIDDEN, 'Registration is not open', 403);
+    const body = (await readJson(c)) as {
+      response?: RegistrationResponseJSON;
+      label?: string;
+      setupToken?: string;
+    };
+    // Token may arrive via header or body (the verify POST already carries a body).
+    const token = c.req.header(SETUP_TOKEN_HEADER) ?? asString(body.setupToken);
+    const gate = evaluateRegistration(deps.env, account, !!session, token);
+    if (!gate.allowed) {
+      await audit(deps, c.get('requestId'), 'admin.register.denied', {
+        stage: 'verify',
+        reason: gate.reason,
+      });
+      throw denyRegistration(gate);
     }
-    const body = (await readJson(c)) as { response?: RegistrationResponseJSON; label?: string };
     if (!body.response) {
       throw new AppError(ERROR_CODE.VALIDATION_FAILED, 'Missing registration response', 400);
     }

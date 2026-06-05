@@ -52,3 +52,9 @@ All notable changes to this project are documented here. Format follows
   reload byte-identical), a sample-certificate generator, and a confirmed boot of
   both composition roots (issuer serves `/health`; verify runs to key-load).
   Generated certificate verified pixel-faithful to the reference (incl. bold).
+- 2026-06-05: `ADMIN_SETUP_TOKEN` fail-closed bootstrap gate — the first admin
+  passkey registration (and re-registration after a factory reset) requires a
+  dedicated setup token (timing-safe compare), refused in production if unset.
+  Closes the initial land-grab and a stolen-session → reset → durable-admin
+  escalation chain (locked by an end-to-end attack-chain regression test).
+  Final suite: 259 tests green.

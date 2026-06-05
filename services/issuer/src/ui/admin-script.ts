@@ -32,10 +32,12 @@ function bufToB64u(buf){
   for(var i=0;i<bytes.length;i++) bin += String.fromCharCode(bytes[i]);
   return btoa(bin).replace(/\\+/g,'-').replace(/\\//g,'_').replace(/=+$/,'');
 }
-function api(path, body){
+function api(path, body, extraHeaders){
+  var headers = {'content-type':'application/json'};
+  if(extraHeaders){ for(var k in extraHeaders){ if(extraHeaders[k]) headers[k] = extraHeaders[k]; } }
   return fetch(path, {
     method:'POST', credentials:'same-origin',
-    headers:{'content-type':'application/json'},
+    headers: headers,
     body: JSON.stringify(body||{})
   }).then(function(r){
     return r.json().catch(function(){return {};}).then(function(j){
@@ -95,10 +97,15 @@ function supported(){
 }
 function register(label){
   if(!supported()) return;
+  // Setup token only exists on the first-time bootstrap form; absent when adding
+  // a passkey to a provisioned account (the session authorises that instead).
+  var tokenEl = document.getElementById('setup-token');
+  var setupToken = tokenEl ? tokenEl.value : '';
+  var hdr = setupToken ? {'x-setup-token': setupToken} : undefined;
   setStatus('Starting passkey registration…');
-  return api('/api/auth/register/options', {})
+  return api('/api/auth/register/options', {}, hdr)
     .then(function(opts){ return navigator.credentials.create({publicKey: toCreateOptions(opts)}); })
-    .then(function(cred){ return api('/api/auth/register/verify', {response: regResponseJSON(cred), label: label}); })
+    .then(function(cred){ return api('/api/auth/register/verify', {response: regResponseJSON(cred), label: label}, hdr); })
     .then(function(){ setStatus('Passkey registered.'); location.reload(); })
     .catch(function(e){ setStatus('Registration failed: '+e.message, true); });
 }

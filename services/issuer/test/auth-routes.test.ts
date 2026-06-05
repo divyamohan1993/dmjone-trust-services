@@ -78,6 +78,61 @@ describe('registration bootstrap gate', () => {
   });
 });
 
+describe('bootstrap ADMIN_SETUP_TOKEN gate (production fail-closed)', () => {
+  const TOKEN = 'prod-setup-token-abcdefgh'; // pragma: allowlist secret
+
+  function reqOptions(
+    app: ReturnType<typeof createIssuerApp>,
+    setupToken?: string,
+  ): Promise<Response> {
+    return app.request('/api/auth/register/options', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...(setupToken ? { 'x-setup-token': setupToken } : {}),
+      },
+      body: '{}',
+    });
+  }
+
+  it('production + no token configured → 403 (fail closed), no challenge issued', async () => {
+    const deps = buildDeps({ env: { NODE_ENV: 'production' } });
+    delete (deps.env as { ADMIN_SETUP_TOKEN?: string }).ADMIN_SETUP_TOKEN;
+    const app = createIssuerApp(deps);
+    const res = await reqOptions(app, TOKEN); // token presented but none configured
+    expect(res.status).toBe(403);
+    expect(((await res.json()) as { code: string }).code).toBe('FORBIDDEN');
+  });
+
+  it('production + token configured + correct token → 200 (bootstrap allowed)', async () => {
+    const deps = buildDeps({ env: { NODE_ENV: 'production', ADMIN_SETUP_TOKEN: TOKEN } });
+    const app = createIssuerApp(deps);
+    const res = await reqOptions(app, TOKEN);
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { challenge?: string }).challenge).toBeTruthy();
+  });
+
+  it('production + token configured + wrong/missing token → 403', async () => {
+    const deps = buildDeps({ env: { NODE_ENV: 'production', ADMIN_SETUP_TOKEN: TOKEN } });
+    const app = createIssuerApp(deps);
+    expect((await reqOptions(app, 'nope')).status).toBe(403);
+    expect((await reqOptions(app, undefined)).status).toBe(403);
+  });
+
+  it('register/verify is gated too: production + no token → 403 before any ceremony', async () => {
+    const deps = buildDeps({ env: { NODE_ENV: 'production', ADMIN_SETUP_TOKEN: TOKEN } });
+    const app = createIssuerApp(deps);
+    const res = await app.request('/api/auth/register/verify', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' }, // no token
+      body: JSON.stringify({ response: { id: 'x' }, label: 'primary' }),
+    });
+    expect(res.status).toBe(403);
+    // Account stays unprovisioned — nothing was registered.
+    expect(deps.adminRepo.account).toBeNull();
+  });
+});
+
 describe('login endpoints require provisioning', () => {
   it('401s login/options when no admin is provisioned', async () => {
     const app = createIssuerApp(buildDeps());

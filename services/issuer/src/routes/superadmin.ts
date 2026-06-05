@@ -20,7 +20,7 @@ import { AppError, ERROR_CODE } from '@dmjone/shared';
 
 import type { IssuerDeps } from '../deps.js';
 import type { IssuerHonoEnv } from '../http/context.js';
-import { readSession } from '../auth/session.js';
+import { clearSession, readSession } from '../auth/session.js';
 import { TokenBucket } from '../superadmin/token-bucket.js';
 import { page } from '../ui/layout.js';
 
@@ -168,7 +168,12 @@ export function registerSuperAdminRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerD
       updatedAt: new Date().toISOString(),
     });
 
-    return c.json({ reset: true, note: 'Admin account cleared; re-bootstrap required.' });
+    // Defence-in-depth: drop this browser's session cookie. (A captured stateless
+    // cookie stays valid until TTL, so the real protection is that post-reset
+    // re-registration requires a fresh ADMIN_SETUP_TOKEN — see evaluateRegistration.)
+    clearSession(c, deps.env);
+
+    return c.json({ reset: true, note: 'Admin account cleared; re-bootstrap requires the setup token.' });
   });
 
   app.route('/super-admin', sa);

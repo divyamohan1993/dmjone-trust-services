@@ -1,0 +1,29 @@
+{
+  "name": "@dmjone/data",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@dmjone/shared": "workspace:*",
+    "@google-cloud/firestore": "^8.6.0",
+    "@google-cloud/secret-manager": "^6.1.3"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

@@ -1,0 +1,11 @@
+# Builds one service image from its Dockerfile. Parameterized by autoconfig.sh:
+#   _IMG = fully-qualified image tag,  _DF = Dockerfile path
+# Build context is the repo root (workspace deps must be visible).
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ['build', '-f', '${_DF}', '-t', '${_IMG}', '.']
+images:
+  - '${_IMG}'
+options:
+  machineType: E2_HIGHCPU_8
+timeout: 1200s

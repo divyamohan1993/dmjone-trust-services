@@ -1,0 +1,143 @@
+/**
+ * The issuance pipeline — the one place the certificate is produced.
+ *
+ * Order is load-bearing and mirrors the locked signing pipeline (spec §5):
+ *
+ *   1. allocate credential id (DMJ-<TYPE>-<YYYYMMDD>-<NN>)
+ *   2. render(content)               → unsignedPdf
+ *   3. signer.sign(unsignedPdf)      → hybrid signature (PAdES + detached ML-DSA)
+ *   4. section63.metadata(...)       → §63 Part-A metadata (sync; feeds the record)
+ *   5. append leaf to transparency log (with LOG_CONFLICT retry)
+ *   6. hash the candidate password (Argon2id)
+ *   7. credentialRepo.create(record)
+ *   8. blobStore.put(certificate) then section63.generate(record) → blobStore.put(section63)
+ *   9. best-effort external anchor (never blocks issuance)
+ *  10. audit the issuance
+ *
+ * Steps 2→3→5→8(cert)→8(section63)→10 are the externally observable ordering
+ * the tests assert.
+ */
+
+import { DEFAULT_SIGNATORY } from '@dmjone/shared';
+import type {
+  CredentialContent,
+  CredentialRecord,
+  IssueCredentialInput,
+} from '@dmjone/shared';
+
+import type { IssuerDeps } from '../deps.js';
+import { allocateCredentialId } from './credential-id.js';
+import { appendToLog } from './log-append.js';
+
+export interface IssueOutcome {
+  credentialId: string;
+  logSeq: number;
+}
+
+/**
+ * Run the full issuance pipeline for one validated request. Returns the new
+ * credential id (and log sequence, for callers/telemetry). Throws an
+ * {@link AppError} on any fatal step; the external anchor is best-effort and a
+ * failure there is logged, not propagated.
+ */
+export async function issueCredential(
+  deps: IssuerDeps,
+  input: IssueCredentialInput,
+  ctx: { requestId: string; actor: string },
+): Promise<IssueOutcome> {
+  const now = new Date().toISOString();
+
+  // 1. Allocate a unique, well-formed credential id for the issue date.
+  const credentialId = await allocateCredentialId(
+    deps.credentialRepo,
+    input.type,
+    input.issueDate,
+  );
+
+  // Build the certificate content. `closingLine` is optional — omit the key
+  // entirely when absent (exactOptionalPropertyTypes).
+  const content: CredentialContent = {
+    credentialId,
+    type: input.type,
+    issueDate: input.issueDate,
+    kicker: input.kicker,
+    title: input.title,
+    intro: input.intro,
+    recipientName: input.recipientName,
+    bodyParagraphs: input.bodyParagraphs,
+    signatory: { ...DEFAULT_SIGNATORY },
+    ...(input.closingLine !== undefined && { closingLine: input.closingLine }),
+  };
+
+  const qrUrl = `${deps.env.VERIFY_PUBLIC_URL}/c/${credentialId}`;
+
+  // 2. Render the pixel-faithful UNSIGNED pdf.
+  const unsignedPdf = await deps.renderer.render(content, { qrUrl });
+
+  // 3. Hybrid-sign: PAdES embedded + detached ML-DSA over canonical(content, pdfSha256).
+  const sig = await deps.signer.sign(unsignedPdf, content);
+
+  // 4. §63 Part-A metadata over the final signed pdf hash (sync).
+  const s63meta = deps.section63.metadata(content, sig.pdfSha256);
+
+  // 5. Append to the transparency log (serialized; retry on LOG_CONFLICT).
+  const append = await appendToLog({
+    logRepo: deps.logRepo,
+    logSigner: deps.logSigner,
+    credentialId,
+    canonicalSha256: sig.canonicalSha256,
+    now,
+  });
+
+  // 6. Hash the candidate download password (Argon2id, PHC string).
+  const passwordHash = await deps.passwordHasher.hash(input.password);
+
+  // 7. Assemble + persist the canonical record (status 'valid'; no revokedAt yet).
+  const record: CredentialRecord = {
+    id: credentialId,
+    content,
+    status: 'valid',
+    createdAt: now,
+    pdfSha256: sig.pdfSha256,
+    canonicalPayload: sig.canonicalPayload,
+    canonicalSha256: sig.canonicalSha256,
+    mldsaSignature: sig.mldsaSignature,
+    mldsaPublicKeyId: sig.mldsaPublicKeyId,
+    padesCertFingerprint: sig.padesCertFingerprint,
+    logSeq: append.logSeq,
+    logLeafHash: append.logLeafHash,
+    passwordHash,
+    section63: s63meta,
+  };
+  await deps.credentialRepo.create(record);
+
+  // 8. Store the signed certificate, then generate + store the §63 pdf.
+  await deps.blobStore.put(credentialId, 'certificate', sig.signedPdf);
+  const s63pdf = await deps.section63.generate(record);
+  await deps.blobStore.put(credentialId, 'section63', s63pdf);
+
+  // 9. Best-effort external anchor of the new signed head — never blocks issuance.
+  const head = await deps.logRepo.getHead();
+  if (head) {
+    try {
+      const proof = await deps.anchorPublisher.publish(head);
+      await deps.anchorRepo.save(proof);
+    } catch (err) {
+      deps.logger.warn(
+        { err, credentialId, headSeq: head.seq, requestId: ctx.requestId },
+        'external anchor failed (non-fatal); will be re-anchored by the scheduled job',
+      );
+    }
+  }
+
+  // 10. Tamper-evident audit of the issuance.
+  await deps.auditLog.append({
+    actor: 'admin',
+    action: 'credential.issue',
+    subject: credentialId,
+    requestId: ctx.requestId,
+    meta: { type: input.type, logSeq: append.logSeq, by: ctx.actor },
+  });
+
+  return { credentialId, logSeq: append.logSeq };
+}

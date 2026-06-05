@@ -15,11 +15,18 @@ export const ALGO = {
   KDF: 'Argon2id',
 } as const;
 
-/** Argon2id defaults (overridable via env). OWASP-aligned. */
+/**
+ * Argon2id defaults tuned for the PURE-JS implementation we run (@noble/hashes).
+ * The OWASP m=19456 (19 MiB), t=2, p=1 profile is ~1.3 s/derivation in pure JS
+ * and remains OWASP-compliant. The heavier native-calibrated profile
+ * (m=65536, t=3, p=4) costs ~4.5 s in JS — bad UX and a CPU-exhaustion DoS
+ * surface. p=1 because @noble Argon2id is single-threaded (parallelism > 1 only
+ * adds cost without the parallel speedup).
+ */
 export const ARGON2_DEFAULTS = {
-  memoryKiB: 65536,
-  iterations: 3,
-  parallelism: 4,
+  memoryKiB: 19456,
+  iterations: 2,
+  parallelism: 1,
 } as const;
 
 /**
@@ -39,6 +46,13 @@ export const CREDENTIAL_TYPE_CODES = {
 
 /** Firestore single-document limit is 1 MiB; chunk well under it. */
 export const PDF_CHUNK_SIZE_BYTES = 256 * 1024;
+
+/**
+ * `prevHeadHash` for the first entry of a hash chain (empty chain / no
+ * predecessor). Used by both the transparency log and the audit log. The first
+ * real leaf is seq 1.
+ */
+export const GENESIS_HEAD_HASH = '0'.repeat(64);
 
 /** Number of one-time recovery codes generated at admin setup. */
 export const RECOVERY_CODE_COUNT = 12;

@@ -9,7 +9,7 @@
 import { serve } from '@hono/node-server';
 import { pino } from 'pino';
 import { loadEnv } from '@dmjone/shared';
-import { createFirestoreStores } from '@dmjone/data';
+import { createFirestoreStores, createInMemoryStores } from '@dmjone/data';
 import { createLogVerifier, createPasswordHasher, createSignatureVerifier } from '@dmjone/crypto';
 import { createVerifyApp } from './app.js';
 import { loadVerifyingKeys, type VerifyKeyMaterial } from './runtime/keys.js';
@@ -36,7 +36,7 @@ async function loadKeysWithRetry(
 async function main(): Promise<void> {
   const env = loadEnv();
   const logger = pino({ level: env.LOG_LEVEL });
-  const stores = createFirestoreStores(env);
+  const stores = env.DATA_BACKEND === 'memory' ? createInMemoryStores() : createFirestoreStores(env);
 
   const { verifyingKeys, padesFingerprint } = await loadKeysWithRetry(
     () => loadVerifyingKeys(stores.secrets),

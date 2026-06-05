@@ -44,6 +44,28 @@ Two Cloud Run services in `asia-east1`, both scale-to-zero:
 See [`docs/superpowers/specs/2026-06-05-quantum-certificate-system-design.md`](docs/superpowers/specs/2026-06-05-quantum-certificate-system-design.md)
 for the full design.
 
+## Run it
+
+```bash
+pnpm install
+pnpm -r build
+pnpm -r --workspace-concurrency=1 test     # 237 tests across all packages
+pnpm --filter @dmjone/e2e test              # the full pipeline, end to end
+```
+
+The e2e renders a real certificate with headless Chromium, hybrid-signs it,
+verifies it, downloads it byte-for-byte behind a password, and proves a single
+flipped bit is detected as tampering.
+
+## Deploy
+
+Two Cloud Run services in `asia-east1`, scale-to-zero. See
+[`infra/DEPLOY.md`](infra/DEPLOY.md) for the runbook and the `ghs.googlehosted.com`
+CNAMEs, or run [`infra/autoconfig.sh`](infra/autoconfig.sh) for a one-command deploy.
+
 ## Status
 
-🚧 Under construction. See [CHANGELOG.md](CHANGELOG.md).
+v1 complete — all packages green (237 tests), full workspace builds clean, the
+end-to-end pipeline is proven. See [CHANGELOG.md](CHANGELOG.md). Phase 2 (PAdES-LTV
+timestamps, multi-tenant, SMS recovery) is scoped in the
+[design spec](docs/superpowers/specs/2026-06-05-quantum-certificate-system-design.md).

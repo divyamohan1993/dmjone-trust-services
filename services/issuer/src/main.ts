@@ -10,7 +10,7 @@
 import { serve } from '@hono/node-server';
 import { pino } from 'pino';
 import { loadEnv } from '@dmjone/shared';
-import { createFirestoreStores } from '@dmjone/data';
+import { createFirestoreStores, createInMemoryStores } from '@dmjone/data';
 import {
   createAnchorPublisher,
   createHybridSigner,
@@ -26,7 +26,7 @@ import type { AnchorPublisherConfig } from '@dmjone/crypto';
 async function main(): Promise<void> {
   const env = loadEnv();
   const logger = pino({ level: env.LOG_LEVEL });
-  const stores = createFirestoreStores(env);
+  const stores = env.DATA_BACKEND === 'memory' ? createInMemoryStores() : createFirestoreStores(env);
 
   // The signing keys exist in memory only here, in the key-holding service.
   const masterKey = resolveMasterKey(env, (m) => logger.warn(m));

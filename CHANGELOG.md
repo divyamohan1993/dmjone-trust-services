@@ -47,3 +47,8 @@ All notable changes to this project are documented here. Format follows
 - 2026-06-05: End-to-end test proving the streams compose — real Chromium render
   → hybrid-sign → verify → byte-exact gated download → flip-a-bit tamper
   detection → SSR credential page. Full workspace builds clean; 237 tests green.
+- 2026-06-05: Verification hardening — `DATA_BACKEND=memory` local-dev mode (boot
+  without GCP), key-provisioning + AES-256-GCM seal/unseal tests (generate-then-
+  reload byte-identical), a sample-certificate generator, and a confirmed boot of
+  both composition roots (issuer serves `/health`; verify runs to key-load).
+  Generated certificate verified pixel-faithful to the reference (incl. bold).

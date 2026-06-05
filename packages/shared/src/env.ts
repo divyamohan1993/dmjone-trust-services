@@ -9,6 +9,8 @@ const baseEnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
   SERVICE_ROLE: z.enum(['issuer', 'verify']),
+  /** `firestore` (prod) or `memory` (local dev / smoke — no GCP needed). */
+  DATA_BACKEND: z.enum(['memory', 'firestore']).default('firestore'),
   PORT: z.coerce.number().int().positive().default(8080),
 
   GCP_PROJECT_ID: z.string().min(1),

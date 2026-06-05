@@ -15,8 +15,23 @@ import {
   normalizeCode,
 } from '../src/auth/recovery.js';
 import { enrollTotp, verifyTotp } from '../src/auth/totp.js';
-import { emptyAdmin, isProvisioned, mayRegister } from '../src/auth/admin-store.js';
+import {
+  emptyAdmin,
+  evaluateRegistration,
+  isProvisioned,
+  mayRegister,
+} from '../src/auth/admin-store.js';
 import { FakePasswordHasher, FakeSecretSealer, makeTestEnv } from './fakes.js';
+
+/** A provisioned account (≥1 passkey) for gate tests. */
+function provisioned(): ReturnType<typeof emptyAdmin> {
+  return {
+    ...emptyAdmin('2026-06-05T00:00:00.000Z'),
+    webauthnCredentials: [
+      { credentialId: 'c', publicKey: 'k', counter: 0, label: 'l', createdAt: 'now' },
+    ],
+  };
+}
 
 describe('lockout.backoffMs', () => {
   it('is 0 for no failures and grows exponentially, capped at 1h', () => {
@@ -140,17 +155,104 @@ describe('admin-store bootstrap gate', () => {
 
   it('allows registration only at bootstrap or with a session', () => {
     const empty = emptyAdmin('2026-06-05T00:00:00.000Z');
-    const provisioned = {
-      ...empty,
-      webauthnCredentials: [
-        { credentialId: 'c', publicKey: 'k', counter: 0, label: 'l', createdAt: 'now' },
-      ],
-    };
+    const withKey = provisioned();
     // No admin yet → bootstrap allowed regardless of session.
     expect(mayRegister(null, false)).toBe(true);
     expect(mayRegister(empty, false)).toBe(true);
     // Provisioned → only with a session.
-    expect(mayRegister(provisioned, false)).toBe(false);
-    expect(mayRegister(provisioned, true)).toBe(true);
+    expect(mayRegister(withKey, false)).toBe(false);
+    expect(mayRegister(withKey, true)).toBe(true);
+  });
+});
+
+describe('evaluateRegistration — bootstrap token gate', () => {
+  const TOKEN = 'a-strong-setup-token-1234'; // pragma: allowlist secret
+
+  it('provisioned + session → allowed, not bootstrap (token irrelevant)', () => {
+    const env = makeTestEnv({ ADMIN_SETUP_TOKEN: TOKEN });
+    expect(evaluateRegistration(env, provisioned(), true, undefined)).toEqual({
+      allowed: true,
+      bootstrap: false,
+    });
+  });
+
+  it('provisioned + no session → denied (session_required), even with a token', () => {
+    const env = makeTestEnv({ ADMIN_SETUP_TOKEN: TOKEN });
+    expect(evaluateRegistration(env, provisioned(), false, TOKEN)).toEqual({
+      allowed: false,
+      reason: 'session_required',
+    });
+  });
+
+  it('unprovisioned + correct token → allowed bootstrap', () => {
+    const env = makeTestEnv({ ADMIN_SETUP_TOKEN: TOKEN });
+    expect(evaluateRegistration(env, null, false, TOKEN)).toEqual({
+      allowed: true,
+      bootstrap: true,
+    });
+  });
+
+  it('unprovisioned + wrong/missing token (token configured) → denied bad_setup_token', () => {
+    const env = makeTestEnv({ ADMIN_SETUP_TOKEN: TOKEN });
+    expect(evaluateRegistration(env, null, false, 'wrong')).toEqual({
+      allowed: false,
+      reason: 'bad_setup_token',
+    });
+    expect(evaluateRegistration(env, null, false, undefined)).toEqual({
+      allowed: false,
+      reason: 'bad_setup_token',
+    });
+  });
+
+  it('unprovisioned + token UNSET in production → fail closed (setup_disabled)', () => {
+    const env = makeTestEnv({ NODE_ENV: 'production' });
+    delete (env as { ADMIN_SETUP_TOKEN?: string }).ADMIN_SETUP_TOKEN;
+    expect(evaluateRegistration(env, null, false, undefined)).toEqual({
+      allowed: false,
+      reason: 'setup_disabled',
+    });
+  });
+
+  it('unprovisioned + token UNSET in dev/test → allowed (local convenience)', () => {
+    const env = makeTestEnv(); // NODE_ENV 'test', no token
+    expect(evaluateRegistration(env, null, false, undefined)).toEqual({
+      allowed: true,
+      bootstrap: true,
+    });
+  });
+
+  it('UNPROVISIONED + session + no token → DENIED (closes stolen-session→reset→re-register hole)', () => {
+    const env = makeTestEnv({ ADMIN_SETUP_TOKEN: TOKEN });
+    // A session must NOT substitute for the token on the unprovisioned (post-reset)
+    // path: otherwise a stolen session that triggered a factory reset could
+    // re-register an attacker passkey with no token.
+    expect(evaluateRegistration(env, null, true, undefined)).toEqual({
+      allowed: false,
+      reason: 'bad_setup_token',
+    });
+    // Even with a session, an unprovisioned account in prod with no token fails closed.
+    const prod = makeTestEnv({ NODE_ENV: 'production' });
+    delete (prod as { ADMIN_SETUP_TOKEN?: string }).ADMIN_SETUP_TOKEN;
+    expect(evaluateRegistration(prod, null, true, undefined)).toEqual({
+      allowed: false,
+      reason: 'setup_disabled',
+    });
+  });
+
+  it('recovery path is unaffected: PROVISIONED account + recovery session → allowed via session branch', () => {
+    const env = makeTestEnv({ ADMIN_SETUP_TOKEN: TOKEN });
+    // Recovery leaves passkey records on the account (never clears them), so a
+    // post-recovery account is provisioned and registers via the session branch
+    // with no token — the documented recovery→register flow still works.
+    expect(evaluateRegistration(env, provisioned(), true, undefined)).toEqual({
+      allowed: true,
+      bootstrap: false,
+    });
+  });
+
+  it('token comparison is exact (no prefix/length leniency)', () => {
+    const env = makeTestEnv({ ADMIN_SETUP_TOKEN: TOKEN });
+    expect(evaluateRegistration(env, null, false, TOKEN + 'x').allowed).toBe(false);
+    expect(evaluateRegistration(env, null, false, TOKEN.slice(0, -1)).allowed).toBe(false);
   });
 });

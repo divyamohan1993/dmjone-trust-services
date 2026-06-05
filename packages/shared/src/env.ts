@@ -55,6 +55,13 @@ const issuerEnvSchema = z.object({
   WEBAUTHN_RP_NAME: z.string().min(1),
   WEBAUTHN_ORIGIN: z.string().url(),
   PUPPETEER_EXECUTABLE_PATH: z.string().optional(),
+  /**
+   * Gates the FIRST admin passkey registration (and re-registration after a
+   * factory reset / empty restore — the zero-passkey window). Must be its OWN
+   * secret; never reuse SESSION_SECRET or MASTER_ENCRYPTION_KEY. The issuer
+   * refuses bootstrap in production when this is unset (fail-closed).
+   */
+  ADMIN_SETUP_TOKEN: z.string().min(16).optional(),
 });
 
 export type BaseEnv = z.infer<typeof baseEnvSchema>;

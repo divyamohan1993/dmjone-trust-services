@@ -130,3 +130,52 @@ describe('super-admin auth gate + factory reset', () => {
     expect(body429).toBe('Too Many Requests');
   });
 });
+
+describe('stolen-session → factory-reset → re-register is blocked without a setup token', () => {
+  it('post-reset registration is denied when only a (captured) session is presented', async () => {
+    // Production with a configured setup token (the deploy posture).
+    const deps = buildDeps({
+      env: { NODE_ENV: 'production', ADMIN_SETUP_TOKEN: 'the-real-setup-token-xyz' }, // pragma: allowlist secret
+    });
+    deps.adminRepo.account = {
+      id: 'admin',
+      webauthnCredentials: [
+        { credentialId: 'real', publicKey: 'k', counter: 5, label: 'owner', createdAt: 'now' },
+      ],
+      recoveryCodeHashes: [],
+      failureCount: 0,
+      createdAt: 'now',
+      updatedAt: 'now',
+    };
+    const app = createIssuerApp(deps);
+    // Attacker holds a valid (captured) session cookie — stateless, not revocable.
+    const stolen = await mintSessionCookie(deps.env);
+
+    // 1) Trigger factory reset with the session + the non-secret phrase.
+    const reset = await app.request('/super-admin/factory-reset', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: stolen },
+      body: JSON.stringify({ phrase: 'RESET dmj.one Trust Services' }),
+    });
+    expect(reset.status).toBe(200);
+    expect(deps.adminRepo.account?.webauthnCredentials).toHaveLength(0); // unprovisioned now
+
+    // 2) Attempt to re-register a passkey with ONLY the captured session, no token.
+    const optsWithSessionOnly = await app.request('/api/auth/register/options', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: stolen },
+      body: '{}',
+    });
+    // MUST be denied — a session does not substitute for the setup token on the
+    // unprovisioned path. This is the load-bearing assertion.
+    expect(optsWithSessionOnly.status).toBe(403);
+
+    // 3) With the real setup token, re-bootstrap is permitted again.
+    const optsWithToken = await app.request('/api/auth/register/options', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-setup-token': 'the-real-setup-token-xyz' }, // pragma: allowlist secret
+      body: '{}',
+    });
+    expect(optsWithToken.status).toBe(200);
+  });
+});

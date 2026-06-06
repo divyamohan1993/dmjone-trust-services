@@ -3,12 +3,16 @@
  *
  * On first boot this generates the three keypairs that back the system (the
  * credential ML-DSA key, the self-signed PAdES X.509 key, and the transparency
- * log ML-DSA key), seals the secret halves with the master key, and persists
- * them via the SecretStore. On every subsequent boot it loads + unseals them.
+ * log ML-DSA key) and persists them as exactly TWO Secret Manager secrets:
  *
- * Public material (ML-DSA public keys, the PAdES certificate) is stored
- * UNSEALED so the keyless verify service can read it without ever touching the
- * master key or a private key.
+ *   - `trust_public`  — plain JSON of all PUBLIC material (ML-DSA public keys +
+ *     the PAdES certificate). The keyless verify service reads ONLY this; it
+ *     never sees private ciphertext or the master key.
+ *   - `trust_private` — JSON of the AES-256-GCM-sealed private halves. Read +
+ *     unsealed only by the issuer.
+ *
+ * Two secrets instead of six keeps the project inside Secret Manager's free
+ * tier and keeps the public/private split crisp.
  */
 
 import type { SecretStore, SigningKeys, VerifyingKeys } from '@dmjone/shared';
@@ -16,124 +20,96 @@ import {
   certFingerprint,
   generateMldsaKeypair,
   generateSelfSignedPadesCert,
-  mldsaPublicKeyId,
 } from '@dmjone/crypto';
-import { openString, sealString, seal, open } from './secret-box.js';
+import { open, openString, seal, sealString } from './secret-box.js';
 
-/** SecretStore key names. `*_secret` are sealed; the rest are plain. */
-// NB: the `*_secret` strings below are Secret Manager key NAMES (identifiers),
-// not credential values — the actual secrets are sealed at runtime.
-const NAME = {
-  credSecret: 'cred_mldsa_secret', // pragma: allowlist secret
-  credPublic: 'cred_mldsa_public',
-  padesCert: 'pades_cert_pem',
-  padesKey: 'pades_key_pem_secret', // pragma: allowlist secret
-  logSecret: 'log_mldsa_secret', // pragma: allowlist secret
-  logPublic: 'log_mldsa_public',
-} as const;
+/** The two Secret Manager entries. */
+export const TRUST_PUBLIC_SECRET = 'trust_public';
+export const TRUST_PRIVATE_SECRET = 'trust_private'; // pragma: allowlist secret
+
+/** Plain public material — what the keyless verify service consumes. */
+interface PublicBlob {
+  credPublic: string; // base64 ML-DSA public key
+  credKid: string;
+  padesCertPem: string;
+  logPublic: string; // base64 ML-DSA log public key
+}
+
+/** Sealed private material — issuer-only. */
+interface PrivateBlob {
+  credSecretSealed: string;
+  padesKeySealed: string;
+  logSecretSealed: string;
+}
 
 export interface IssuerKeyMaterial {
   signingKeys: SigningKeys;
-  /** The transparency-log secret key (for createLogSigner). */
   logSecretKey: Uint8Array;
-  /** Public material, also handed to the verify service. */
   verifyingKeys: VerifyingKeys;
-  /** SHA-256 of the PAdES cert DER — the trusted fingerprint verify pins against. */
   padesFingerprint: string;
 }
 
 const b64 = (b: Uint8Array): string => Buffer.from(b).toString('base64');
 const unb64 = (s: string): Uint8Array => new Uint8Array(Buffer.from(s, 'base64'));
 
-/**
- * Idempotent: load the key material, generating + persisting it on first run.
- * Concurrency note: two cold issuer instances booting simultaneously could both
- * generate; v1 runs `max-instances` low and the SecretStore set is last-writer.
- * If that ever matters, wrap generation in a Firestore-locked critical section.
- */
+/** Idempotent: load the key material, generating + persisting it on first run. */
 export async function provisionIssuerKeys(
   store: SecretStore,
   masterKey: Uint8Array,
 ): Promise<IssuerKeyMaterial> {
-  const credSecretSealed = await store.get(NAME.credSecret);
-  if (credSecretSealed) return loadIssuerKeys(store, masterKey);
+  if (await store.get(TRUST_PRIVATE_SECRET)) return loadIssuerKeys(store, masterKey);
 
   const cred = generateMldsaKeypair();
   const pades = generateSelfSignedPadesCert();
   const log = generateMldsaKeypair();
 
-  await store.set(NAME.credSecret, seal(masterKey, cred.secretKey));
-  await store.set(NAME.credPublic, b64(cred.publicKey));
-  await store.set(NAME.padesCert, pades.certPem);
-  await store.set(NAME.padesKey, sealString(masterKey, pades.keyPem));
-  await store.set(NAME.logSecret, seal(masterKey, log.secretKey));
-  await store.set(NAME.logPublic, b64(log.publicKey));
-
-  return assemble({
-    credPublic: cred.publicKey,
-    credSecret: cred.secretKey,
+  const pub: PublicBlob = {
+    credPublic: b64(cred.publicKey),
     credKid: cred.publicKeyId,
     padesCertPem: pades.certPem,
-    padesKeyPem: pades.keyPem,
-    padesFingerprint: pades.fingerprint,
-    logPublic: log.publicKey,
-    logSecret: log.secretKey,
-  });
+    logPublic: b64(log.publicKey),
+  };
+  const priv: PrivateBlob = {
+    credSecretSealed: seal(masterKey, cred.secretKey),
+    padesKeySealed: sealString(masterKey, pades.keyPem),
+    logSecretSealed: seal(masterKey, log.secretKey),
+  };
+  await store.set(TRUST_PUBLIC_SECRET, JSON.stringify(pub));
+  await store.set(TRUST_PRIVATE_SECRET, JSON.stringify(priv));
+
+  return assemble(pub, priv, masterKey);
 }
 
 async function loadIssuerKeys(store: SecretStore, masterKey: Uint8Array): Promise<IssuerKeyMaterial> {
-  const [credSecret, credPublic, padesCertPem, padesKeySealed, logSecret, logPublic] =
-    await Promise.all([
-      store.get(NAME.credSecret),
-      store.get(NAME.credPublic),
-      store.get(NAME.padesCert),
-      store.get(NAME.padesKey),
-      store.get(NAME.logSecret),
-      store.get(NAME.logPublic),
-    ]);
-  if (!credSecret || !credPublic || !padesCertPem || !padesKeySealed || !logSecret || !logPublic) {
+  const [pubRaw, privRaw] = await Promise.all([
+    store.get(TRUST_PUBLIC_SECRET),
+    store.get(TRUST_PRIVATE_SECRET),
+  ]);
+  if (!pubRaw || !privRaw) {
     throw new Error('key material incomplete in SecretStore; re-provision required');
   }
-  const credPublicBytes = unb64(credPublic);
-  return assemble({
-    credPublic: credPublicBytes,
-    credSecret: open(masterKey, credSecret),
-    credKid: mldsaPublicKeyId(credPublicBytes),
-    padesCertPem,
-    padesKeyPem: openString(masterKey, padesKeySealed),
-    padesFingerprint: certFingerprint(padesCertPem),
-    logPublic: unb64(logPublic),
-    logSecret: open(masterKey, logSecret),
-  });
+  return assemble(JSON.parse(pubRaw) as PublicBlob, JSON.parse(privRaw) as PrivateBlob, masterKey);
 }
 
-function assemble(m: {
-  credPublic: Uint8Array;
-  credSecret: Uint8Array;
-  credKid: string;
-  padesCertPem: string;
-  padesKeyPem: string;
-  padesFingerprint: string;
-  logPublic: Uint8Array;
-  logSecret: Uint8Array;
-}): IssuerKeyMaterial {
+function assemble(pub: PublicBlob, priv: PrivateBlob, masterKey: Uint8Array): IssuerKeyMaterial {
+  const credPublic = unb64(pub.credPublic);
   const signingKeys: SigningKeys = {
-    padesCertPem: m.padesCertPem,
-    padesKeyPem: m.padesKeyPem,
-    mldsaPublicKey: m.credPublic,
-    mldsaSecretKey: m.credSecret,
-    mldsaPublicKeyId: m.credKid,
+    padesCertPem: pub.padesCertPem,
+    padesKeyPem: openString(masterKey, priv.padesKeySealed),
+    mldsaPublicKey: credPublic,
+    mldsaSecretKey: open(masterKey, priv.credSecretSealed),
+    mldsaPublicKeyId: pub.credKid,
   };
   const verifyingKeys: VerifyingKeys = {
-    mldsaPublicKey: m.credPublic,
-    mldsaPublicKeyId: m.credKid,
-    logMldsaPublicKey: m.logPublic,
-    padesCertPem: m.padesCertPem,
+    mldsaPublicKey: credPublic,
+    mldsaPublicKeyId: pub.credKid,
+    logMldsaPublicKey: unb64(pub.logPublic),
+    padesCertPem: pub.padesCertPem,
   };
   return {
     signingKeys,
-    logSecretKey: m.logSecret,
+    logSecretKey: open(masterKey, priv.logSecretSealed),
     verifyingKeys,
-    padesFingerprint: m.padesFingerprint,
+    padesFingerprint: certFingerprint(pub.padesCertPem),
   };
 }

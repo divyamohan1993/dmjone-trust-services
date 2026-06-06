@@ -8,6 +8,19 @@ All notable changes to this project are documented here. Format follows
 
 ### Added
 
+- 2026-06-06: **Live deployment** to Cloud Run (`asia-east1`, scale-to-zero) —
+  issuer + verify, isolated `trust` Firestore DB, images in Artifact Registry,
+  Cloud Run domain mappings (the `ghs.googlehosted.com` CNAMEs). Public repo +
+  GitHub Actions image build. Live health + Firestore validated in production.
+
+### Changed
+
+- 2026-06-06: Consolidated the issuer key material into TWO Secret Manager
+  entries — `trust_public` (plain, what the keyless verify service reads) and
+  `trust_private` (AES-256-GCM sealed, issuer-only) — instead of six. Keeps the
+  project inside Secret Manager's free tier and tightens the keyless boundary
+  (verify no longer reads any private ciphertext).
+
 - 2026-06-05: Approved design spec — dmj.one Trust Services quantum-verifiable
   certificate system (`docs/superpowers/specs/2026-06-05-quantum-certificate-system-design.md`).
 - 2026-06-05: Monorepo skeleton (pnpm workspaces), strict TypeScript base config,

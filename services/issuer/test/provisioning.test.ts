@@ -83,17 +83,21 @@ describe('provisionIssuerKeys', () => {
     const mk = masterKey();
     const km = await provisionIssuerKeys(store, mk);
 
-    const storedSealed = await store.get('cred_mldsa_secret');
-    expect(storedSealed).toBeTruthy();
-    // The sealed blob must not equal the base64 of the raw secret key.
-    const rawB64 = Buffer.from(km.signingKeys.mldsaSecretKey).toString('base64');
-    expect(storedSealed).not.toBe(rawB64);
-    // ...but it unseals back to the real key.
-    expect(Buffer.from(open(mk, storedSealed!)).equals(Buffer.from(km.signingKeys.mldsaSecretKey))).toBe(true);
+    const privRaw = await store.get('trust_private');
+    const pubRaw = await store.get('trust_public');
+    expect(privRaw).toBeTruthy();
+    expect(pubRaw).toBeTruthy();
 
-    // Public material is stored UNSEALED (so the keyless verify service can read it).
-    expect(await store.get('cred_mldsa_public')).toBe(
-      Buffer.from(km.signingKeys.mldsaPublicKey).toString('base64'),
-    );
+    // The private blob holds only SEALED material — neither the raw ML-DSA key
+    // nor the plain PAdES private key may appear in it.
+    const rawSecretB64 = Buffer.from(km.signingKeys.mldsaSecretKey).toString('base64');
+    expect(privRaw).not.toContain(rawSecretB64);
+    expect(privRaw).not.toContain(km.signingKeys.padesKeyPem);
+    const priv = JSON.parse(privRaw!) as { credSecretSealed: string };
+    expect(Buffer.from(open(mk, priv.credSecretSealed)).equals(Buffer.from(km.signingKeys.mldsaSecretKey))).toBe(true);
+
+    // The public blob holds PLAIN material the keyless verifier reads directly.
+    const pub = JSON.parse(pubRaw!) as { credPublic: string };
+    expect(pub.credPublic).toBe(Buffer.from(km.signingKeys.mldsaPublicKey).toString('base64'));
   });
 });

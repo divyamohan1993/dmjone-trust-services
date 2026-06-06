@@ -20,9 +20,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # No version here on purpose: package.json `packageManager` is the single
+      # source of truth (specifying both fails pnpm/action-setup@v4).
       - uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
       - uses: actions/setup-node@v4
         with:
@@ -31,6 +31,11 @@ jobs:
 
       - name: Install
         run: pnpm install --frozen-lockfile
+
+      # render + e2e tests launch headless Chromium; pnpm v10 blocks puppeteer's
+      # auto-download, so fetch a browser explicitly into puppeteer's cache.
+      - name: Install Chromium for tests
+        run: pnpm --filter @dmjone/render exec puppeteer browsers install chrome
 
       - name: Typecheck
         run: pnpm -r --if-present typecheck

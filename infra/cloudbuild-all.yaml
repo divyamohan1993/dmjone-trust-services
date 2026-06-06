@@ -5,11 +5,13 @@
 steps:
   - name: gcr.io/cloud-builders/docker
     id: issuer
+    env: ['DOCKER_BUILDKIT=1'] # Dockerfiles use RUN --mount=type=cache (BuildKit)
     args:
       ['build', '-f', 'infra/Dockerfile.issuer', '-t',
        'asia-east1-docker.pkg.dev/dmjone/trust/issuer:latest', '.']
   - name: gcr.io/cloud-builders/docker
     id: verify
+    env: ['DOCKER_BUILDKIT=1']
     args:
       ['build', '-f', 'infra/Dockerfile.verify', '-t',
        'asia-east1-docker.pkg.dev/dmjone/trust/verify:latest', '.']

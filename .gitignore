@@ -31,6 +31,10 @@ service-account*.json
 *.log
 logs/
 
+# Browser-test artifacts
+.playwright-mcp/
+/live-*.png
+
 # OS / editor
 .DS_Store
 Thumbs.db

@@ -76,6 +76,21 @@ describe('registration bootstrap gate', () => {
     const res = await post(app, '/api/auth/register/options', {}, cookie);
     expect(res.status).toBe(200);
   });
+
+  // Regression: finishRegistration → takeChallenge deletes the `__Host-dmj_wa_reg`
+  // cookie. Deleting a `__Host-` cookie without Secure throws ("__Host- Cookie
+  // must have Secure attributes"), which 500'd /register/verify in production
+  // (behind Cloud Run's TLS-terminating proxy) and broke every real passkey
+  // registration. With no challenge cookie present the verify must reach a CLEAN
+  // 401 (challenge expired), proving the cookie deletion no longer crashes.
+  it('register/verify survives the __Host- challenge-cookie delete → clean 401', async () => {
+    const app = createIssuerApp(buildDeps()); // dev/test → bootstrap gate allows
+    const res = await post(app, '/api/auth/register/verify', {
+      response: { id: 'x' },
+      label: 'primary',
+    });
+    expect(res.status).toBe(401); // was 500 before the Secure fix
+  });
 });
 
 describe('bootstrap ADMIN_SETUP_TOKEN gate (production fail-closed)', () => {

@@ -85,8 +85,11 @@ async function takeChallenge(
   } catch {
     value = undefined;
   }
-  // One-time: clear regardless of outcome so it can't be replayed.
-  deleteCookie(c, CHALLENGE_COOKIE[purpose], { path: '/' });
+  // One-time: clear regardless of outcome so it can't be replayed. Must carry
+  // secure + sameSite to match the set — a `__Host-` cookie deleted without
+  // Secure throws ("__Host- Cookie must have Secure attributes"), which would
+  // 500 the verify step in production (behind Cloud Run's TLS-terminating proxy).
+  deleteCookie(c, CHALLENGE_COOKIE[purpose], { path: '/', secure: true, sameSite: 'Strict' });
   return value === false || value === undefined ? null : value;
 }
 

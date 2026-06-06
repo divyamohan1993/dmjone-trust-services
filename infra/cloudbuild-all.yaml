@@ -1,0 +1,21 @@
+# Builds BOTH service images in one Cloud Build run and pushes them to
+# Artifact Registry (asia-east1). Used for the initial deploy; ongoing image
+# builds run in GitHub Actions (.github/workflows/deploy.yml) to ghcr, but
+# Cloud Run pulls from Artifact Registry.
+steps:
+  - name: gcr.io/cloud-builders/docker
+    id: issuer
+    args:
+      ['build', '-f', 'infra/Dockerfile.issuer', '-t',
+       'asia-east1-docker.pkg.dev/dmjone/trust/issuer:latest', '.']
+  - name: gcr.io/cloud-builders/docker
+    id: verify
+    args:
+      ['build', '-f', 'infra/Dockerfile.verify', '-t',
+       'asia-east1-docker.pkg.dev/dmjone/trust/verify:latest', '.']
+images:
+  - 'asia-east1-docker.pkg.dev/dmjone/trust/issuer:latest'
+  - 'asia-east1-docker.pkg.dev/dmjone/trust/verify:latest'
+options:
+  machineType: E2_HIGHCPU_8
+timeout: 1800s

@@ -1,0 +1,18 @@
+# Keep the Cloud Build source upload small. The Docker build only needs the
+# workspace source + Dockerfiles; node_modules/dist are rebuilt in-container,
+# and the original assets/ + samples/ + docs/ aren't part of the image
+# (render vendors its own images into packages/render/assets).
+.git
+.github
+node_modules
+**/node_modules
+dist
+**/dist
+*.tsbuildinfo
+.env
+.env.*
+samples
+docs
+assets
+.vscode
+.idea

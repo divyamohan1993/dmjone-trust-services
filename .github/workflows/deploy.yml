@@ -1,9 +1,8 @@
-name: build-images
+name: deploy
 
-# Builds the issuer + verify container images and pushes them to the free
-# GitHub Container Registry (ghcr.io). Cloud Run then pulls these public images.
-# Deliberately ₹0: public packages = free unlimited storage, and the images
-# carry NO secrets (keys are generated at runtime + held in Secret Manager).
+# Push to main → build both images to Artifact Registry and deploy to Cloud Run.
+# Auth is keyless via Workload Identity Federation (no service-account key in the
+# repo). The deployer SA is scoped to the `trust` AR repo + the two services.
 
 on:
   push:
@@ -12,31 +11,62 @@ on:
 
 permissions:
   contents: read
-  packages: write
+  id-token: write # required for the WIF OIDC token
+
+env:
+  PROJECT: dmjone
+  REGION: asia-east1
+  AR: asia-east1-docker.pkg.dev/dmjone/trust
+  WIF_PROVIDER: projects/107722137045/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+  DEPLOYER: trust-deployer@dmjone.iam.gserviceaccount.com
 
 jobs:
-  images:
+  ship:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - service: issuer
-            dockerfile: infra/Dockerfile.issuer
-          - service: verify
-            dockerfile: infra/Dockerfile.verify
     steps:
       - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+
+      - uses: google-github-actions/auth@v2
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ${{ matrix.dockerfile }}
-          push: true
-          tags: ghcr.io/${{ github.repository }}/${{ matrix.service }}:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.DEPLOYER }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Build + push images
+        run: |
+          docker build -f infra/Dockerfile.issuer -t "$AR/issuer:latest" .
+          docker build -f infra/Dockerfile.verify -t "$AR/verify:latest" .
+          docker push "$AR/issuer:latest"
+          docker push "$AR/verify:latest"
+
+      - name: Deploy issuer
+        run: |
+          gcloud run deploy issuer \
+            --image="$AR/issuer:latest" --region="$REGION" --project="$PROJECT" \
+            --service-account="issuer-sa@$PROJECT.iam.gserviceaccount.com" \
+            --min-instances=0 --max-instances=2 --cpu=1 --memory=1Gi \
+            --concurrency=4 --timeout=120 --allow-unauthenticated \
+            --set-env-vars="SERVICE_ROLE=issuer,DATA_BACKEND=firestore,GCP_PROJECT_ID=$PROJECT,GCP_REGION=$REGION,FIRESTORE_DATABASE_ID=trust,ISSUER_PUBLIC_URL=https://issue.dmj.one,VERIFY_PUBLIC_URL=https://verify.dmj.one,WEBAUTHN_RP_ID=issue.dmj.one,WEBAUTHN_RP_NAME=dmj.one Trust Services,WEBAUTHN_ORIGIN=https://issue.dmj.one,TSA_URL=http://timestamp.digicert.com" \
+            --set-secrets="MASTER_ENCRYPTION_KEY=master-encryption-key:latest,ADMIN_SETUP_TOKEN=admin-setup-token:latest,SESSION_SECRET=session-secret:latest" # pragma: allowlist secret
+
+      - name: Deploy verify
+        run: |
+          gcloud run deploy verify \
+            --image="$AR/verify:latest" --region="$REGION" --project="$PROJECT" \
+            --service-account="verify-sa@$PROJECT.iam.gserviceaccount.com" \
+            --min-instances=0 --max-instances=4 --cpu=1 --memory=512Mi \
+            --concurrency=80 --timeout=60 --allow-unauthenticated \
+            --set-env-vars="SERVICE_ROLE=verify,DATA_BACKEND=firestore,GCP_PROJECT_ID=$PROJECT,GCP_REGION=$REGION,FIRESTORE_DATABASE_ID=trust,ISSUER_PUBLIC_URL=https://issue.dmj.one,VERIFY_PUBLIC_URL=https://verify.dmj.one" \
+            --set-secrets="SESSION_SECRET=session-secret:latest" # pragma: allowlist secret
+
+      - name: Smoke-check health
+        run: |
+          for svc in issuer verify; do
+            url=$(gcloud run services describe $svc --region="$REGION" --project="$PROJECT" --format='value(status.url)')
+            echo "$svc: $url"
+            curl -fsS "$url/health" && echo " OK"
+          done

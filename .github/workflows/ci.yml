@@ -32,11 +32,6 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      # render + e2e tests launch headless Chromium; pnpm v10 blocks puppeteer's
-      # auto-download, so fetch a browser explicitly into puppeteer's cache.
-      - name: Install Chromium for tests
-        run: pnpm --filter @dmjone/render exec puppeteer browsers install chrome
-
       # Build first: tsc -b emits the workspace .d.ts files that the per-package
       # `tsc --noEmit` typecheck (and the tests) resolve against.
       - name: Build
@@ -48,8 +43,13 @@ jobs:
       - name: Lint
         run: pnpm -r --if-present lint
 
+      # render + e2e launch headless Chromium via puppeteer-core; point it at the
+      # Google Chrome preinstalled on the runner (same mechanism as the Docker image).
       - name: Test
-        run: pnpm -r --if-present test
+        run: |
+          export PUPPETEER_EXECUTABLE_PATH="$(command -v google-chrome-stable || command -v google-chrome || command -v chromium-browser)"
+          echo "Chrome: ${PUPPETEER_EXECUTABLE_PATH:-NOT FOUND}"
+          pnpm -r --if-present test
 
       - name: Audit (fail on high/critical)
         run: pnpm audit --audit-level high

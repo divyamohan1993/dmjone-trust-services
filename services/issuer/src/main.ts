@@ -48,7 +48,7 @@ async function main(): Promise<void> {
     adminRepo: stores.admin,
     auditLog: stores.audit,
     secretStore: stores.secrets,
-    signer: createHybridSigner(signingKeys),
+    signer: createHybridSigner(signingKeys, env.TSA_URL ? { tsa: { url: env.TSA_URL } } : undefined),
     logSigner: createLogSigner(logSecretKey),
     anchorPublisher: createAnchorPublisher(anchorConfig),
     passwordHasher: createPasswordHasher({

@@ -30,6 +30,13 @@ import { plainAddPlaceholder } from '@signpdf/placeholder-plain';
 import { bytesToBase64, sha256Hex, toUtf8Bytes } from './hash.js';
 import { certFingerprint } from './pades-util.js';
 import { ForgePadesSigner } from './pades-signer.js';
+import type { TsaOptions } from './tsa.js';
+
+/**
+ * Reserved bytes for the PAdES signature window. Sized to fit the self-signed
+ * PKCS#7 (~2 KB) plus an RFC-3161 timestamp token + TSA cert chain (PAdES-B-T).
+ */
+const PADES_SIGNATURE_BYTES = 30000;
 
 /** Placeholder metadata embedded in the PAdES signature dictionary. */
 const PLACEHOLDER_META = {
@@ -50,13 +57,18 @@ const PLACEHOLDER_META = {
  * silently alter appearance) and is the standard PAdES approach. It requires the
  * input PDF to carry a classic cross-reference TABLE (which Chromium emits).
  */
-async function embedAndSignPades(unsignedPdf: Uint8Array, keys: SigningKeys): Promise<Uint8Array> {
+async function embedAndSignPades(
+  unsignedPdf: Uint8Array,
+  keys: SigningKeys,
+  tsa?: TsaOptions,
+): Promise<Uint8Array> {
   const withPlaceholder = plainAddPlaceholder({
     pdfBuffer: Buffer.from(unsignedPdf),
     ...PLACEHOLDER_META,
+    signatureLength: PADES_SIGNATURE_BYTES,
   });
 
-  const signer = new ForgePadesSigner(keys.padesCertPem, keys.padesKeyPem);
+  const signer = new ForgePadesSigner(keys.padesCertPem, keys.padesKeyPem, tsa);
   const signed = await new SignPdf().sign(withPlaceholder, signer);
   return new Uint8Array(signed);
 }
@@ -66,14 +78,14 @@ async function embedAndSignPades(unsignedPdf: Uint8Array, keys: SigningKeys): Pr
  * Constructed only inside the issuer service; the verify service never has the
  * secret material to call this.
  */
-export function createHybridSigner(keys: SigningKeys): HybridSigner {
+export function createHybridSigner(keys: SigningKeys, opts?: { tsa?: TsaOptions }): HybridSigner {
   return {
     async sign(
       unsignedPdf: Uint8Array,
       content: CredentialContent,
     ): Promise<HybridSignatureResult> {
-      // 2. PAdES sign → FINAL signed PDF.
-      const signedPdf = await embedAndSignPades(unsignedPdf, keys);
+      // 2. PAdES sign → FINAL signed PDF (PAdES-B-T when a TSA is configured).
+      const signedPdf = await embedAndSignPades(unsignedPdf, keys, opts?.tsa);
 
       // 3. Hash the final signed bytes.
       const pdfSha256 = sha256Hex(signedPdf);

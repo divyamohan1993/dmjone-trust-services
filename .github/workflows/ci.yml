@@ -37,6 +37,11 @@ jobs:
       - name: Install Chromium for tests
         run: pnpm --filter @dmjone/render exec puppeteer browsers install chrome
 
+      # Build first: tsc -b emits the workspace .d.ts files that the per-package
+      # `tsc --noEmit` typecheck (and the tests) resolve against.
+      - name: Build
+        run: pnpm -r build
+
       - name: Typecheck
         run: pnpm -r --if-present typecheck
 
@@ -45,9 +50,6 @@ jobs:
 
       - name: Test
         run: pnpm -r --if-present test
-
-      - name: Build
-        run: pnpm -r build
 
       - name: Audit (fail on high/critical)
         run: pnpm audit --audit-level high

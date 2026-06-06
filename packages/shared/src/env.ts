@@ -62,6 +62,13 @@ const issuerEnvSchema = z.object({
    * refuses bootstrap in production when this is unset (fail-closed).
    */
   ADMIN_SETUP_TOKEN: z.string().min(16).optional(),
+  /**
+   * RFC-3161 Time-Stamping Authority endpoint for PAdES-B-T timestamps.
+   * Best-effort at sign time; unset = no embedded timestamp (the transparency
+   * log + anchor remain the primary trusted timestamp). e.g.
+   * http://timestamp.digicert.com
+   */
+  TSA_URL: z.string().url().optional(),
 });
 
 export type BaseEnv = z.infer<typeof baseEnvSchema>;

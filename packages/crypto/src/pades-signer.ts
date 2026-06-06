@@ -16,15 +16,24 @@
 
 import { Signer } from '@signpdf/signpdf';
 import forge from 'node-forge';
+import {
+  injectTimestampToken,
+  requestTimestampToken,
+  signerInfoSignature,
+  type TsaOptions,
+} from './tsa.js';
 
 export class ForgePadesSigner extends Signer {
   readonly #cert: forge.pki.Certificate;
   readonly #key: forge.pki.rsa.PrivateKey;
+  readonly #tsa: TsaOptions | undefined;
 
-  constructor(certPem: string, keyPem: string) {
+  /** @param tsa optional RFC-3161 TSA — when set, signatures are PAdES-B-T. */
+  constructor(certPem: string, keyPem: string, tsa?: TsaOptions) {
     super();
     this.#cert = forge.pki.certificateFromPem(certPem);
     this.#key = forge.pki.privateKeyFromPem(keyPem);
+    this.#tsa = tsa;
   }
 
   /**
@@ -53,7 +62,19 @@ export class ForgePadesSigner extends Signer {
       ],
     });
     p7.sign({ detached: true });
-    const der = forge.asn1.toDer(p7.toAsn1()).getBytes();
+
+    const p7Asn1 = p7.toAsn1();
+    // PAdES-B-T: best-effort RFC-3161 signature timestamp as an UNSIGNED attr.
+    // Any failure (TSA down, timeout, malformed) leaves a valid PAdES-B-B
+    // signature — the transparency log + anchor remain the primary timestamp.
+    if (this.#tsa) {
+      const sig = signerInfoSignature(p7Asn1);
+      if (sig) {
+        const token = await requestTimestampToken(sig, this.#tsa);
+        if (token) injectTimestampToken(p7Asn1, token);
+      }
+    }
+    const der = forge.asn1.toDer(p7Asn1).getBytes();
     return Buffer.from(der, 'binary');
   }
 }

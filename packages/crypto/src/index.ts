@@ -34,6 +34,14 @@ export { ForgePadesSigner } from './pades-signer.js';
 // Hybrid signing pipeline (issuer-side).
 export { createHybridSigner } from './hybrid-signer.js';
 
+// RFC-3161 trusted timestamping (PAdES-B-T; issuer-side, best-effort).
+export {
+  requestTimestampToken,
+  injectTimestampToken,
+  signerInfoSignature,
+  type TsaOptions,
+} from './tsa.js';
+
 // Signature verification (verify-side, keyless).
 export { createSignatureVerifier } from './verifier.js';
 

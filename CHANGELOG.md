@@ -8,6 +8,12 @@ All notable changes to this project are documented here. Format follows
 
 ### Added
 
+- 2026-06-06: **PAdES-B-T** — best-effort RFC-3161 trusted timestamps embedded in
+  the PAdES signature (configured via `TSA_URL`; request format validated live
+  against DigiCert, freetsa, and Sectigo). The timestamp is an *unsigned*
+  attribute, so it can never invalidate the signature, and a TSA outage degrades
+  gracefully to PAdES-B-B. 6 crypto tests; e2e pipeline intact with the enlarged
+  signature placeholder.
 - 2026-06-06: **Live deployment** to Cloud Run (`asia-east1`, scale-to-zero) —
   issuer + verify, isolated `trust` Firestore DB, images in Artifact Registry,
   Cloud Run domain mappings (the `ghs.googlehosted.com` CNAMEs). Public repo +

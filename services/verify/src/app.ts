@@ -44,6 +44,7 @@ import {
 import { checkAnchor, checkLogInclusion, deriveOutcome, publicFieldsOf } from './verification.js';
 import { RateLimiter } from './rate-limit.js';
 import { renderCredentialPage, renderErrorPage, renderLandingPage } from './page.js';
+import { FONT_BYTES, isFontFile } from './fonts/font-bytes.js';
 
 /**
  * A single structured-log method. Two overloads matching how the service calls
@@ -202,7 +203,9 @@ export function createVerifyApp(deps: VerifyDeps): Hono<{ Variables: RequestVars
         "base-uri 'none'",
         "object-src 'none'",
         "frame-ancestors 'none'",
-        "img-src 'self' data:",
+        "img-src 'none'",
+        // Brand woff2 served same-origin from GET /fonts/:file; no CDN, offline-safe.
+        "font-src 'self'",
         `style-src 'self' 'nonce-${nonce}'`,
         `script-src 'self' 'nonce-${nonce}'`,
         "connect-src 'self'",
@@ -236,6 +239,29 @@ export function createVerifyApp(deps: VerifyDeps): Hono<{ Variables: RequestVars
       logger.error({ err: String(err) }, 'readiness probe failed');
       return c.json({ status: 'unready' }, 503);
     }
+  });
+
+  // ── Self-hosted brand fonts (in-memory, immutable, same-origin) ────────────
+  // The design system's @font-face block references url(/fonts/<file>.woff2);
+  // these bytes live in a compiled module so they ship in the pruned distroless
+  // image with no filesystem or Dockerfile change. The map IS the allow-list:
+  // anything not a known key 404s, so there is no path-traversal surface. Public
+  // and uncacheable-by-nobody: content-stable per @fontsource version → immutable.
+  app.get('/fonts/:file', (c) => {
+    const file = c.req.param('file');
+    if (!isFontFile(file)) {
+      fail('NOT_FOUND', 'Unknown font.', 404);
+    }
+    const bytes = FONT_BYTES[file];
+    if (!bytes) {
+      fail('NOT_FOUND', 'Unknown font.', 404);
+    }
+    // Copy into a fresh, exact-length ArrayBuffer (same pattern as pdfResponse).
+    const buf = bytes.slice().buffer;
+    c.header('Content-Type', 'font/woff2');
+    c.header('Cache-Control', 'public, max-age=31536000, immutable');
+    c.header('Content-Length', String(bytes.byteLength));
+    return c.body(buf);
   });
 
   // ── Landing (bare domain): branded entry; `?id=…` redirects to /c/:id ──────
@@ -324,8 +350,11 @@ export function createVerifyApp(deps: VerifyDeps): Hono<{ Variables: RequestVars
 
     let parsed: { credentialId: string; password: string };
     try {
-      const json = await c.req.json();
-      const result = downloadSchema.safeParse(json);
+      // Accept JSON (enhanced fetch) OR urlencoded (the no-JS form POST). Either
+      // way the password stays in the POST body — never a GET URL or query log.
+      const ct = c.req.header('content-type') ?? '';
+      const raw = ct.includes('application/json') ? await c.req.json() : await c.req.parseBody();
+      const result = downloadSchema.safeParse(raw);
       if (!result.success) {
         fail('VALIDATION_FAILED', 'Invalid download request.', 400);
       }

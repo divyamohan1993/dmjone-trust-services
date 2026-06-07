@@ -34,6 +34,13 @@ async function loadKeysWithRetry(
 }
 
 async function main(): Promise<void> {
+  // Local dev/preview: load a gitignored .env before validation. In Cloud Run
+  // there is no .env (env is injected) and loadEnvFile throws — ignore it.
+  try {
+    process.loadEnvFile();
+  } catch {
+    /* no .env present — using the injected environment */
+  }
   const env = loadEnv();
   const logger = pino({ level: env.LOG_LEVEL });
   const stores = env.DATA_BACKEND === 'memory' ? createInMemoryStores() : createFirestoreStores(env);

@@ -18,6 +18,7 @@ function setStatus(msg, isError){
   if(!statusEl) return;
   statusEl.textContent = msg || '';
   statusEl.setAttribute('role', isError ? 'alert' : 'status');
+  statusEl.setAttribute('aria-live', isError ? 'assertive' : 'polite');
 }
 // base64url <-> ArrayBuffer
 function b64uToBuf(b64u){
@@ -160,6 +161,7 @@ function renderRows(items){
     if(it.status !== 'revoked'){
       var btn = document.createElement('button');
       btn.type = 'button'; btn.className = 'secondary'; btn.textContent = 'Revoke';
+      btn.setAttribute('aria-label', 'Revoke credential ' + it.credentialId);
       btn.setAttribute('data-revoke', it.credentialId);
       actions.appendChild(btn);
     }

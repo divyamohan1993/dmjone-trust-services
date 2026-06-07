@@ -12,6 +12,8 @@ import { Hono } from 'hono';
 
 import type { IssuerDeps } from './deps.js';
 import type { IssuerHonoEnv } from './http/context.js';
+import { AppError, ERROR_CODE } from '@dmjone/shared';
+import { FONT_BYTES, isFontFile } from './fonts/font-bytes.js';
 import { errorHandler, requestId, securityHeaders } from './http/middleware.js';
 import { registerAdminUiRoutes } from './routes/admin-ui.js';
 import { registerAuthRoutes } from './routes/auth.js';
@@ -35,6 +37,27 @@ export function createIssuerApp(deps: IssuerDeps): Hono<IssuerHonoEnv> {
   app.onError(errorHandler(deps));
   app.use('*', requestId());
   app.use('*', securityHeaders());
+
+  // Self-hosted brand fonts (in-memory, immutable, same-origin). Registered
+  // BEFORE any auth gate so the shared design system's @font-face url(/fonts/...)
+  // loads on the sign-in / bootstrap surfaces too (font-src 'self' already set).
+  // The map IS the allow-list: an unknown filename 404s, no path traversal.
+  app.get('/fonts/:file', (c) => {
+    const file = c.req.param('file');
+    if (!isFontFile(file)) {
+      throw new AppError(ERROR_CODE.NOT_FOUND, 'Unknown font.', 404);
+    }
+    const bytes = FONT_BYTES[file];
+    if (!bytes) {
+      throw new AppError(ERROR_CODE.NOT_FOUND, 'Unknown font.', 404);
+    }
+    // Copy into a fresh, exact-length ArrayBuffer for a clean BodyInit slice.
+    const buf = bytes.slice().buffer;
+    c.header('Content-Type', 'font/woff2');
+    c.header('Cache-Control', 'public, max-age=31536000, immutable');
+    c.header('Content-Length', String(bytes.byteLength));
+    return c.body(buf);
+  });
 
   registerHealthRoutes(app, deps);
   registerAuthRoutes(app, deps);

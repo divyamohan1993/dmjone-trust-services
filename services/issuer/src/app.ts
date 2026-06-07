@@ -42,5 +42,8 @@ export function createIssuerApp(deps: IssuerDeps): Hono<IssuerHonoEnv> {
   registerSuperAdminRoutes(app, deps);
   registerAdminUiRoutes(app, deps);
 
+  // Bare domain → the admin console (avoid a raw 404 on `/`).
+  app.get('/', (c) => c.redirect('/admin', 302));
+
   return app;
 }

@@ -2,7 +2,7 @@
  * One-time key material generation.
  *
  * Two independent keypairs back the hybrid signature:
- *   - ML-DSA-65 (FIPS 204) for the post-quantum detached signature.
+ *   - ML-DSA-87 (FIPS 204) for the post-quantum detached signature.
  *   - A self-signed RSA-3072 X.509 certificate for the embedded PAdES PKCS#7.
  *
  * These are generated once at install/setup, encrypted at rest by Stream D, and
@@ -10,7 +10,7 @@
  * or persistence — it returns plain key material for the caller to store safely.
  */
 
-import { ml_dsa65 } from '@noble/post-quantum/ml-dsa.js';
+import { ml_dsa87 } from '@noble/post-quantum/ml-dsa.js';
 import forge from 'node-forge';
 import { sha256Hex } from './hash.js';
 import { binaryStringToBytes } from './pades-util.js';
@@ -38,9 +38,9 @@ export interface MldsaKeypair {
   publicKeyId: string;
 }
 
-/** Generate a fresh ML-DSA-65 keypair plus its derived public-key id. */
+/** Generate a fresh ML-DSA-87 keypair plus its derived public-key id. */
 export function generateMldsaKeypair(): MldsaKeypair {
-  const { publicKey, secretKey } = ml_dsa65.keygen();
+  const { publicKey, secretKey } = ml_dsa87.keygen();
   const pub = Uint8Array.from(publicKey);
   return {
     publicKey: pub,

@@ -46,7 +46,7 @@ describe('buildSection63Html', () => {
   it('carries the issuer trust identity', () => {
     expect(html).toContain('dmj.one Trust Services');
     expect(html).toContain('Document Signing');
-    expect(html).toContain('ML-DSA-65');
+    expect(html).toContain('ML-DSA-87');
   });
 
   it('makes the honest disclosure (not a licensed-CA DSC; self-signed; tamper-evident)', () => {
@@ -87,7 +87,7 @@ describe('createSection63Generator.metadata', () => {
     expect(meta.producedBy).toContain('Cloud Run');
     expect(meta.producedBy).toContain('asia-east1');
     expect(meta.productionMethod).toContain('PAdES');
-    expect(meta.productionMethod).toContain('ML-DSA-65');
+    expect(meta.productionMethod).toContain('ML-DSA-87');
     expect(meta.deviceParticulars).toContain('Chromium');
     expect(meta.generatedAt).toBe('2026-06-04T00:00:00.000Z');
   });

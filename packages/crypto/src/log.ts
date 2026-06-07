@@ -4,7 +4,7 @@
  *   leaf_n = SHA-256(canonicalSha256_n)
  *   head_n = SHA-256(leaf_n ‖ head_{n-1})         (head_0 = GENESIS_HEAD_HASH)
  *
- * Each head is a Signed Tree Head: the running chain digest, ML-DSA-65 signed.
+ * Each head is a Signed Tree Head: the running chain digest, ML-DSA-87 signed.
  * Anyone with the log public key can replay the chain and verify every head, so
  * the issuer cannot silently rewrite or back-date history.
  *
@@ -16,7 +16,7 @@
  * the audit log.
  */
 
-import { ml_dsa65 } from '@noble/post-quantum/ml-dsa.js';
+import { ml_dsa87 } from '@noble/post-quantum/ml-dsa.js';
 import {
   GENESIS_HEAD_HASH,
   type LogLeaf,
@@ -87,7 +87,7 @@ export function nextHead(prevHead: SignedTreeHead | null, input: NextHeadInput):
 
 /**
  * Issuer-side log signer (holds the log secret key). The keyless verify service
- * never constructs this. The log key is just another ML-DSA-65 keypair, provided
+ * never constructs this. The log key is just another ML-DSA-87 keypair, provided
  * as raw bytes by the composition root.
  */
 export function createLogSigner(logSecretKey: Uint8Array): LogSigner {
@@ -95,7 +95,7 @@ export function createLogSigner(logSecretKey: Uint8Array): LogSigner {
     computeLeafHash,
     computeHeadHash,
     signHead(headHash: string): string {
-      return bytesToBase64(ml_dsa65.sign(toUtf8Bytes(headHash), logSecretKey));
+      return bytesToBase64(ml_dsa87.sign(toUtf8Bytes(headHash), logSecretKey));
     },
   };
 }
@@ -107,7 +107,7 @@ export function createLogVerifier(logPublicKey: Uint8Array): LogVerifier {
     computeHeadHash,
     verifyHead(head: SignedTreeHead): boolean {
       try {
-        return ml_dsa65.verify(base64ToBytes(head.signature), toUtf8Bytes(head.headHash), logPublicKey);
+        return ml_dsa87.verify(base64ToBytes(head.signature), toUtf8Bytes(head.headHash), logPublicKey);
       } catch {
         return false;
       }

@@ -30,7 +30,7 @@ export const SAMPLE_SECTION63: Section63Metadata = {
   hashValue: 'a'.repeat(64),
   hashAlgorithm: 'SHA-256',
   producedBy: 'dmj.one Trust Services (Google Cloud Run, asia-east1)',
-  productionMethod: 'render to PDF, embed PAdES, detached ML-DSA-65 over SHA-256 of the signed PDF',
+  productionMethod: 'render to PDF, embed PAdES, detached ML-DSA-87 over SHA-256 of the signed PDF',
   deviceParticulars: 'Cloud Run Linux container, headless Chromium, Node.js signer',
   generatedAt: '2026-06-04T10:15:00.000Z',
 };

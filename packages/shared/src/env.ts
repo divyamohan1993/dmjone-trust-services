@@ -29,8 +29,11 @@ const baseEnvSchema = z.object({
   ISSUER_CONTACT_PHONE: z.string().default('+91 79799 30293'),
 
   MASTER_ENCRYPTION_KEY: z.string().optional(),
-  ARGON2_MEMORY_KIB: z.coerce.number().int().positive().default(19456),
-  ARGON2_ITERATIONS: z.coerce.number().int().positive().default(2),
+  // Argon2id (pure-JS, runs in the distroless verify image): 32 MiB / t=3 is a
+  // research-grade bump over the OWASP-min 19 MiB/t=2 that stays within the
+  // download endpoint's latency + memory budget. 64 MiB pure-JS is too slow.
+  ARGON2_MEMORY_KIB: z.coerce.number().int().positive().default(32768),
+  ARGON2_ITERATIONS: z.coerce.number().int().positive().default(3),
   ARGON2_PARALLELISM: z.coerce.number().int().positive().default(1),
   SESSION_SECRET: z.string().min(16),
   ADMIN_SESSION_TTL_SECONDS: z.coerce.number().int().positive().default(900),

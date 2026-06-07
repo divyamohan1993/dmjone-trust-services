@@ -253,7 +253,7 @@ ${flourish()}
       </section>
       <section class="explainer" aria-labelledby="he">
         <h2 id="he">How verification works</h2>
-        <p>Each credential carries a post-quantum signature (ML-DSA-65) over its exact bytes, is recorded in a public, tamper-evident transparency log, and is anchored externally. Change a single bit and verification reports <strong>TAMPERED</strong>. This is a self-signed cryptographic attestation by an independent educational initiative, not a licensed certifying-authority signature.</p>
+        <p>Each credential carries a post-quantum signature (ML-DSA-87) over its exact bytes, is recorded in a public, tamper-evident transparency log, and is anchored externally. Change a single bit and verification reports <strong>TAMPERED</strong>. This is a self-signed cryptographic attestation by an independent educational initiative, not a licensed certifying-authority signature.</p>
       </section>
     </main>
     <footer class="foot">
@@ -289,7 +289,7 @@ export function renderCredentialPage(input: CredentialPageInput): string {
   // Pre-render each check row with its server-computed state, so the ledger is
   // meaningful (and honest) before any script runs.
   const checkRows: Array<{ key: keyof VerificationChecks; label: string }> = [
-    { key: 'mldsaSignature', label: 'Post-quantum signature (ML-DSA-65)' },
+    { key: 'mldsaSignature', label: 'Post-quantum signature (ML-DSA-87)' },
     { key: 'logInclusion', label: 'Transparency-log inclusion' },
     { key: 'anchorProof', label: 'External anchor (GitHub · OpenTimestamps)' },
     { key: 'notRevoked', label: 'Not revoked by issuer' },

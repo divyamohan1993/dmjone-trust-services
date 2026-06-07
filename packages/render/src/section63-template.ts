@@ -199,12 +199,12 @@ ${SECTION63_CSS}
 
       <div class="sec">
         <h2>Issuer Trust Identity</h2>
-        <p class="lede" style="font-size:9.6pt;">${escapeHtml(issuerIdentity)}. The signed PDF carries an embedded PAdES (PKCS#7) signature object bearing this subject, and a detached post-quantum ML-DSA-65 (NIST FIPS&nbsp;204) signature covering the document hash, retained in the issuer&rsquo;s records and transparency log.</p>
+        <p class="lede" style="font-size:9.6pt;">${escapeHtml(issuerIdentity)}. The signed PDF carries an embedded PAdES (PKCS#7) signature object bearing this subject, and a detached post-quantum ML-DSA-87 (NIST FIPS&nbsp;204) signature covering the document hash, retained in the issuer&rsquo;s records and transparency log.</p>
       </div>
 
       <div class="disclosure">
         <h2>Honest Disclosure &middot; Nature &amp; Limits of this Attestation</h2>
-        <p>dmj.one is an independent educational initiative; it is <strong>not</strong> a Government body, a recognised University, or a licensed Certifying Authority. The cryptographic signatures on the record are <strong>self-signed</strong> attestations by dmj.one: they prove that this credential was issued by dmj.one and has not been altered. They are <strong>not</strong> a digital signature backed by a licensed Certifying Authority under the Information Technology Act, 2000, and therefore do not carry the statutory presumption attaching to such signatures. Tamper-evidence is provided by the post-quantum ML-DSA-65 signature together with a public, append-only transparency log; authenticity may be verified independently and without any password at the issuer&rsquo;s verification service.</p>
+        <p>dmj.one is an independent educational initiative; it is <strong>not</strong> a Government body, a recognised University, or a licensed Certifying Authority. The cryptographic signatures on the record are <strong>self-signed</strong> attestations by dmj.one: they prove that this credential was issued by dmj.one and has not been altered. They are <strong>not</strong> a digital signature backed by a licensed Certifying Authority under the Information Technology Act, 2000, and therefore do not carry the statutory presumption attaching to such signatures. Tamper-evidence is provided by the post-quantum ML-DSA-87 signature together with a public, append-only transparency log; authenticity may be verified independently and without any password at the issuer&rsquo;s verification service.</p>
       </div>
 
       <div class="signrow">

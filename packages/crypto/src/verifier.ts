@@ -5,7 +5,7 @@
  *
  *  - {@link SignatureVerifier.verifyMldsa}: the authoritative check. Rebuilds the
  *    canonical payload via the SHARED computeCanonicalPayload (byte-identical to
- *    issue-time) and verifies the detached ML-DSA-65 signature. Never throws —
+ *    issue-time) and verifies the detached ML-DSA-87 signature. Never throws —
  *    any malformed input is a verification failure, not an exception.
  *  - {@link SignatureVerifier.verifyPdfPades}: only meaningful in the file-upload
  *    flow. Parses the embedded PKCS#7, recomputes the ByteRange digest and
@@ -16,7 +16,7 @@
  * service with only public keys + the public certificate.
  */
 
-import { ml_dsa65 } from '@noble/post-quantum/ml-dsa.js';
+import { ml_dsa87 } from '@noble/post-quantum/ml-dsa.js';
 import {
   computeCanonicalPayload,
   type CredentialContent,
@@ -37,7 +37,7 @@ export function createSignatureVerifier(keys: VerifyingKeys): SignatureVerifier 
       try {
         const canonical = computeCanonicalPayload(content, pdfSha256);
         const sig = base64ToBytes(signatureB64);
-        return ml_dsa65.verify(sig, toUtf8Bytes(canonical), keys.mldsaPublicKey);
+        return ml_dsa87.verify(sig, toUtf8Bytes(canonical), keys.mldsaPublicKey);
       } catch {
         // Malformed signature / inputs → not verified. Never leak details.
         return false;

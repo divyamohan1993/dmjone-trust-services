@@ -1,15 +1,15 @@
-import { ml_dsa65 } from '@noble/post-quantum/ml-dsa.js';
+import { ml_dsa87 } from '@noble/post-quantum/ml-dsa.js';
 import forge from 'node-forge';
 import { describe, expect, it } from 'vitest';
 import { sha256Hex, toUtf8Bytes } from './hash.js';
 import { generateMldsaKeypair, generateSelfSignedPadesCert, mldsaPublicKeyId } from './keys.js';
 
 describe('generateMldsaKeypair', () => {
-  it('produces ML-DSA-65 keys of the FIPS 204 sizes', () => {
+  it('produces ML-DSA-87 keys of the FIPS 204 sizes', () => {
     const kp = generateMldsaKeypair();
-    // ML-DSA-65: public key 1952 bytes, secret key 4032 bytes.
-    expect(kp.publicKey.length).toBe(1952);
-    expect(kp.secretKey.length).toBe(4032);
+    // ML-DSA-87 (NIST Level 5): public key 2592 bytes, secret key 4896 bytes.
+    expect(kp.publicKey.length).toBe(2592);
+    expect(kp.secretKey.length).toBe(4896);
   });
 
   it('derives publicKeyId as the first 16 hex of sha256(publicKey)', () => {
@@ -22,10 +22,10 @@ describe('generateMldsaKeypair', () => {
   it('can sign and verify a message with the generated keys', () => {
     const kp = generateMldsaKeypair();
     const msg = toUtf8Bytes('quantum-verifiable');
-    const sig = ml_dsa65.sign(msg, kp.secretKey);
-    expect(ml_dsa65.verify(sig, msg, kp.publicKey)).toBe(true);
+    const sig = ml_dsa87.sign(msg, kp.secretKey);
+    expect(ml_dsa87.verify(sig, msg, kp.publicKey)).toBe(true);
     // A different message must not verify under the same signature.
-    expect(ml_dsa65.verify(sig, toUtf8Bytes('tampered'), kp.publicKey)).toBe(false);
+    expect(ml_dsa87.verify(sig, toUtf8Bytes('tampered'), kp.publicKey)).toBe(false);
   });
 
   it('generates distinct keypairs on each call', () => {

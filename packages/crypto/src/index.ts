@@ -2,7 +2,7 @@
  * @dmjone/crypto — the cryptographic core (Stream A).
  *
  * Implements the @dmjone/shared crypto contracts: hybrid signing (PAdES PKCS#7 +
- * detached ML-DSA-65), signature verification, the transparency-log hash chain
+ * detached ML-DSA-87), signature verification, the transparency-log hash chain
  * (Signed Tree Heads), and external anchoring. Everything is exposed as factory
  * functions that take their dependencies as plain key material / config, so the
  * issuer and verify services wire concrete keys in at composition time.

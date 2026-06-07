@@ -225,6 +225,11 @@ function head(nonce: string, title: string): string {
   .panel .submit-row{ margin-top:12px; }
   .trust-spaced{ margin-top:22px; }
 
+  /* landing: verify-by-id lookup */
+  .lookup{ display:flex; gap:10px; flex-wrap:wrap; margin-top:20px; }
+  .lookup input{ flex:1 1 260px; padding:12px 14px; font-size:15px; border:1px solid #D8CFC0; border-radius:10px; font-family:var(--label); letter-spacing:.03em; color:var(--ink); background:#fff; }
+  .lookup input:focus-visible{ outline:3px solid var(--gold-soft); outline-offset:1px; border-color:var(--gold); }
+
   .explainer{ margin-top:30px; font-size:13.5px; color:var(--ink-soft); }
   .explainer h2{ font-family:var(--label); font-size:12px; letter-spacing:.18em; text-transform:uppercase; color:var(--gold-deep); }
   .flip{ display:inline-flex; gap:6px; align-items:center; margin-top:8px; font-family:ui-monospace,monospace; font-size:12.5px; }
@@ -272,6 +277,47 @@ export function renderErrorPage(input: { nonce: string; issuer: string }): strin
       </div>
     </main>
     <footer class="foot">${escapeHtml(IDENTITY.trustService)} · ${escapeHtml(IDENTITY.email)}</footer>
+  </div>
+</body>
+</html>`;
+}
+
+/**
+ * The public landing page at `/` — a branded entry point so the bare domain is
+ * never a raw 404. The form GETs `/?id=…`, which the route redirects to
+ * `/c/<id>` (works with JavaScript off; no path-building needed client-side).
+ */
+export function renderLandingPage(input: { nonce: string; issuer: string }): string {
+  const { nonce, issuer } = input;
+  return `${head(nonce, `Verify a credential · ${IDENTITY.trustService}`)}
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <div class="wrap">
+    <header class="brand">
+      <span class="mark"><b>dmj</b>.one</span>
+      <span class="svc">${escapeHtml(issuer)}</span>
+      <span class="descriptor">${escapeHtml(IDENTITY.descriptor)}</span>
+    </header>
+    <main id="main">
+      <section class="card" aria-labelledby="lh">
+        <p class="eyebrow">Verification</p>
+        <h1 class="type-title" id="lh">Verify a credential</h1>
+        <p class="recipient"><span class="lbl">${escapeHtml(IDENTITY.trustService)}</span>Confirm a certificate is authentic, untampered, and recorded in the transparency log.</p>
+        <form class="lookup" method="GET" action="/" role="search" aria-label="Verify by credential ID">
+          <input name="id" type="text" inputmode="text" autocomplete="off" spellcheck="false"
+                 placeholder="Credential ID, e.g. DMJ-IC-20260606-01" aria-label="Credential ID" maxlength="64" required>
+          <button class="btn primary" type="submit">Verify</button>
+        </form>
+        <p class="trust trust-spaced">Scan the QR code on a certificate, follow its verification link, or paste the credential ID above. ${escapeHtml(issuer)} only attests to credentials it has issued; the handwritten signature lives only inside the password-protected PDF, never on this page.</p>
+      </section>
+      <section class="explainer" aria-labelledby="he">
+        <h2 id="he">How verification works</h2>
+        <p>Each credential carries a post-quantum signature (ML-DSA-65) over its exact bytes, is recorded in a public, tamper-evident transparency log, and is anchored externally. Change a single bit and verification reports <strong>TAMPERED</strong>. This is a self-signed cryptographic attestation by an independent educational initiative, not a licensed certifying-authority signature.</p>
+      </section>
+    </main>
+    <footer class="foot">
+      ${escapeHtml(IDENTITY.trustService)} · ${escapeHtml(IDENTITY.email)} · <span>${escapeHtml(IDENTITY.motto)}</span>
+    </footer>
   </div>
 </body>
 </html>`;

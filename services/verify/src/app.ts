@@ -43,7 +43,7 @@ import {
 } from '@dmjone/shared';
 import { checkAnchor, checkLogInclusion, deriveOutcome, publicFieldsOf } from './verification.js';
 import { RateLimiter } from './rate-limit.js';
-import { renderCredentialPage, renderErrorPage } from './page.js';
+import { renderCredentialPage, renderErrorPage, renderLandingPage } from './page.js';
 
 /**
  * A single structured-log method. Two overloads matching how the service calls
@@ -236,6 +236,18 @@ export function createVerifyApp(deps: VerifyDeps): Hono<{ Variables: RequestVars
       logger.error({ err: String(err) }, 'readiness probe failed');
       return c.json({ status: 'unready' }, 503);
     }
+  });
+
+  // ── Landing (bare domain): branded entry; `?id=…` redirects to /c/:id ──────
+  app.get('/', (c) => {
+    const id = c.req.query('id');
+    if (id) {
+      const parsed = credentialIdParamSchema.safeParse({ credentialId: id.trim() });
+      if (parsed.success) {
+        return c.redirect(`/c/${encodeURIComponent(parsed.data.credentialId)}`, 302);
+      }
+    }
+    return c.html(renderLandingPage({ nonce: c.get('nonce'), issuer: issuerName }));
   });
 
   // ── The public credential page (distinct, web-native, SSR) ─────────────────

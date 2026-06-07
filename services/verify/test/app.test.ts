@@ -116,6 +116,29 @@ function makeHarness(recordOverrides: Partial<CredentialRecord> = {}): Harness {
 
 const ID = 'DMJ-IC-20260604-01';
 
+describe('landing (bare domain)', () => {
+  it('GET / renders the branded landing, not a raw 404', async () => {
+    const { app } = makeHarness();
+    const res = await app.request('/');
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type') ?? '').toContain('text/html');
+    expect(await res.text()).toContain('Verify a credential');
+  });
+
+  it('GET /?id=<valid> redirects to /c/:id', async () => {
+    const { app } = makeHarness();
+    const res = await app.request(`/?id=${ID}`);
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe(`/c/${ID}`);
+  });
+
+  it('GET /?id=<invalid> falls back to the landing (no open redirect)', async () => {
+    const { app } = makeHarness();
+    const res = await app.request('/?id=' + encodeURIComponent('bad id /../'));
+    expect(res.status).toBe(200);
+  });
+});
+
 describe('health', () => {
   it('GET /health is shallow OK', async () => {
     const { app } = makeHarness();

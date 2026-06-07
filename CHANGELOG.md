@@ -6,6 +6,12 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- 2026-06-07: Bare domains no longer return a raw 404. `verify.dmj.one/` now
+  serves a branded "verify by credential ID" landing (`/?id=…` redirects to
+  `/c/:id`); `issue.dmj.one/` redirects to `/admin`.
+
 ### Added
 
 - 2026-06-06: **PAdES-B-T** — best-effort RFC-3161 trusted timestamps embedded in

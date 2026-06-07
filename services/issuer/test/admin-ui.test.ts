@@ -4,6 +4,15 @@ import { createIssuerApp } from '../src/app.js';
 import { buildDeps } from './fakes.js';
 import { mintSessionCookie } from './session-helper.js';
 
+describe('GET / (bare domain)', () => {
+  it('redirects to /admin instead of a raw 404', async () => {
+    const app = createIssuerApp(buildDeps());
+    const res = await app.request('/');
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe('/admin');
+  });
+});
+
 describe('GET /admin (server-rendered, no CDN)', () => {
   it('renders the first-time setup view when unprovisioned + unauthenticated', async () => {
     const app = createIssuerApp(buildDeps());

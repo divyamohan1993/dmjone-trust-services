@@ -1,12 +1,15 @@
 /**
  * Server-rendered admin UI: sign-in, issuance form, credential list.
  *
- * The page is plain HTML/CSS from {@link page}; the only script is one inline,
- * nonce'd, dependency-free block ({@link adminScript}) that drives the WebAuthn
- * ceremonies through the raw `navigator.credentials` API and posts to the
- * `/api/auth` + `/api/credentials` JSON endpoints. No CDN, no bundler, no
- * third-party code. The page itself ships no secrets; everything sensitive
- * stays server-side behind the session cookie.
+ * The page is plain HTML/CSS from {@link page} (the shared "Sealed Instrument"
+ * design system); the only script is one inline, nonce'd, dependency-free block
+ * ({@link adminScript}) that drives the WebAuthn ceremonies through the raw
+ * `navigator.credentials` API and posts to the `/api/auth` + `/api/credentials`
+ * JSON endpoints. No CDN, no bundler, no third-party code. The page itself ships
+ * no secrets; everything sensitive stays server-side behind the session cookie.
+ *
+ * Register: the ornamental "sealing ceremony" surface. Sign-in / bootstrap is
+ * the act of SEALING (passkey); the dashboard is composing a fresh document.
  *
  * Accessibility (WCAG 2.2 AA): semantic landmarks, a skip link (from the
  * layout), labelled inputs, a polite live region for status messages, visible
@@ -23,6 +26,9 @@ import { readSession } from '../auth/session.js';
 import { isProvisioned } from '../auth/admin-store.js';
 import { adminScript } from '../ui/admin-script.js';
 import { page } from '../ui/layout.js';
+
+/** The four diamond corner studs that frame an ornamental hero card. */
+const STUDS = html`<span class="stud tl" aria-hidden="true"></span><span class="stud tr" aria-hidden="true"></span><span class="stud bl" aria-hidden="true"></span><span class="stud br" aria-hidden="true"></span>`;
 
 export function registerAdminUiRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps): void {
   app.get('/admin', async (c) => {
@@ -50,25 +56,36 @@ export function registerAdminUiRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps
 /** Sign-in view: passkey login (or first-time bootstrap) + recovery entry. */
 function signInBody(provisioned: boolean): ReturnType<typeof html> {
   return html`<h1>${provisioned ? 'Administrator sign-in' : 'First-time setup'}</h1>
+<p class="lede">${provisioned
+    ? 'Authenticate with a registered passkey to seal and issue credentials.'
+    : 'Register the first administrator passkey to bring this issuer to life.'}</p>
 <p class="muted" id="status" role="status" aria-live="polite"></p>
 
 ${provisioned
     ? html`<div class="card">
-  <h2>Sign in with a passkey</h2>
-  <p>Use a registered passkey (Windows Hello, a phone, or a security key).</p>
-  <button type="button" data-action="login">Sign in with passkey</button>
+  ${STUDS}
+  <h2>Seal your session</h2>
+  <p>Use a registered passkey (Windows Hello, a phone, or a security key) to sign in.</p>
+  <div class="actions">
+    <button type="button" data-action="login">Sign in with passkey</button>
+  </div>
 </div>
-<div class="card">
-  <h2>Lost your passkeys? Recover</h2>
-  <p>Enter a one-time recovery code and your authenticator code, then register a fresh passkey.</p>
+<details class="panel">
+  <summary>Lost your passkeys? Recover access</summary>
+  <div class="inner">
+  <p class="muted">Enter a one-time recovery code and your authenticator code, then register a fresh passkey.</p>
   <label for="rc-code">Recovery code</label>
   <input id="rc-code" name="recoveryCode" autocomplete="off" spellcheck="false" />
   <label for="rc-totp">Authenticator code</label>
   <input id="rc-totp" name="token" inputmode="numeric" autocomplete="one-time-code"
     pattern="[0-9]*" maxlength="6" />
-  <p><button type="button" class="secondary" data-action="recover">Recover & register passkey</button></p>
-</div>`
+  <div class="actions">
+    <button type="button" class="secondary" data-action="recover">Recover &amp; register passkey</button>
+  </div>
+  </div>
+</details>`
     : html`<div class="card">
+  ${STUDS}
   <h2>Register the administrator passkey</h2>
   <p>No administrator exists yet. Enter the one-time setup token (from your deployment
   secrets) and register the first passkey to bootstrap this issuer. After this, registration
@@ -79,16 +96,20 @@ ${provisioned
     spellcheck="false" autocapitalize="off" />
   <label for="pk-label">Passkey label</label>
   <input id="pk-label" name="label" value="primary" autocomplete="off" />
-  <p><button type="button" data-action="register">Register administrator passkey</button></p>
+  <div class="actions">
+    <button type="button" data-action="register">Register administrator passkey</button>
+  </div>
 </div>`}`;
 }
 
 /** Authenticated dashboard: register more passkeys, set up TOTP/recovery, issue, list. */
 function dashboardBody(): ReturnType<typeof html> {
   return html`<h1>Issue a certificate</h1>
+<p class="lede">Compose a fresh credential. Each issuance is signed, logged, and sealed.</p>
 <p class="muted" id="status" role="status" aria-live="polite"></p>
 
 <div class="card">
+  ${STUDS}
   <h2>New credential</h2>
   <form id="issue-form">
     <label for="f-type">Type</label>
@@ -101,51 +122,55 @@ function dashboardBody(): ReturnType<typeof html> {
     </select>
     <label for="f-recipient">Recipient name</label>
     <input id="f-recipient" name="recipientName" maxlength="120" required />
-    <div class="row">
-      <div style="flex:1 1 12rem">
+    <div class="field-row">
+      <div class="field-half">
         <label for="f-kicker">Kicker</label>
         <input id="f-kicker" name="kicker" value="Certificate of" maxlength="60" required />
       </div>
-      <div style="flex:1 1 12rem">
+      <div class="field-half">
         <label for="f-title">Title</label>
         <input id="f-title" name="title" value="INTERNSHIP" maxlength="60" required />
       </div>
     </div>
     <label for="f-intro">Intro line</label>
     <input id="f-intro" name="intro" value="This is to certify that" maxlength="120" required />
-    <label for="f-body">Body paragraphs (one per line)</label>
+    <label for="f-body">Body paragraphs (one per line, up to 6)</label>
     <textarea id="f-body" name="bodyParagraphs" required></textarea>
     <label for="f-closing">Closing line (optional)</label>
     <input id="f-closing" name="closingLine" maxlength="200" />
-    <div class="row">
-      <div style="flex:1 1 12rem">
+    <div class="field-row">
+      <div class="field-half">
         <label for="f-date">Issue date</label>
         <input id="f-date" name="issueDate" type="date" required />
       </div>
-      <div style="flex:1 1 12rem">
+      <div class="field-half">
         <label for="f-pw">Candidate download password</label>
         <input id="f-pw" name="password" type="password" minlength="8" maxlength="128" required />
       </div>
     </div>
-    <p><button type="submit">Issue certificate</button></p>
+    <div class="actions">
+      <button type="submit">Issue certificate</button>
+    </div>
   </form>
 </div>
 
 <div class="card">
+  ${STUDS}
   <h2>Issued credentials</h2>
-  <div class="row">
+  <div class="actions">
     <button type="button" class="secondary" data-action="refresh-list">Refresh list</button>
     <button type="button" class="secondary" data-action="logout">Sign out</button>
   </div>
   <table>
-    <thead><tr><th>Credential ID</th><th>Recipient</th><th>Type</th><th>Status</th><th></th></tr></thead>
+    <thead><tr><th>Credential ID</th><th>Recipient</th><th>Type</th><th>Status</th><th><span class="sr-only">Actions</span></th></tr></thead>
     <tbody id="cred-rows"><tr><td colspan="5" class="muted">Loading…</td></tr></tbody>
   </table>
 </div>
 
 <div class="card">
+  ${STUDS}
   <h2>Account security</h2>
-  <div class="row">
+  <div class="actions">
     <button type="button" class="secondary" data-action="add-passkey">Add another passkey</button>
     <button type="button" class="secondary" data-action="totp-enroll">Set up authenticator (TOTP)</button>
     <button type="button" class="secondary" data-action="recovery-gen">Generate recovery codes</button>

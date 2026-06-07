@@ -19,6 +19,7 @@
     "start": "node dist/main.js"
   },
   "dependencies": {
+    "@dmjone/brand": "workspace:*",
     "@dmjone/crypto": "workspace:*",
     "@dmjone/data": "workspace:*",
     "@dmjone/render": "workspace:*",

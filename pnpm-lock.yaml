@@ -153,6 +153,9 @@ importers:
 
   services/issuer:
     dependencies:
+      '@dmjone/brand':
+        specifier: workspace:*
+        version: link:../../packages/brand
       '@dmjone/crypto':
         specifier: workspace:*
         version: link:../../packages/crypto

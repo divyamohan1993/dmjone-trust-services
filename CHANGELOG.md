@@ -6,6 +6,16 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Security
+
+- 2026-06-07: **Crypto strength raised to NIST Level 5.** Credential + transparency-
+  log signatures upgraded from ML-DSA-65 (L3) to **ML-DSA-87** (FIPS 204, Level 5,
+  ~AES-256 quantum security). Argon2id download-password hashing raised to 32 MiB /
+  t=3 (from 19 MiB / t=2 — pure-JS budget keeps it below 64 MiB). All keys
+  regenerated at full CSPRNG entropy (no certificates issued prior, so the
+  re-provision is clean). The classical PAdES PKCS#7 layer (RSA → ECDSA P-521) and
+  the Secret-Manager → Cloud Run / Firestore secret move follow as the next step.
+
 ### Added
 
 - 2026-06-07: **Shared web design system + self-hosted brand fonts** ("The Sealed

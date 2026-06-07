@@ -6,7 +6,7 @@
 /** Cryptographic algorithm identifiers (NIST names). */
 export const ALGO = {
   /** Post-quantum signature: NIST FIPS 204, category 3. */
-  MLDSA: 'ML-DSA-65',
+  MLDSA: 'ML-DSA-87',
   /** Content + chain hash. */
   HASH: 'SHA-256',
   /** Symmetric encryption for secrets at rest. */

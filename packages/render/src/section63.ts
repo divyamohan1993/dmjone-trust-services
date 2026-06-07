@@ -34,14 +34,14 @@ const PRODUCED_BY = 'dmj.one Trust Services (Google Cloud Run, asia-east1)';
 const PRODUCTION_METHOD =
   'The certificate content was rendered to a PDF by a headless Chromium browser; ' +
   'the PDF was then signed in-place with an embedded PAdES (PKCS#7) signature, and a ' +
-  'detached post-quantum ML-DSA-65 (NIST FIPS 204) signature was computed over the ' +
+  'detached post-quantum ML-DSA-87 (NIST FIPS 204) signature was computed over the ' +
   'SHA-256 hash of the signed PDF and retained in the issuer records and the public ' +
   'append-only transparency log.';
 
 const DEVICE_PARTICULARS =
   'Google Cloud Run managed compute (Linux x86-64 container), region asia-east1; ' +
   'system Chromium (headless) for rendering; Node.js runtime performing PAdES signing ' +
-  '(node-forge / @signpdf) and ML-DSA-65 signing (@noble/post-quantum); signing keys ' +
+  '(node-forge / @signpdf) and ML-DSA-87 signing (@noble/post-quantum); signing keys ' +
   'held encrypted at rest (AES-256-GCM) in Google Secret Manager and loaded only by the ' +
   'issuer service at issue-time.';
 

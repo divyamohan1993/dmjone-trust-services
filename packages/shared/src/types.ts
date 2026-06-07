@@ -70,7 +70,7 @@ export interface HybridSignatureResult {
   canonicalPayload: string;
   /** SHA-256 of {@link canonicalPayload}, hex. */
   canonicalSha256: string;
-  /** ML-DSA-65 detached signature, base64. */
+  /** ML-DSA-87 detached signature, base64. */
   mldsaSignature: string;
   /** Key id / version of the ML-DSA public key used. */
   mldsaPublicKeyId: string;
@@ -132,7 +132,7 @@ export interface SignedTreeHead {
   /** SHA-256(leafHash ‖ prevHeadHash), hex. */
   headHash: string;
   prevHeadHash: string;
-  /** ML-DSA-65 signature over headHash, base64. */
+  /** ML-DSA-87 signature over headHash, base64. */
   signature: string;
   signedAt: string;
 }

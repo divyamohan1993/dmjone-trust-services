@@ -37,7 +37,7 @@ function makeSection63(hashValue: string): Section63Metadata {
     hashValue,
     hashAlgorithm: 'SHA-256',
     producedBy: 'dmj.one Trust Services',
-    productionMethod: 'Deterministic HTML→PDF render, hybrid PAdES + ML-DSA-65 signing',
+    productionMethod: 'Deterministic HTML→PDF render, hybrid PAdES + ML-DSA-87 signing',
     deviceParticulars: 'Cloud Run container, asia-east1',
     generatedAt: '2026-06-04T10:00:00.000Z',
   };

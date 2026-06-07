@@ -71,7 +71,7 @@ export function makeRecord(overrides: Partial<CredentialRecord> = {}): Credentia
       hashValue: 'a'.repeat(64),
       hashAlgorithm: 'SHA-256',
       producedBy: 'dmj.one Trust Services',
-      productionMethod: 'Deterministic HTML→PDF render, hybrid PAdES + ML-DSA-65 signature',
+      productionMethod: 'Deterministic HTML→PDF render, hybrid PAdES + ML-DSA-87 signature',
       deviceParticulars: 'Cloud Run container, asia-east1',
       generatedAt: '2026-06-04T10:00:00.000Z',
     },

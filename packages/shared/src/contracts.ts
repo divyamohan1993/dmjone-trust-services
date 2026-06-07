@@ -63,7 +63,7 @@ export interface VerifyingKeys {
  *   2. embed PAdES PKCS#7 placeholder + sign → signedPdf   (FINAL — never mutate after)
  *   3. pdfSha256     = SHA-256(signedPdf)
  *   4. canonical     = computeCanonicalPayload(content, pdfSha256)   (from @dmjone/shared)
- *   5. mldsaSignature = ML-DSA-65.sign(UTF8(canonical))    (DETACHED — not written into the PDF)
+ *   5. mldsaSignature = ML-DSA-87.sign(UTF8(canonical))    (DETACHED — not written into the PDF)
  *   6. canonicalSha256 = SHA-256(UTF8(canonical))          (for the log leaf)
  */
 export interface HybridSigner {
@@ -96,7 +96,7 @@ export interface LogHashing {
 
 /** Issuer-side: holds the log secret key. The keyless verify service never constructs this. */
 export interface LogSigner extends LogHashing {
-  /** ML-DSA-65 signature over the head hash, base64. */
+  /** ML-DSA-87 signature over the head hash, base64. */
   signHead(headHash: string): string;
 }
 

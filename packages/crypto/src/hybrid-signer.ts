@@ -8,7 +8,7 @@
  *   2. embed PAdES placeholder + sign → signedPdf   (FINAL — never mutated after)
  *   3. pdfSha256      = SHA-256(signedPdf)
  *   4. canonical      = computeCanonicalPayload(content, pdfSha256)   (shared)
- *   5. mldsaSignature = ML-DSA-65.sign(UTF8(canonical))   (DETACHED — never in the PDF)
+ *   5. mldsaSignature = ML-DSA-87.sign(UTF8(canonical))   (DETACHED — never in the PDF)
  *   6. canonicalSha256 = SHA-256(UTF8(canonical))
  *
  * Because ML-DSA covers pdfSha256, and pdfSha256 is the hash of the already
@@ -17,7 +17,7 @@
  * the PDF would change pdfSha256 and break the 1-bit upload-verify guarantee.
  */
 
-import { ml_dsa65 } from '@noble/post-quantum/ml-dsa.js';
+import { ml_dsa87 } from '@noble/post-quantum/ml-dsa.js';
 import { SignPdf } from '@signpdf/signpdf';
 import {
   computeCanonicalPayload,
@@ -94,8 +94,8 @@ export function createHybridSigner(keys: SigningKeys, opts?: { tsa?: TsaOptions 
       const canonicalPayload = computeCanonicalPayload(content, pdfSha256);
       const canonicalBytes = toUtf8Bytes(canonicalPayload);
 
-      // 5. Detached ML-DSA-65 signature over the canonical bytes.
-      const mldsaSignature = bytesToBase64(ml_dsa65.sign(canonicalBytes, keys.mldsaSecretKey));
+      // 5. Detached ML-DSA-87 signature over the canonical bytes.
+      const mldsaSignature = bytesToBase64(ml_dsa87.sign(canonicalBytes, keys.mldsaSecretKey));
 
       // 6. Canonical hash (the transparency-log leaf input).
       const canonicalSha256 = sha256Hex(canonicalBytes);

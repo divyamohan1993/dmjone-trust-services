@@ -50,8 +50,8 @@ jobs:
             --service-account="issuer-sa@$PROJECT.iam.gserviceaccount.com" \
             --min-instances=0 --max-instances=2 --cpu=1 --memory=1Gi \
             --concurrency=4 --timeout=120 --allow-unauthenticated \
-            --set-env-vars="SERVICE_ROLE=issuer,DATA_BACKEND=firestore,GCP_PROJECT_ID=$PROJECT,GCP_REGION=$REGION,FIRESTORE_DATABASE_ID=trust,ISSUER_PUBLIC_URL=https://issue.dmj.one,VERIFY_PUBLIC_URL=https://verify.dmj.one,WEBAUTHN_RP_ID=issue.dmj.one,WEBAUTHN_RP_NAME=dmj.one Trust Services,WEBAUTHN_ORIGIN=https://issue.dmj.one,TSA_URL=http://timestamp.digicert.com,SESSION_SECRET=${{ secrets.SESSION_SECRET }},ADMIN_SETUP_TOKEN=${{ secrets.ADMIN_SETUP_TOKEN }}" \
-            --set-secrets="MASTER_ENCRYPTION_KEY=master-encryption-key:latest" # pragma: allowlist secret
+            --set-env-vars="SERVICE_ROLE=issuer,DATA_BACKEND=firestore,GCP_PROJECT_ID=$PROJECT,GCP_REGION=$REGION,FIRESTORE_DATABASE_ID=trust,ISSUER_PUBLIC_URL=https://issue.dmj.one,VERIFY_PUBLIC_URL=https://verify.dmj.one,WEBAUTHN_RP_ID=issue.dmj.one,WEBAUTHN_RP_NAME=dmj.one Trust Services,WEBAUTHN_ORIGIN=https://issue.dmj.one,TSA_URL=http://timestamp.digicert.com" \
+            --set-secrets="MASTER_ENCRYPTION_KEY=master-encryption-key:latest,ADMIN_SETUP_TOKEN=admin-setup-token:latest,SESSION_SECRET=session-secret:latest" # pragma: allowlist secret
 
       - name: Deploy verify
         run: |
@@ -60,7 +60,8 @@ jobs:
             --service-account="verify-sa@$PROJECT.iam.gserviceaccount.com" \
             --min-instances=0 --max-instances=4 --cpu=1 --memory=512Mi \
             --concurrency=80 --timeout=60 --allow-unauthenticated \
-            --set-env-vars="SERVICE_ROLE=verify,DATA_BACKEND=firestore,GCP_PROJECT_ID=$PROJECT,GCP_REGION=$REGION,FIRESTORE_DATABASE_ID=trust,ISSUER_PUBLIC_URL=https://issue.dmj.one,VERIFY_PUBLIC_URL=https://verify.dmj.one,SESSION_SECRET=${{ secrets.SESSION_SECRET }}"
+            --set-env-vars="SERVICE_ROLE=verify,DATA_BACKEND=firestore,GCP_PROJECT_ID=$PROJECT,GCP_REGION=$REGION,FIRESTORE_DATABASE_ID=trust,ISSUER_PUBLIC_URL=https://issue.dmj.one,VERIFY_PUBLIC_URL=https://verify.dmj.one" \
+            --set-secrets="SESSION_SECRET=session-secret:latest" # pragma: allowlist secret
 
       - name: Smoke-check health
         run: |

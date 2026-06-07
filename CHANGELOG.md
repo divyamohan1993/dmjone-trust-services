@@ -15,11 +15,15 @@ All notable changes to this project are documented here. Format follows
   regenerated at full CSPRNG entropy (no certificates issued prior, so the
   re-provision is clean). The classical PAdES PKCS#7 layer (RSA → ECDSA P-521) and
   the Secret-Manager → Cloud Run / Firestore secret move follow as the next step.
-- 2026-06-07: **`session-secret` + `admin-setup-token` moved off Secret Manager**
-  to Cloud Run env vars (free; sourced from GitHub Actions secrets — masked in
-  logs, never in the repo) and raised to 512-bit / 384-bit entropy. The master
-  key stays in Secret Manager, out of the CI path. Secret Manager: 5 → 3 secrets.
-  `trust_public`/`trust_private` → Firestore + the ECDSA layer remain to come.
+- 2026-06-07: **All deploy-time secrets remain in Secret Manager** (`master-encryption-key`,
+  `session-secret`, `admin-setup-token`). An attempt to move `session-secret`/`admin-setup-token`
+  to Cloud Run env vars was reverted after a security review flagged that
+  `SESSION_SECRET` forges admin sessions — like the master key, it must stay out
+  of the CI/config path. (The env-var deploy had already failed on the
+  secret→literal transition, so nothing insecure went live.) The Secret-Manager
+  cost cut will instead come from moving the **sealed/public signing keys** to
+  Firestore (no security downgrade), with the 512/384-bit entropy bump and the
+  ECDSA P-521 layer, as a focused next step.
 
 ### Added
 

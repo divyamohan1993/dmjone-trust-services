@@ -10,8 +10,11 @@
  * concurrent issuance), and `credentialRepo.create` is the final authority on
  * uniqueness.
  *
- * Certificate callers pass `CREDENTIAL_TYPE_CODES[type]`; letter/upload callers
- * pass `DOCUMENT_ID_PREFIX.letter` / `DOCUMENT_ID_PREFIX.upload`.
+ * Certificate callers pass `credentialTypeCode(type)` (a preset's fixed code, or
+ * a derived 2–4 letter code for a custom mode-1 type); letter/upload callers
+ * pass `DOCUMENT_ID_PREFIX.letter` / `DOCUMENT_ID_PREFIX.upload`. Whatever the
+ * prefix, the assembled id is re-validated against `CREDENTIAL_ID_REGEX` below,
+ * so a bad derivation can never mint a malformed id.
  */
 
 import { AppError, CREDENTIAL_ID_REGEX, ERROR_CODE } from '@dmjone/shared';

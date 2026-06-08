@@ -17,14 +17,14 @@
 import type {
   CredentialContent,
   CredentialRecord,
-  CredentialType,
   Section63Metadata,
 } from '@dmjone/shared';
+import { titleCase } from '@dmjone/shared';
 import { getFontFaceCss } from './assets.js';
 import { escapeHtml, formatIsoDate } from './html.js';
 
 /** Human-readable label for a credential type (the machine code is internal). */
-const TYPE_LABEL: Readonly<Record<CredentialType, string>> = {
+const TYPE_LABEL: Readonly<Record<string, string>> = {
   internship: 'Internship Certificate',
   completion: 'Certificate of Completion',
   appreciation: 'Certificate of Appreciation',
@@ -134,7 +134,9 @@ export function buildSection63Html(record: CredentialRecord, meta: Section63Meta
   // the content union is widened for the letter/upload backbone (Phase 2).
   const content = record.content as CredentialContent;
 
-  const typeLabel = TYPE_LABEL[content.type];
+  // Preset types keep their §63 label; a custom (Mode-1) type falls back to its
+  // Title-Cased name so the lookup is always a defined string.
+  const typeLabel = TYPE_LABEL[content.type] ?? titleCase(content.type);
   const issuerIdentity =
     'dmj.one Trust Services — Document Signing (X.509 subject CN=dmj.one Trust Services, OU=Document Signing, C=IN)';
 

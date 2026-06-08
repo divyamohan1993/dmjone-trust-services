@@ -118,6 +118,9 @@ importers:
       '@fontsource/playfair-display':
         specifier: ^5.2.8
         version: 5.2.8
+      pdf-lib:
+        specifier: ^1.17.1
+        version: 1.17.1
       puppeteer:
         specifier: ^25.1.0
         version: 25.1.0

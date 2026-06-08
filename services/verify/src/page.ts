@@ -29,14 +29,14 @@ import { IDENTITY, designSystemCss } from '@dmjone/brand';
 import type {
   CredentialContent,
   CredentialRecord,
-  CredentialType,
   VerificationChecks,
   VerificationOutcome,
 } from '@dmjone/shared';
+import { titleCase } from '@dmjone/shared';
 import { escapeHtml } from './escape.js';
 
 /** Human label for each credential type code. */
-const TYPE_LABEL: Record<CredentialType, string> = {
+const TYPE_LABEL: Record<string, string> = {
   internship: 'Internship',
   completion: 'Completion',
   appreciation: 'Appreciation',
@@ -272,7 +272,7 @@ export function renderCredentialPage(input: CredentialPageInput): string {
   // letter/upload backbone (their pages are Phase 2).
   const c = record.content as CredentialContent;
   const id = c.credentialId;
-  const typeLabel = TYPE_LABEL[c.type];
+  const typeLabel = TYPE_LABEL[c.type] ?? titleCase(c.type);
   const issued = formatIssueDate(c.issueDate);
   const outcome = input.verification.outcome;
 

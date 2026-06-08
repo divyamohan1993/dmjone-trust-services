@@ -14,9 +14,33 @@ export const credentialTypeSchema = z.enum([
   'participation',
 ]);
 
+/**
+ * A custom certificate type (mode 1): a short free-text label. Must start with a
+ * letter and contain only letters, digits, spaces, and hyphens — the same
+ * character class the ID-code derivation ({@link credentialTypeCode}) and the
+ * Title-Case label ({@link labelForType}) consume. 2–40 chars, trimmed.
+ */
+export const customCredentialTypeSchema = z
+  .string()
+  .trim()
+  .min(2)
+  .max(40)
+  .regex(/^[a-z][a-z0-9 -]*$/i, 'expected letters, digits, spaces or hyphens; start with a letter');
+
+/**
+ * The certificate `type` accepted at issuance: one of the five presets OR a
+ * custom label. The presets stay first-class (and a preset value parses via the
+ * enum branch), so existing behavior/IDs are unchanged; a custom label rides the
+ * same ornamental template with only the kicker/title/type varying.
+ */
+export const issueCredentialTypeSchema = z.union([
+  credentialTypeSchema,
+  customCredentialTypeSchema,
+]);
+
 /** Issue a new credential (issuer, authenticated). */
 export const issueCredentialSchema = z.object({
-  type: credentialTypeSchema,
+  type: issueCredentialTypeSchema,
   recipientName: z.string().trim().min(1).max(120),
   kicker: z.string().trim().min(1).max(60),
   title: z.string().trim().min(1).max(60),

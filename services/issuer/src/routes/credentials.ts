@@ -20,7 +20,15 @@ import type { CredentialRecord } from '@dmjone/shared';
 import type { IssuerDeps } from '../deps.js';
 import type { IssuerHonoEnv } from '../http/context.js';
 import { requireAdmin } from '../http/middleware.js';
+import { assembleContent } from '../issuance/assemble-content.js';
 import { issueCredential } from '../issuance/issue.js';
+
+/**
+ * Fixed display-only id for the exact-preview render. Satisfies
+ * {@link CREDENTIAL_ID_REGEX} (`PRV` is 3 letters); never allocated, never
+ * stored. The preview path is strictly side-effect-free.
+ */
+const PREVIEW_CREDENTIAL_ID = 'DMJ-PRV-00000000-00';
 
 /** Parse a JSON body, normalising any malformed JSON to a uniform 400. */
 async function readJson(c: { req: { json(): Promise<unknown> } }): Promise<unknown> {
@@ -73,6 +81,35 @@ export function registerCredentialRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerD
       actor: session?.sub ?? 'admin',
     });
     return c.json({ credentialId }, 201);
+  });
+
+  // Exact preview — the real Chromium PDF for the SAME content issuance renders,
+  // with NO side effects (no allocation, signing, persistence, anchoring, or
+  // audit). Same body as issue minus `password`. Strictly: validate →
+  // assembleContent(placeholder id) → renderer.render → return PDF bytes.
+  api.post('/preview', async (c) => {
+    const previewSchema = issueCredentialSchema.omit({ password: true });
+    const parsed = previewSchema.safeParse(await readJson(c));
+    if (!parsed.success) {
+      throw new AppError(
+        ERROR_CODE.VALIDATION_FAILED,
+        'Invalid preview request',
+        400,
+        parsed.error.flatten(),
+      );
+    }
+
+    const content = assembleContent(parsed.data, PREVIEW_CREDENTIAL_ID);
+    const qrUrl = `${deps.env.VERIFY_PUBLIC_URL}/c/${PREVIEW_CREDENTIAL_ID}`;
+    const pdfBytes = await deps.renderer.render(content, { qrUrl });
+
+    // Copy into a fresh ArrayBuffer so the BodyInit is a clean ArrayBuffer slice.
+    const buf = pdfBytes.slice().buffer;
+    c.header('Content-Type', 'application/pdf');
+    c.header('Content-Disposition', 'inline; filename="preview.pdf"');
+    c.header('Content-Length', String(pdfBytes.byteLength));
+    c.header('Cache-Control', 'no-store');
+    return c.body(buf);
   });
 
   // List credentials (newest-first projection; no secrets).

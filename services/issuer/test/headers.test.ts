@@ -6,6 +6,8 @@ describe('headers', () => {
     const app = createIssuerApp(buildDeps());
     const ok = await app.request('/health');
     expect(ok.headers.get('content-security-policy')).toContain("nonce-");
+    // The embedded exact-preview viewer frames a same-origin blob: PDF.
+    expect(ok.headers.get('content-security-policy')).toContain("frame-src 'self' blob:");
     expect(ok.headers.get('x-frame-options')).toBe('DENY');
     expect(ok.headers.get('strict-transport-security')).toContain('max-age');
     expect(ok.headers.get('x-request-id')).toBeTruthy();

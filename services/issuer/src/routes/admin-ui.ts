@@ -30,6 +30,33 @@ import { page } from '../ui/layout.js';
 /** The four diamond corner studs that frame an ornamental hero card. */
 const STUDS = html`<span class="stud tl" aria-hidden="true"></span><span class="stud tr" aria-hidden="true"></span><span class="stud bl" aria-hidden="true"></span><span class="stud br" aria-hidden="true"></span>`;
 
+/**
+ * One editable body paragraph for the live "type-inside-the-render" editor
+ * (frozen contract §4.3). The block is a labelled multiline `contenteditable`
+ * region defaulting to `pa-justify` (the certificate default, §2.4), with a
+ * per-paragraph L/C/R/J alignment control that toggles ONLY the `pa-*` class —
+ * never an inline `style` (CSP) — plus a remove control. The admin script
+ * (`admin-script.ts`) renders blocks 2–6 with an identical structure via
+ * `createElement`, keeps the labels/`aria-pressed` in sync, and serialises the
+ * blocks through the trust-boundary serialiser. `index` is 1-based for the
+ * accessible name only; it is NOT load-bearing for serialisation.
+ */
+function paragraphBlock(index: number): ReturnType<typeof html> {
+  return html`<div class="para-block">
+  <div class="para-edit pa-justify" contenteditable="true" role="textbox" aria-multiline="true"
+    aria-label="Certificate body paragraph ${String(index)}"
+    data-placeholder="Body paragraph…"></div>
+  <div class="para-tools" role="group" aria-label="Paragraph ${String(index)} alignment">
+    <span class="lbl" aria-hidden="true">Align</span>
+    <button type="button" class="align-btn" data-align="left" aria-label="Align left" aria-pressed="false">L</button>
+    <button type="button" class="align-btn" data-align="center" aria-label="Align center" aria-pressed="false">C</button>
+    <button type="button" class="align-btn" data-align="right" aria-label="Align right" aria-pressed="false">R</button>
+    <button type="button" class="align-btn" data-align="justify" aria-label="Justify" aria-pressed="true">J</button>
+    <button type="button" class="para-rm" data-action="remove-para" aria-label="Remove paragraph ${String(index)}">&times;</button>
+  </div>
+</div>`;
+}
+
 export function registerAdminUiRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps): void {
   app.get('/admin', async (c) => {
     const nonce = c.get('cspNonce');
@@ -134,8 +161,35 @@ function dashboardBody(): ReturnType<typeof html> {
     </div>
     <label for="f-intro">Intro line</label>
     <input id="f-intro" name="intro" value="This is to certify that" maxlength="120" required />
-    <label for="f-body">Body paragraphs (one per line, up to 6)</label>
-    <textarea id="f-body" name="bodyParagraphs" required></textarea>
+
+    <span class="card-label" id="body-label">Certificate body</span>
+    <p class="muted body-hint">Type the body exactly where it lands on the certificate. Select text and use
+    <strong>Bold</strong>, <em>Italic</em>, or <u>Underline</u>, or Ctrl/Cmd+B / I / U. Each paragraph
+    carries its own alignment. Up to six paragraphs.</p>
+    <div class="composer" aria-describedby="body-label">
+      <div class="mark-toolbar" role="toolbar" aria-label="Text formatting" aria-controls="body-editor">
+        <button type="button" class="mark-btn" data-cmd="bold" aria-label="Bold" aria-pressed="false"
+          aria-keyshortcuts="Control+B" tabindex="0">B</button>
+        <button type="button" class="mark-btn" data-cmd="italic" aria-label="Italic" aria-pressed="false"
+          aria-keyshortcuts="Control+I" tabindex="-1"><span class="i">I</span></button>
+        <button type="button" class="mark-btn" data-cmd="underline" aria-label="Underline" aria-pressed="false"
+          aria-keyshortcuts="Control+U" tabindex="-1"><span class="u">U</span></button>
+      </div>
+      <div class="canvas">
+        <div class="body-echo" aria-hidden="true">
+          <div class="echo-intro" id="echo-intro">This is to certify that</div>
+          <div class="echo-recipient" id="echo-recipient">Recipient name</div>
+        </div>
+        <div id="body-editor">${paragraphBlock(1)}</div>
+        <div class="body-placeholder" aria-hidden="true">Signature &amp; verification QR appear here</div>
+      </div>
+      <div class="composer-actions">
+        <button type="button" class="secondary" data-action="add-para">+ Add paragraph</button>
+        <button type="button" class="secondary" data-action="preview">Preview exact PDF</button>
+      </div>
+      <div id="preview-host" aria-live="polite"></div>
+    </div>
+
     <label for="f-closing">Closing line (optional)</label>
     <input id="f-closing" name="closingLine" maxlength="200" />
     <div class="field-row">

@@ -38,7 +38,9 @@ const PADES_SIGNATURE_BYTES = 30000;
 
 /** Placeholder metadata embedded in the PAdES signature dictionary. */
 const PLACEHOLDER_META = {
-  reason: 'Document authenticity — dmj.one Trust Services',
+  // ASCII only: a non-ASCII glyph (e.g. an em dash) makes the signer emit the
+  // Reason as a UTF-16 PDF string, which some readers mis-decode into mojibake.
+  reason: 'Document authenticity by dmj.one Trust Services',
   contactInfo: 'verify.dmj.one',
   name: 'dmj.one Trust Services',
   location: 'IN',

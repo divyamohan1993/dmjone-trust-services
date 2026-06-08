@@ -5,7 +5,7 @@
  *
  *   1. allocate credential id (DMJ-<TYPE>-<YYYYMMDD>-<NN>)
  *   2. render(content)               → unsignedPdf
- *   3. signer.sign(unsignedPdf)      → hybrid signature (PAdES + detached ML-DSA)
+ *   3. signer.sign(unsignedPdf)      → detached ML-DSA-87 signature (no embedded PDF sig)
  *   4. section63.metadata(...)       → §63 Part-A metadata (sync; feeds the record)
  *   5. append leaf to transparency log (with LOG_CONFLICT retry)
  *   6. hash the candidate password (Argon2id)
@@ -69,8 +69,8 @@ export async function issueCredential(
   // 2. Render the pixel-faithful UNSIGNED pdf.
   const unsignedPdf = await deps.renderer.render(content, { qrUrl });
 
-  // 3. Hybrid-sign: PAdES embedded + detached ML-DSA over canonical(content, pdfSha256).
-  //    The signer supplies pdfSha256 (known only after PAdES) to this builder.
+  // 3. Sign: a detached ML-DSA-87 signature over canonical(content, pdfSha256), with
+  //    no embedded PDF signature. The signer supplies pdfSha256 (of the delivered PDF).
   const sig = await deps.signer.sign(unsignedPdf, (h) => computeCanonicalPayload(content, h));
 
   // 4. §63 Part-A metadata over the final signed pdf hash (sync).

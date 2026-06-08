@@ -285,7 +285,7 @@ export class FakeSection63 implements Section63Generator {
       hashValue: pdfSha256,
       hashAlgorithm: 'SHA-256',
       producedBy: 'dmj.one Trust Services issuer',
-      productionMethod: 'Automated hybrid signing (PAdES + ML-DSA-87)',
+      productionMethod: 'Automated detached ML-DSA-87 signing (no embedded PDF signature)',
       deviceParticulars: 'Cloud Run container, asia-east1',
       generatedAt: new Date().toISOString(),
     };

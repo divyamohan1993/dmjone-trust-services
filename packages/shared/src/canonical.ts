@@ -35,7 +35,7 @@ export const CANONICAL_PAYLOAD_VERSION = 1;
  * Build the exact UTF-8 string the ML-DSA signature covers.
  *
  * @param content   the certificate content (authored fields)
- * @param pdfSha256 hex SHA-256 of the FINAL signed PDF bytes (after PAdES)
+ * @param pdfSha256 hex SHA-256 of the FINAL delivered PDF bytes (no embedded signature)
  */
 export function computeCanonicalPayload(content: CredentialContent, pdfSha256: string): string {
   const payload = {
@@ -64,7 +64,7 @@ export const LETTER_PAYLOAD_VERSION = 1;
  * branch; optional fields collapse to `''` so the signed bytes are unambiguous.
  *
  * @param c         the letter content (authored fields)
- * @param pdfSha256 hex SHA-256 of the FINAL signed PDF bytes (after PAdES)
+ * @param pdfSha256 hex SHA-256 of the FINAL delivered PDF bytes (no embedded signature)
  */
 export function computeLetterCanonicalPayload(c: LetterContent, pdfSha256: string): string {
   return canonicalJson({
@@ -95,7 +95,7 @@ export const UPLOAD_PAYLOAD_VERSION = 1;
  * `canonicalJson` preserves array order, so this sort IS the determinism.
  *
  * @param a         the upload attestation metadata
- * @param pdfSha256 hex SHA-256 of the FINAL signed PDF bytes (after PAdES)
+ * @param pdfSha256 hex SHA-256 of the FINAL delivered PDF bytes (no embedded signature)
  */
 export function computeUploadCanonicalPayload(a: UploadAttestation, pdfSha256: string): string {
   return canonicalJson({

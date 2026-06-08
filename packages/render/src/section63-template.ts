@@ -216,6 +216,13 @@ export function buildSection63Html(record: CredentialRecord, meta: Section63Meta
   // post-quantum ML-DSA-87 signing key, NOT an embedded X.509/PKCS#7 signer
   // certificate (the delivered PDF embeds no signature object). Naming an X.509
   // subject here would imply a certificate-backed PDF signature we do not apply.
+  //
+  // BSA 2023 §63(4) requires the certificate be signed by BOTH a person in charge (Part A)
+  // and an expert (Part B). LAWYER-REVIEW FLAG: by default the SAME operator self-attests as
+  // the Part B technical expert. Any person with the requisite computer-science / cyber-
+  // forensics expertise may validly sign Part B (subject to the court's satisfaction); whether,
+  // in a contested matter, an expert who is NOT the operator should instead sign Part B is a
+  // legal judgement to confirm with counsel.
   const issuerIdentity =
     'dmj.one Trust Services, Document Signing function (country: IN), signing with a post-quantum ML-DSA-87 (NIST FIPS 204) key held by the issuer';
 
@@ -282,6 +289,19 @@ ${SECTION63_CSS}
       </div>
 
       <div class="sec">
+        <h2>Part B &middot; Statement of the Expert (pre-filled)</h2>
+        <div class="statement">
+          <p>I, possessing special skills and technical expertise in computer systems and cryptographic methods, having examined the manner of production and the device particulars stated in Part 3, do hereby certify, to the best of my knowledge and belief, that:</p>
+          <ol>
+            <li>The computer system described in Part 3 is of a kind ordinarily used to produce electronic records of the nature identified in Part 1, and there is nothing before me to indicate that it was not operating properly during the material period.</li>
+            <li>The methods stated in Part 3 &mdash; computation of a SHA-256 integrity hash and a detached post-quantum ML-DSA-87 (NIST FIPS&nbsp;204) signature over the canonical record of the document, with entry in a public, append-only transparency log &mdash; are technically sound and were applied to the said electronic record.</li>
+            <li>The integrity hash stated in Part 2 is the SHA-256 hash of the delivered electronic record and correctly identifies it; any alteration of a single bit of that record would yield a different hash value.</li>
+          </ol>
+          <p style="margin-top:2.4mm; font-size:9.2pt; color:var(--ink-soft);">By default this Part B is completed by the operator named in Part A, who possesses the relevant technical expertise; consistent with the Honest Disclosure below, it is a self-attestation and not the certificate of an outside expert. Where the matter so requires, an expert who is not the operator may complete this Part.</p>
+        </div>
+      </div>
+
+      <div class="sec">
         <h2>Issuer Trust Identity</h2>
         <p class="lede" style="font-size:9.6pt;">${escapeHtml(issuerIdentity)}. The delivered PDF carries no embedded digital-signature object; instead, the issuer computes a detached post-quantum ML-DSA-87 (NIST FIPS&nbsp;204) signature over the canonical record of this document &mdash; which includes the SHA-256 hash stated in Part 2 &mdash; and records the entry in a public, append-only transparency log whose successive heads are themselves ML-DSA-87 signed (a tamper-evident hash chain). Where external anchoring is enabled, each such head may additionally be published to a public GitHub repository (github.com/divyamohan1993/dmjone-trust-anchor), yielding an externally-hosted, publicly-timestamped commit record of the log&rsquo;s state. Anyone may check this, without a password, at verify.dmj.one (by scanning the stamped QR or entering the document identifier).</p>
       </div>
@@ -300,9 +320,9 @@ ${SECTION63_CSS}
         </div>
         <div class="signbox">
           <div class="line"></div>
-          <div class="who">Part B &middot; to be completed on presentation</div>
-          <div class="meta">Signature of the person tendering the record in evidence,</div>
-          <div class="meta">with name, designation, date and place.</div>
+          <div class="who">For dmj.one Trust Services</div>
+          <div class="meta">${escapeHtml(signatory.name)} &middot; ${escapeHtml(signatory.role)}</div>
+          <div class="meta">Part B &middot; technical expert (self-attested)</div>
         </div>
       </div>
 

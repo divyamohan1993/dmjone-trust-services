@@ -69,8 +69,8 @@ export async function issueLetter(
   // 3. Render the flowing, multi-page letterhead UNSIGNED pdf.
   const unsignedPdf = await deps.renderer.renderLetter(content, { qrUrl });
 
-  // 4. Hybrid-sign: PAdES embedded + detached ML-DSA over the letter canonical
-  //    payload. The signer supplies pdfSha256 (known only after PAdES).
+  // 4. Sign: a detached ML-DSA-87 signature over the letter canonical payload, with
+  //    no embedded PDF signature. The signer supplies pdfSha256 (of the delivered PDF).
   const sig = await deps.signer.sign(unsignedPdf, (h) =>
     computeLetterCanonicalPayload(content, h),
   );

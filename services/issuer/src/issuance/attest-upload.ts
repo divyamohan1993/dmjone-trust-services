@@ -4,7 +4,7 @@
  * Unlike the certificate/letter pipelines (which render the document), this one
  * STAMPS a user-uploaded PDF: it draws a visible validation mark (QR + caption)
  * on every page and, optionally, the dmj.one handwritten-signature PNG, then
- * PAdES + ML-DSA-signs the STAMPED bytes. The document id must exist BEFORE
+ * ML-DSA-87-signs the STAMPED bytes (detached; no embedded PDF signature). The document id must exist BEFORE
  * stamping because the stamp's QR encodes the verify URL for that id.
  *
  *   1. (caller) validate `signUploadSchema` + the PDF bytes →
@@ -109,8 +109,8 @@ export async function attestUpload(
     }),
   });
 
-  // 4. Hybrid-sign the STAMPED bytes: PAdES embedded + detached ML-DSA over the
-  //    upload canonical payload. The signer supplies pdfSha256 (post-PAdES).
+  // 4. Sign the STAMPED bytes: a detached ML-DSA-87 signature over the upload
+  //    canonical payload (no embedded PDF signature). The signer supplies pdfSha256.
   const sig = await deps.signer.sign(stamped, (h) =>
     computeUploadCanonicalPayload(attestation, h),
   );

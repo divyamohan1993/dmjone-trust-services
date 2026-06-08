@@ -70,11 +70,18 @@ describe('buildSection63Html', () => {
     expect(html).toContain(SAMPLE_SECTION63.deviceParticulars);
   });
 
-  it('includes a pre-filled Part-A operator statement and a Part-B block', () => {
+  it('includes a pre-filled Part-A operator statement and a Part-B EXPERT statement (BSA §63(4))', () => {
     expect(html).toContain('Part A');
     expect(html).toContain('operating the computer'.toLowerCase().slice(0, 6)); // "operat"
     expect(html).toContain('in the ordinary course');
+    // BSA §63(4) needs a SECOND signatory — an expert (Part B) addressing the §63(2)
+    // technical conditions, distinct from the person in charge (Part A).
     expect(html).toContain('Part B');
+    expect(html).toContain('Statement of the Expert');
+    expect(html).toContain('technically sound');
+    // Honest: the default Part-B expert is the operator (self-attested), not an outside expert.
+    expect(html).toContain('self-attestation');
+    expect(html).toContain('technical expert (self-attested)');
   });
 
   it('carries the issuer trust identity as the detached ML-DSA-87 signer (no embedded PDF signature)', () => {

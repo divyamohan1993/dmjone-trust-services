@@ -113,16 +113,18 @@ describe.skipIf(!chromiumWorks)('Chromium integration', () => {
   );
 
   it(
-    'section63 generate() returns a valid two-page PDF from real Chromium',
+    'section63 generate() returns a valid three-page PDF from real Chromium',
     async () => {
       const gen = createSection63Generator();
       const pdf = await gen.generate(SAMPLE_RECORD);
       expect(startsWithPdfMagic(pdf)).toBe(true);
       expect(pdf.byteLength).toBeGreaterThan(20 * 1024);
-      // The §63 certificate is a deliberate, clean two-page legal instrument.
-      // A third page would mean a block (signature row / footer) was orphaned —
+      // The §63 certificate is a deliberate, clean three-page legal instrument:
+      // Parts 1-3, the Part A (operator) AND Part B (expert) statements required by
+      // BSA §63(4), the issuer identity + honest disclosure, and the dual signature
+      // row. A FOURTH page would mean a block (signature row / footer) was orphaned —
       // this assertion is the regression guard for that.
-      expect(pdfPageCount(pdf)).toBe(2);
+      expect(pdfPageCount(pdf)).toBe(3);
     },
     120_000,
   );

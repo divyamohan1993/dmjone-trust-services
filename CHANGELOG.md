@@ -31,6 +31,16 @@ All notable changes to this project are documented here. Format follows
 
 ### Added
 
+- 2026-06-08: **Phase 2C — the three-mode admin console (completes Trusted Documents).** The
+  issuer dashboard is now a tabbed console: **Certificate · Letterhead · Upload**. Certificate
+  gains a free-text type (datalist of the five presets) on the existing ornamental template +
+  rich editor. **Letterhead** reuses the rich body editor for a long letter (reference, recipient
+  block, subject, salutation, body, valediction) with live preview + issue. **Upload**: pick a
+  PDF → inspect → drag-and-resize your handwritten signature on a page-accurate canvas → preview
+  the exact stamped result → "Sign & download" the PAdES + ML-DSA attested file (named by its
+  document number). All inside the one nonce'd, dependency-free IIFE; CSP unchanged (drag via
+  CSSOM, no inline styles); WCAG-friendly tablist + keyboard-operable placement. This finishes
+  the three-mode dmj.one Trusted Documents system end-to-end (author/upload → sign → verify).
 - 2026-06-08: **Phase 2B (backend) — letterhead + upload issuance, kind-aware verification.**
   New issuer routes: `POST /api/letters` (+ side-effect-free `/api/letters/preview`) issues a
   letterhead letter as a verified Trusted Document; `POST /api/uploads/inspect`, `/api/uploads/preview`,

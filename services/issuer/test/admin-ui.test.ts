@@ -84,9 +84,12 @@ describe('GET /admin — live body editor surface (§4)', () => {
 
   it('replaces the #f-body textarea with the body-composing editor', async () => {
     const body = await dashboardHtml();
-    // The old free-text textarea is GONE (the editor is the only body input now).
-    expect(body).not.toContain('<textarea');
+    // The old free-text CERTIFICATE-BODY textarea is GONE (the editor is the only
+    // body input now). NB: the letterhead panel legitimately has a recipient-lines
+    // <textarea>, so the assertion is the specific old id, not a blanket textarea
+    // ban — the cert body is the contenteditable editor below.
     expect(body).not.toContain('id="f-body"');
+    expect(body).not.toContain('name="bodyParagraphs"'); // body never rides a form field
     // A faithful composing surface exists with at least one editable paragraph.
     expect(body).toContain('id="body-editor"');
     expect(body).toContain('contenteditable="true"');
@@ -202,8 +205,11 @@ describe('adminScript() — still a dependency-free nonce-ready IIFE', () => {
     expect(src).toContain("addEventListener('selectionchange'");
     expect(src).toContain("addEventListener('paste'");
     expect(src).toContain('queryCommandState');
-    // No inline style is ever assigned to a DOM node (alignment is class-only).
-    expect(src).not.toMatch(/\.style\.[a-zA-Z]/);
+    // Alignment is class-only — the body editor never assigns inline geometry to a
+    // DOM node. (The Mode-3 placement box DOES use CSSOM left/top/width/height for
+    // drag; that is permitted by CSP — only HTML style="" ATTRIBUTES are blocked —
+    // and is asserted to stay within that allowlist by the dedicated test below.)
+    expect(src).not.toMatch(/\.style\.(?!left|top|width|height)[a-zA-Z]/);
     expect(src).not.toContain('execCommand(\'justify');
   });
 });
@@ -232,6 +238,218 @@ describe('layout — editor CSS fidelity + CSP (§2.4, §4.1)', () => {
     expect(body).toContain('#body-editor{max-width:152mm');
     // prefers-reduced-motion is respected (WCAG 2.2 AA).
     expect(body).toContain('@media (prefers-reduced-motion: reduce)');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The 3-mode console (frozen contract §E): a role=tablist mode switcher above
+// three panels (Certificate · Letterhead · Upload). The certificate panel is the
+// existing issue form (Type now a free-text input + preset datalist); the
+// letterhead panel is a new form reusing the SHARED rich body editor; the upload
+// panel is an empty container with a placeholder (built by the next stream). All
+// CSP-clean: tablist roving via aria-selected/tabindex, panels toggle via the
+// [hidden] boolean attribute, and NO inline style="" attribute anywhere.
+// ---------------------------------------------------------------------------
+describe('GET /admin — 3-mode console shell (§E)', () => {
+  async function dashboardHtml(): Promise<string> {
+    const deps = buildDeps();
+    const app = createIssuerApp(deps);
+    const cookie = await mintSessionCookie(deps.env);
+    return (await app.request('/admin', { headers: { cookie } })).text();
+  }
+
+  it('renders a role=tablist mode switcher with three roving tabs', async () => {
+    const body = await dashboardHtml();
+    expect(body).toContain('role="tablist"');
+    // Three tabs, each labelled + wired to its panel via aria-controls.
+    expect(body).toMatch(/role="tab"[^>]*aria-controls="panel-certificate"/);
+    expect(body).toMatch(/role="tab"[^>]*aria-controls="panel-letterhead"/);
+    expect(body).toMatch(/role="tab"[^>]*aria-controls="panel-upload"/);
+    expect(body).toContain('>Certificate</button>');
+    expect(body).toContain('>Letterhead</button>');
+    expect(body).toContain('>Upload</button>');
+    // Default tab = Certificate (selected + tabbable); the others are roved out.
+    expect(body).toMatch(/id="tab-certificate"[^>]*aria-selected="true"/);
+    expect(body).toMatch(/id="tab-certificate"[^>]*tabindex="0"/);
+    expect(body).toMatch(/id="tab-letterhead"[^>]*aria-selected="false"/);
+    expect(body).toMatch(/id="tab-letterhead"[^>]*tabindex="-1"/);
+  });
+
+  it('renders three tabpanels, only the certificate panel visible by default', async () => {
+    const body = await dashboardHtml();
+    expect(body).toMatch(/id="panel-certificate"[^>]*role="tabpanel"/);
+    expect(body).toMatch(/id="panel-letterhead"[^>]*role="tabpanel"/);
+    expect(body).toMatch(/id="panel-upload"[^>]*role="tabpanel"/);
+    // The two non-default panels start hidden (the [hidden] boolean attr — CSP-clean).
+    expect(body).toMatch(/id="panel-letterhead"[^>]*\shidden/);
+    expect(body).toMatch(/id="panel-upload"[^>]*\shidden/);
+    // The certificate panel is NOT hidden (carries the existing issue form).
+    expect(body).not.toMatch(/id="panel-certificate"[^>]*\shidden/);
+    // The certificate panel still hosts the existing issue form + recipient input.
+    expect(body).toMatch(/id="panel-certificate"[\s\S]*id="issue-form"/);
+    expect(body).toContain('name="recipientName"');
+  });
+
+  it('fills the Upload panel with the upload→stamp→sign flow (file, toggle, stage, actions)', async () => {
+    const body = await dashboardHtml();
+    // The placeholder copy is GONE; the panel now hosts the upload form.
+    expect(body).not.toMatch(/coming in the next step/i);
+    expect(body).toMatch(/id="panel-upload"[\s\S]*id="upload-form"/);
+    // A labelled PDF file input (accept=application/pdf) — the upload entry point.
+    expect(body).toMatch(/<input[^>]*id="upload-file"[^>]*type="file"/);
+    expect(body).toMatch(/<input[^>]*id="upload-file"[^>]*accept="application\/pdf"/);
+    expect(body).toMatch(/<label[^>]*for="upload-file"/);
+    // The "Place my handwritten signature" toggle (a labelled checkbox, default off).
+    expect(body).toMatch(/<input[^>]*id="upload-place"[^>]*type="checkbox"/);
+    expect(body).not.toMatch(/id="upload-place"[^>]*checked/);
+    expect(body).toMatch(/<label[^>]*for="upload-place"/);
+    // The placement stage + the draggable/resizable signature box (with the brand
+    // signature image and a resize handle) — keyboard-operable + labelled.
+    expect(body).toContain('id="upload-stage"');
+    // The stage must NOT be aria-hidden: it holds the focusable, aria-labelled box,
+    // and a focusable node inside an aria-hidden subtree is the aria-hidden-focus
+    // violation (the box's label would be dead to AT while still keyboard-focusable).
+    expect(body).not.toMatch(/id="upload-stage"[^>]*aria-hidden/);
+    expect(body).toMatch(/id="upload-sigbox"[^>]*tabindex="0"/);
+    expect(body).toMatch(/id="upload-sigbox"[^>]*aria-label="/);
+    expect(body).toMatch(/<img[^>]*id="upload-sigimg"[^>]*alt="/);
+    expect(body).toContain('id="upload-resize"');
+    // A labelled download-password field (gates the signed PDF).
+    expect(body).toMatch(/<input[^>]*id="upload-pw"[^>]*type="password"/);
+    expect(body).toMatch(/<label[^>]*for="upload-pw"/);
+    // Preview (data-action) + Sign & download (submit) actions, distinct ids from
+    // the cert/letter panels (never an f-* / lf-* id reused).
+    expect(body).toContain('data-action="upload-preview"');
+    expect(body).toMatch(/<button[^>]*type="submit"[^>]*>Sign &amp; download<\/button>|>Sign &amp; download<\/button>/);
+    expect(body).not.toContain('id="f-file"');
+    // A blob-iframe preview host mirrors the cert/letter *-preview-host divs.
+    expect(body).toContain('id="upload-preview-host"');
+  });
+
+  it('makes the certificate Type a free-text input backed by a preset datalist', async () => {
+    const body = await dashboardHtml();
+    // Type is now an <input list="cert-types"> (free text), NOT a <select>.
+    expect(body).toMatch(/<input[^>]*id="f-type"[^>]*list="cert-types"/);
+    expect(body).toMatch(/<input[^>]*id="f-type"[^>]*name="type"/);
+    expect(body).not.toMatch(/<select[^>]*id="f-type"/);
+    // The datalist offers all five presets.
+    expect(body).toContain('<datalist id="cert-types">');
+    for (const preset of [
+      'internship',
+      'completion',
+      'appreciation',
+      'experience',
+      'participation',
+    ]) {
+      expect(body).toContain(`<option value="${preset}">`);
+    }
+  });
+
+  it('renders the letterhead panel fields, each labelled (WCAG 2.2 AA)', async () => {
+    const body = await dashboardHtml();
+    // The letterhead form + its distinct field ids (never the cert f-* ids).
+    expect(body).toContain('id="letter-form"');
+    const fields: Array<[string, string]> = [
+      ['lf-reference', 'reference'],
+      ['lf-recipient', 'recipientLines'],
+      ['lf-subject', 'subject'],
+      ['lf-salutation', 'salutation'],
+      ['lf-valediction', 'valediction'],
+      ['lf-date', 'issueDate'],
+      ['lf-pw', 'password'],
+    ];
+    for (const [id, name] of fields) {
+      // Each control carries its field name and a programmatically-associated label.
+      expect(body).toMatch(new RegExp(`(id|name)="${id}"[^>]*name="${name}"|name="${name}"[^>]*id="${id}"`));
+      expect(body).toMatch(new RegExp(`<label[^>]*for="${id}"`));
+    }
+    // Recipient lines is a multi-line textarea (one address line per line).
+    expect(body).toMatch(/<textarea[^>]*id="lf-recipient"/);
+    // The letterhead panel reuses the SHARED rich body editor (distinct id).
+    expect(body).toContain('id="letter-body-editor"');
+    expect(body).toMatch(/<button[^>]*type="submit"[^>]*>Issue letter<\/button>|>Issue letter<\/button>/);
+  });
+
+  it('renders NO inline style="" attribute anywhere in the admin HTML (CSP)', async () => {
+    const body = await dashboardHtml();
+    // CSP forbids inline style attributes. Match `style=` only inside an open tag
+    // (the negated [^>] stops at the first >, so the design-system <style> block's
+    // CSS comments that mention style="" descriptively can never match).
+    expect(body).not.toMatch(/<[a-z][^>]*\sstyle=/i);
+  });
+});
+
+describe('adminScript() — 3-mode console wiring (§E)', () => {
+  it('wires the letterhead preview + issue to the §F.2 routes via shared helpers', () => {
+    const src = adminScript();
+    // Letterhead issue + preview hit the exact routes; issue reads documentId.
+    expect(src).toContain("'/api/letters'");
+    expect(src).toContain("'/api/letters/preview'");
+    expect(src).toContain('j.documentId');
+    // The blob-preview helper is SHARED (one extraction, both panels call it) and
+    // uses raw fetch + .blob() (NOT api(), which JSON-parses the body).
+    expect(src).toContain('function blobPreview');
+    expect(src).toContain('.blob()');
+    // recipientLines is the textarea split on newlines (trimmed, empties dropped).
+    expect(src).toContain("recipientLines: splitLines(");
+    // The shared serializer feeds BOTH editors (cert zero-arg call site preserved).
+    expect(src).toContain('bodyParagraphs: collectBody()');
+    expect(src).toContain('collectBody(letterRoot())');
+  });
+
+  it('drives the mode tablist (roving tabindex + [hidden] panels, CSP-clean)', () => {
+    const src = adminScript();
+    // Roving tabindex / aria-selected + arrow-key activation; panels toggle via
+    // the .hidden property (a boolean attribute — never a style attribute).
+    expect(src).toContain('role="tablist"');
+    expect(src).toContain("setAttribute('aria-selected'");
+    expect(src).toContain('panel.hidden');
+    // The only CSSOM writes anywhere in the script are the Mode-3 placement box's
+    // left/top/width/height (permitted by CSP for smooth drag). Nothing assigns any
+    // OTHER style property — and no HTML style="" attribute is ever emitted (that is
+    // the actual CSP boundary, asserted on the rendered HTML elsewhere).
+    expect(src).not.toMatch(/\.style\.(?!left|top|width|height)[a-zA-Z]/);
+  });
+
+  it('wires the upload→stamp→sign flow to the §F.2 routes (inspect/preview/sign)', () => {
+    const src = adminScript();
+    // Inspect uses api() (JSON) with the base64 PDF; preview uses the SHARED blob
+    // viewer; sign is a RAW fetch (api() would JSON-parse the PDF bytes and throw).
+    expect(src).toContain("'/api/uploads/inspect'");
+    expect(src).toContain("'/api/uploads/preview'");
+    expect(src).toContain("fetch('/api/uploads'");
+    expect(src).toContain('function blobPreview'); // reused, not re-authored
+    // The PDF is read as STANDARD base64 (data-URL tail), NOT the base64url
+    // bufToB64u (Node's Buffer.from('base64') need not accept '-_'/no-pad).
+    expect(src).toContain('readAsDataURL');
+    // Sign reads the document id from the X-Document-Id response header and saves
+    // the returned blob as <id>.pdf (createObjectURL + a.download + revoke).
+    expect(src).toContain("headers.get('X-Document-Id')");
+    expect(src).toContain('a.download');
+    expect(src).toContain('createObjectURL');
+    expect(src).toContain('revokeObjectURL');
+    // The sign payload carries the signUploadSchema fields (filename + password).
+    expect(src).toContain('originalFilename');
+    expect(src).toContain('placeHandwrittenSignature');
+    // A successful sign refreshes the kind-aware issued list.
+    expect(src).toContain('refreshList');
+  });
+
+  it('drives the placement box via the CSSOM only (drag + keyboard), CSP-clean', () => {
+    const src = adminScript();
+    // Pointer drag/resize + keyboard move/resize attach via addEventListener (no
+    // inline handlers) and position the box through the CSSOM geometry allowlist.
+    expect(src).toContain("addEventListener('pointerdown'");
+    expect(src).toContain("addEventListener('pointermove'");
+    expect(src).toContain('.style.left');
+    expect(src).toContain('.style.top');
+    expect(src).toContain('.style.width');
+    // The placement is emitted as SignaturePlacement fractions {page,xPct,yPct,wPct}.
+    expect(src).toContain('xPct');
+    expect(src).toContain('yPct');
+    expect(src).toContain('wPct');
+    // Still ONLY the geometry allowlist — no other inline style property is set.
+    expect(src).not.toMatch(/\.style\.(?!left|top|width|height)[a-zA-Z]/);
   });
 });
 

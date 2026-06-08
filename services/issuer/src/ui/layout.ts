@@ -178,6 +178,58 @@ th{font-family:var(--label);letter-spacing:.06em;text-transform:uppercase;font-w
   .align-btn,.mark-btn,.para-rm,button{transition:none}
 }
 
+/* ---- Mode switcher (role=tablist): Certificate · Letterhead · Upload -------
+   A roving-tabindex tablist above the issuance panels. Each tab is a gold-soft
+   chrome chip; the selected tab reads as the filled gold token (never colour
+   ALONE — aria-selected + the underline rule carry it too). Panels toggle with
+   the [hidden] boolean attribute (already display:none!important above) — no
+   inline style, CSP-clean. */
+.mode-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 18px;
+  border-bottom:1px solid rgba(176,137,47,.22);padding-bottom:0}
+.mode-tab{font-family:var(--label);letter-spacing:.06em;font-size:13.5px;
+  padding:10px 18px;border-radius:10px 10px 0 0;cursor:pointer;
+  background:#fff;border:1px solid rgba(176,137,47,.34);border-bottom:none;
+  color:var(--ink-soft);position:relative;top:1px;transition:background 120ms ease,color 120ms ease}
+.mode-tab:hover{background:#FBF7EF;color:var(--ink)}
+.mode-tab[aria-selected=true]{background:var(--gold-deep);border-color:var(--gold-deep);
+  color:#fff;box-shadow:0 -1px 0 var(--gold-deep)}
+.mode-tab:focus-visible{outline:2px solid var(--gold-deep);outline-offset:2px}
+.mode-panel:focus{outline:none}
+
+/* ---- Mode 3: upload & attest panel --------------------------------------- */
+/* The placement STAGE is an aspect-correct scaled rectangle of the chosen page;
+   its width/height are set at runtime via the CSSOM (element.style.*) from the
+   page's widthPt:heightPt — never an inline style attribute. The signature BOX
+   inside it is absolutely positioned (left/top/width/height also via CSSOM) and
+   draggable/resizable; only its CHROME (border, cursor, handle) lives here. */
+.upload-meta{font-size:13px;margin:6px 0 10px}
+.upload-sign-row{display:flex;align-items:center;gap:9px;margin:8px 0 6px}
+.upload-sign-row input[type=checkbox]{width:18px;height:18px;accent-color:var(--gold-deep);cursor:pointer}
+.upload-sign-row label{font-family:var(--label);letter-spacing:.04em;color:var(--ink-soft);cursor:pointer}
+.upload-placement{margin:8px 0 6px}
+.upload-page-row{display:flex;align-items:center;gap:10px;margin:0 0 8px;flex-wrap:wrap}
+.upload-page-row label{font-family:var(--label);letter-spacing:.04em;color:var(--ink-soft)}
+.upload-page-row select{font-family:var(--label);font-size:14px;padding:8px 12px;border-radius:8px;
+  border:1px solid var(--rule-outer);background:#fff;color:var(--ink);cursor:pointer}
+.upload-stage{position:relative;margin:6px auto;background:var(--paper);
+  border:1px solid var(--rule-outer);border-radius:8px;overflow:hidden;
+  box-shadow:0 1px 3px rgba(120,90,40,.10);max-width:100%;touch-action:none}
+.upload-sigbox{position:absolute;left:0;top:0;cursor:grab;
+  border:1.5px dashed var(--gold-deep);border-radius:4px;background:rgba(176,137,47,.06);
+  box-sizing:border-box;touch-action:none}
+.upload-sigbox:focus-visible{outline:2px solid var(--gold-deep);outline-offset:2px}
+.upload-sigbox:active{cursor:grabbing}
+.upload-sigimg{display:block;width:100%;height:100%;object-fit:contain;
+  pointer-events:none;user-select:none}
+/* the handle sits just INSIDE the box corner so the stage's overflow:hidden
+   never clips it when the box is flush against the page edge. */
+.upload-resize{position:absolute;right:-1px;bottom:-1px;width:16px;height:16px;border-radius:50% 0 4px 0;
+  background:var(--gold-deep);border:2px solid #fff;cursor:nwse-resize;
+  box-shadow:0 1px 2px rgba(120,90,40,.35);touch-action:none}
+@media (prefers-reduced-motion: reduce){
+  .upload-page-row select,.upload-sign-row input{transition:none}
+}
+
 /* ---- SOBER register: strip the wash/crest for the super-admin instrument -- */
 body.sober{background-image:none}
 body.sober header.app .role{color:var(--ink-soft)}

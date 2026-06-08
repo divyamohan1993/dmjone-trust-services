@@ -2,6 +2,40 @@ import { describe, it, expect } from 'vitest';
 import { buildSection63Html } from '../src/section63-template.js';
 import { createSection63Generator } from '../src/section63.js';
 import { SAMPLE_RECORD, SAMPLE_SECTION63, SAMPLE_CONTENT } from './fixtures.js';
+import type { CredentialRecord, LetterContent, UploadAttestation } from '@dmjone/shared';
+
+const SIGNATORY = { name: 'Divya Mohan', role: 'Founder · dmj.one', phone: '+91 79799 30293' };
+
+/** A `kind:'letter'` record built inline (so SAMPLE_RECORD stays untouched). */
+function letterRecord(contentOverrides: Partial<LetterContent> = {}): CredentialRecord {
+  const content: LetterContent = {
+    documentId: 'DMJ-LTR-20260604-01',
+    issueDate: '2026-06-04',
+    reference: 'DMJ/2026/0042',
+    recipientLines: ['The Principal', 'Hindu College', 'University of Delhi'],
+    subject: 'Confirmation of Internship Completion',
+    salutation: 'Dear Sir/Madam,',
+    bodyParagraphs: ['Body of the letter.'],
+    valediction: 'Sincerely,',
+    signatory: SIGNATORY,
+    ...contentOverrides,
+  };
+  return { ...SAMPLE_RECORD, id: content.documentId, kind: 'letter', content };
+}
+
+/** A `kind:'upload'` record built inline. */
+function uploadRecord(contentOverrides: Partial<UploadAttestation> = {}): CredentialRecord {
+  const content: UploadAttestation = {
+    documentId: 'DMJ-DOC-20260604-01',
+    issueDate: '2026-06-04',
+    originalFilename: 'offer-letter.pdf',
+    originalSha256: 'e'.repeat(64),
+    pageCount: 3,
+    signatory: SIGNATORY,
+    ...contentOverrides,
+  };
+  return { ...SAMPLE_RECORD, id: content.documentId, kind: 'upload', content };
+}
 
 describe('buildSection63Html', () => {
   const html = buildSection63Html(SAMPLE_RECORD, SAMPLE_SECTION63);
@@ -105,5 +139,73 @@ describe('createSection63Generator.metadata', () => {
     expect(out).toBe(fakePdf);
     expect(receivedHtml).toContain('Certificate of Authenticity');
     expect(receivedHtml).toContain('DMJ-IC-20260604-01');
+  });
+});
+
+describe('buildSection63Html — letter (Mode 2)', () => {
+  const html = buildSection63Html(letterRecord(), SAMPLE_SECTION63);
+
+  it('keeps the §63 legal structure (act, parts, disclosure) for a letter', () => {
+    expect(html.startsWith('<!DOCTYPE html>')).toBe(true);
+    expect(html).toContain('Bharatiya Sakshya Adhiniyam, 2023');
+    expect(html).toContain('Certificate of Authenticity');
+    expect(html).toContain('Part A');
+    expect(html).toContain('Part B');
+    expect(html).toContain('self-signed'); // honest disclosure intact
+    expect(html).toContain('Information Technology Act, 2000');
+  });
+
+  it('identifies the letter (document id, nature, subject, recipient, date)', () => {
+    expect(html).toContain('DMJ-LTR-20260604-01');
+    expect(html).toContain('Letterhead letter');
+    expect(html).toContain('Confirmation of Internship Completion'); // subject
+    expect(html).toContain('The Principal'); // first recipient line
+    expect(html).toContain('04 June 2026');
+    expect(html).toContain(SIGNATORY.name);
+  });
+
+  it('escapes a hostile subject in a letter §63', () => {
+    const out = buildSection63Html(
+      letterRecord({ subject: 'Bad <script>alert(1)</script> & "x"' }),
+      SAMPLE_SECTION63,
+    );
+    expect(out).not.toContain('<script>alert(1)</script>');
+    expect(out).toContain('&lt;script&gt;');
+  });
+});
+
+describe('buildSection63Html — upload (Mode 3)', () => {
+  const html = buildSection63Html(uploadRecord(), SAMPLE_SECTION63);
+
+  it('keeps the §63 legal structure (act, parts, disclosure) for an upload', () => {
+    expect(html.startsWith('<!DOCTYPE html>')).toBe(true);
+    expect(html).toContain('Bharatiya Sakshya Adhiniyam, 2023');
+    expect(html).toContain('Certificate of Authenticity');
+    expect(html).toContain('Part A');
+    expect(html).toContain('Part B');
+    expect(html).toContain('self-signed');
+    expect(html).toContain('Certifying Authority');
+  });
+
+  it('identifies the uploaded document (id, nature, filename, ORIGINAL SHA-256, pages)', () => {
+    expect(html).toContain('DMJ-DOC-20260604-01');
+    expect(html).toContain('Uploaded document (attested)');
+    expect(html).toContain('offer-letter.pdf');
+    expect(html).toContain('e'.repeat(64)); // original SHA-256 (uploaded bytes)
+    expect(html).toContain('Original SHA-256'); // the label
+    expect(html).toContain(SIGNATORY.name);
+  });
+
+  it('discloses that the uploaded content is the uploader\'s (honest copy)', () => {
+    expect(html).toContain('content is the uploader');
+  });
+
+  it('escapes a hostile filename in an upload §63', () => {
+    const out = buildSection63Html(
+      uploadRecord({ originalFilename: 'evil <img src=x onerror=alert(1)> & "x".pdf' }),
+      SAMPLE_SECTION63,
+    );
+    expect(out).not.toContain('<img src=x onerror=alert(1)>');
+    expect(out).toContain('&lt;img');
   });
 });

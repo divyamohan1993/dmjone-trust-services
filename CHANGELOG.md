@@ -31,6 +31,16 @@ All notable changes to this project are documented here. Format follows
 
 ### Added
 
+- 2026-06-08: **Phase 2B (backend) — letterhead + upload issuance, kind-aware verification.**
+  New issuer routes: `POST /api/letters` (+ side-effect-free `/api/letters/preview`) issues a
+  letterhead letter as a verified Trusted Document; `POST /api/uploads/inspect`, `/api/uploads/preview`,
+  and `/api/uploads` ingest a PDF, stamp a per-page validation-ID QR (+ optional placed handwritten
+  signature), then PAdES + ML-DSA + transparency-log attest it (id allocated BEFORE stamping so the
+  QR resolves; signed bytes returned with an `X-Document-Id`). The public verify page and the BSA §63
+  certificate are now kind-aware (`documentKind`): letters show subject/recipient, uploads show the
+  document number, original filename, original SHA-256, and page count with honest "dmj.one attests it
+  signed this document; the content is the uploader's" copy. Certificate page + §63 stay byte-identical.
+  The browser console for the new modes follows. Contract: `docs/specs/2026-06-08-trusted-documents-modes.md`.
 - 2026-06-08: **Phase 2A — render layer for letterhead + uploads, and custom certificate
   types.** `@dmjone/render` gains `buildLetterHtml` (a flowing, multi-page dmj.one
   letterhead with the rich body), `renderer.renderLetter`, `stampAttestation` (pure

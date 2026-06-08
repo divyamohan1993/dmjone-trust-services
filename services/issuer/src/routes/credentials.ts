@@ -12,10 +12,18 @@ import {
   AppError,
   ERROR_CODE,
   credentialIdParamSchema,
+  documentKind,
   issueCredentialSchema,
   revokeSchema,
 } from '@dmjone/shared';
-import type { CredentialContent, CredentialRecord, CredentialType } from '@dmjone/shared';
+import type {
+  CredentialContent,
+  CredentialRecord,
+  CredentialType,
+  DocumentKind,
+  LetterContent,
+  UploadAttestation,
+} from '@dmjone/shared';
 
 import type { IssuerDeps } from '../deps.js';
 import type { IssuerHonoEnv } from '../http/context.js';
@@ -39,27 +47,58 @@ async function readJson(c: { req: { json(): Promise<unknown> } }): Promise<unkno
   }
 }
 
-/** The public, list-safe projection of a stored record (no password hash, no payload). */
-function toListItem(record: CredentialRecord): {
+/**
+ * The public, list-safe projection of a stored record (no password hash, no
+ * payload). Kind-aware (§D): every kind yields the shared identity columns
+ * (`credentialId`, `kind`, `status`, `issueDate`, `createdAt`, `logSeq`) plus a
+ * human `label` for the dashboard row:
+ *   - certificate → the recipient name (and the `type`/`recipientName` columns
+ *     stay, so existing cert consumers read unchanged);
+ *   - letter      → the subject, else the first recipient line, else "Letter";
+ *   - upload      → the original filename.
+ * The cert-only `type`/`recipientName` keys are present ONLY for certificates.
+ */
+interface ListItem {
   credentialId: string;
-  type: CredentialType;
-  recipientName: string;
+  kind: DocumentKind;
+  label: string;
   status: CredentialRecord['status'];
   issueDate: string;
   createdAt: string;
   logSeq: number;
-} {
-  // Phase 1 lists certificates only; the union is widened for the letter/upload
-  // backbone (their listing is Phase 2).
-  const content = record.content as CredentialContent;
-  return {
+  /** Certificate only: the preset/custom type. */
+  type?: CredentialType;
+  /** Certificate only: the recipient name. */
+  recipientName?: string;
+}
+
+function toListItem(record: CredentialRecord): ListItem {
+  const kind = documentKind(record);
+  const base = {
     credentialId: record.id,
-    type: content.type,
-    recipientName: content.recipientName,
+    kind,
     status: record.status,
-    issueDate: content.issueDate,
     createdAt: record.createdAt,
     logSeq: record.logSeq,
+  };
+
+  if (kind === 'letter') {
+    const c = record.content as LetterContent;
+    const label = c.subject || c.recipientLines.find((l) => l.trim().length > 0) || 'Letter';
+    return { ...base, label, issueDate: c.issueDate };
+  }
+  if (kind === 'upload') {
+    const c = record.content as UploadAttestation;
+    return { ...base, label: c.originalFilename, issueDate: c.issueDate };
+  }
+  // certificate (kind absent or 'certificate')
+  const c = record.content as CredentialContent;
+  return {
+    ...base,
+    label: c.recipientName,
+    type: c.type,
+    recipientName: c.recipientName,
+    issueDate: c.issueDate,
   };
 }
 

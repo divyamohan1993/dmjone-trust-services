@@ -13,7 +13,6 @@ import type {
   AppEnv,
   AuditLog,
   BlobStore,
-  CertificateRenderer,
   CredentialRepository,
   HybridSigner,
   LogRepository,
@@ -22,6 +21,12 @@ import type {
   SecretStore,
   Section63Generator,
 } from '@dmjone/shared';
+// The renderer is typed as @dmjone/render's TrustedDocumentRenderer (the frozen
+// CertificateRenderer contract PLUS the Mode-2 `renderLetter` path). The render
+// package widens the type there (not in @dmjone/shared, which is frozen), and
+// `createCertificateRenderer()` already returns it. The issuer's letter
+// issuance (Mode 2) calls `renderer.renderLetter`.
+import type { TrustedDocumentRenderer } from '@dmjone/render';
 import type { Logger } from 'pino';
 
 /**
@@ -50,7 +55,7 @@ export interface IssuerDeps {
   logSigner: LogSigner;
   anchorPublisher: AnchorPublisher;
   passwordHasher: PasswordHasher;
-  renderer: CertificateRenderer;
+  renderer: TrustedDocumentRenderer;
   section63: Section63Generator;
   /** Seals/opens the TOTP secret; master key resolved at the composition root. */
   secretSealer: SecretSealer;

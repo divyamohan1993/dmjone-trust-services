@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { deriveOutcome, publicFieldsOf } from '../src/verification.js';
-import { makeRecord } from './fakes.js';
+import { makeRecord, makeLetterRecord, makeUploadRecord } from './fakes.js';
 import type { VerificationChecks } from '@dmjone/shared';
 
 const allGood: VerificationChecks = {
@@ -77,5 +77,40 @@ describe('publicFieldsOf', () => {
   it('reflects revoked status in the public fields', () => {
     const record = makeRecord({ status: 'revoked', revokedAt: '2026-06-05T00:00:00.000Z' });
     expect(publicFieldsOf(record, 'dmj.one Trust Services').status).toBe('revoked');
+  });
+
+  it('maps a letter onto the frozen public shape (subject headline, addressee, kind)', () => {
+    const fields = publicFieldsOf(makeLetterRecord(), 'dmj.one Trust Services');
+    expect(fields).toEqual({
+      recipientName: 'The Principal',
+      kicker: 'Letterhead',
+      title: 'Confirmation of Internship Completion', // subject as headline
+      type: 'letter',
+      issueDate: '2026-06-04',
+      issuer: 'dmj.one Trust Services',
+      status: 'valid',
+    });
+  });
+
+  it('falls back to the first recipient line when a letter has no subject', () => {
+    const fields = publicFieldsOf(
+      makeLetterRecord({ subject: undefined }),
+      'dmj.one Trust Services',
+    );
+    expect(fields.title).toBe('The Principal');
+    expect(fields.type).toBe('letter');
+  });
+
+  it('maps an upload onto the frozen public shape (filename, kind) without inventing a person', () => {
+    const fields = publicFieldsOf(makeUploadRecord(), 'dmj.one Trust Services');
+    expect(fields).toEqual({
+      recipientName: 'offer-letter.pdf',
+      kicker: 'Attested document',
+      title: 'offer-letter.pdf',
+      type: 'upload',
+      issueDate: '2026-06-04',
+      issuer: 'dmj.one Trust Services',
+      status: 'valid',
+    });
   });
 });

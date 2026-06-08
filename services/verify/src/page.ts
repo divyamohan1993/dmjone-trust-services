@@ -29,10 +29,12 @@ import { IDENTITY, designSystemCss } from '@dmjone/brand';
 import type {
   CredentialContent,
   CredentialRecord,
+  LetterContent,
+  UploadAttestation,
   VerificationChecks,
   VerificationOutcome,
 } from '@dmjone/shared';
-import { titleCase } from '@dmjone/shared';
+import { documentKind, titleCase } from '@dmjone/shared';
 import { escapeHtml } from './escape.js';
 
 /** Human label for each credential type code. */
@@ -162,6 +164,95 @@ function checkClass(key: string, value: boolean | undefined): string {
 }
 
 /**
+ * The kind-aware face of the public page: the browser-tab title, the hero block
+ * (eyebrow / title / recipient line) inside the card, and the rows of the
+ * "Credential details" grid. The verdict, the cryptographic ledger, the honest
+ * trust statement, the §63 + gated downloads, and the tamper explainer are
+ * shared across all kinds and stay outside this branch.
+ *
+ * `record.id` is the document id for every kind, so the id row + downloads use
+ * it directly without reaching into the kind-specific `credentialId`/`documentId`
+ * fields. The `statusPill` is rendered by the caller (it needs the verdict). One
+ * line per `<dt>/<dd>` keeps the grid markup identical in shape to today's
+ * certificate; only the labels/values differ. Every field is HTML-escaped here;
+ * none of these helpers emit a `style=""` attribute (CSP authorises the nonce'd
+ * <style> element only, never inline styles).
+ */
+interface PageFace {
+  /** <title> text (already plain; escaped by head()). */
+  pageTitle: string;
+  /** The card hero: eyebrow + headline + the optional recipient/summary line. */
+  hero: string;
+  /** The <dt>/<dd> rows of the details grid, EXCLUDING the trailing status row. */
+  detailRows: string;
+}
+
+function certificateFace(c: CredentialContent, issued: string, issuer: string, id: string): PageFace {
+  const typeLabel = TYPE_LABEL[c.type] ?? titleCase(c.type);
+  return {
+    pageTitle: `${typeLabel} certificate · ${c.recipientName} · ${IDENTITY.trustService}`,
+    hero: `        <p class="eyebrow">${escapeHtml(c.kicker)}</p>
+        <h1 class="type-title" id="cred-title">${escapeHtml(c.title)}</h1>
+        <p class="recipient"><span class="lbl">${escapeHtml(c.intro)}</span>${escapeHtml(c.recipientName)}</p>`,
+    detailRows: `          <dt>Recipient</dt><dd>${escapeHtml(c.recipientName)}</dd>
+          <dt>Credential</dt><dd>${escapeHtml(c.kicker)} ${escapeHtml(c.title)}</dd>
+          <dt>Type</dt><dd>${escapeHtml(typeLabel)}</dd>
+          <dt>Issue date</dt><dd>${escapeHtml(issued)}</dd>
+          <dt>Issuer</dt><dd>${escapeHtml(issuer)}</dd>
+          <dt>Credential ID</dt><dd><code class="mono">${escapeHtml(id)}</code></dd>`,
+  };
+}
+
+function letterFace(c: LetterContent, issued: string, issuer: string, id: string): PageFace {
+  // The hero headline is the subject if present, else the first recipient line,
+  // else a neutral fallback — never the full letter body (that lives only in the
+  // gated PDF). The recipient line shows the addressee summary, not the body.
+  const headline = (c.subject ?? c.recipientLines[0] ?? 'Letter').trim() || 'Letter';
+  const addressee = (c.recipientLines[0] ?? '').trim();
+  return {
+    pageTitle: `Letter · ${headline} · ${IDENTITY.trustService}`,
+    hero: `        <p class="eyebrow">Letterhead · Trusted Document</p>
+        <h1 class="type-title" id="cred-title">Letter · ${escapeHtml(headline)}</h1>
+        ${addressee ? `<p class="recipient"><span class="lbl">To</span>${escapeHtml(addressee)}</p>` : ''}`,
+    detailRows: `${c.subject ? `          <dt>Subject</dt><dd>${escapeHtml(c.subject)}</dd>\n` : ''}${
+      addressee ? `          <dt>Recipient</dt><dd>${escapeHtml(addressee)}</dd>\n` : ''
+    }          <dt>Issue date</dt><dd>${escapeHtml(issued)}</dd>
+          <dt>Issuer</dt><dd>${escapeHtml(issuer)}</dd>
+          <dt>Document ID</dt><dd><code class="mono">${escapeHtml(id)}</code></dd>`,
+  };
+}
+
+function uploadFace(c: UploadAttestation, issued: string, issuer: string, id: string): PageFace {
+  const filename = (c.originalFilename || 'Uploaded document').trim() || 'Uploaded document';
+  return {
+    pageTitle: `Attested document · ${filename} · ${IDENTITY.trustService}`,
+    hero: `        <p class="eyebrow">Attested document · Trusted Document</p>
+        <h1 class="type-title" id="cred-title">Attested document · ${escapeHtml(filename)}</h1>
+        <p class="recipient"><span class="lbl">Document number</span>${escapeHtml(id)}</p>`,
+    detailRows: `          <dt>Document number</dt><dd><code class="mono">${escapeHtml(id)}</code></dd>
+          <dt>File name</dt><dd>${escapeHtml(filename)}</dd>
+          <dt>Original SHA-256</dt><dd><code class="mono">${escapeHtml(c.originalSha256)}</code></dd>
+          <dt>Pages</dt><dd>${escapeHtml(String(c.pageCount))}</dd>
+          <dt>Issue date</dt><dd>${escapeHtml(issued)}</dd>
+          <dt>Issuer</dt><dd>${escapeHtml(issuer)}</dd>`,
+  };
+}
+
+/** Honest, kind-specific copy for the shared trust statement's lead sentence. */
+function trustLead(kind: ReturnType<typeof documentKind>, issuerLegalName: string): string {
+  switch (kind) {
+    case 'upload':
+      // The content is the uploader's; dmj.one attests only that it signed THIS file.
+      return `<strong>${escapeHtml(issuerLegalName)}</strong> attests that it signed this document; the
+        document's content is the uploader's, not authored or endorsed by dmj.one.`;
+    case 'letter':
+      return `<strong>${escapeHtml(issuerLegalName)}</strong> issued and attests to this letter.`;
+    default:
+      return `<strong>${escapeHtml(issuerLegalName)}</strong> attests to this credential.`;
+  }
+}
+
+/**
  * The shared <head> + the single nonce'd design-system stylesheet, parameterised
  * by the per-request nonce. The CSS comes verbatim from @dmjone/brand so the web
  * surface never drifts from the printed certificate; the fonts it references are
@@ -268,12 +359,18 @@ ${flourish()}
 /** Render the full public credential page for a known record. */
 export function renderCredentialPage(input: CredentialPageInput): string {
   const { record, issuer, issuerLegalName, nonce } = input;
-  // Phase 1 renders the certificate face; the union is widened for the
-  // letter/upload backbone (their pages are Phase 2).
-  const c = record.content as CredentialContent;
-  const id = c.credentialId;
-  const typeLabel = TYPE_LABEL[c.type] ?? titleCase(c.type);
-  const issued = formatIssueDate(c.issueDate);
+  // The verdict/ledger/trust/downloads scaffold is kind-agnostic; only the hero
+  // copy and the "Credential details" rows branch by kind. `record.id` is the id
+  // for every kind (certificate `credentialId` / letter+upload `documentId`), so
+  // it drives the page id + downloads without touching the union's id field.
+  const kind = documentKind(record);
+  const id = record.id;
+  const face =
+    kind === 'letter'
+      ? letterFace(record.content as LetterContent, formatIssueDate((record.content as LetterContent).issueDate), issuer, id)
+      : kind === 'upload'
+        ? uploadFace(record.content as UploadAttestation, formatIssueDate((record.content as UploadAttestation).issueDate), issuer, id)
+        : certificateFace(record.content as CredentialContent, formatIssueDate((record.content as CredentialContent).issueDate), issuer, id);
   const outcome = input.verification.outcome;
 
   // SSR status from the REAL server-computed verdict — correct and
@@ -309,7 +406,7 @@ export function renderCredentialPage(input: CredentialPageInput): string {
   const section63Path = `/api/credentials/${encodeURIComponent(id)}/section63`;
   const verifyApiPath = `/api/verify/${encodeURIComponent(id)}`;
 
-  return `${head(nonce, `${typeLabel} certificate · ${c.recipientName} · ${IDENTITY.trustService}`)}
+  return `${head(nonce, face.pageTitle)}
 <body data-credential-id="${escapeHtml(id)}" data-verify-url="${escapeHtml(verifyApiPath)}">
   <a class="skip" href="#main">Skip to content</a>
   <div class="wrap">
@@ -322,9 +419,7 @@ export function renderCredentialPage(input: CredentialPageInput): string {
     <main id="main">
       <section class="card" aria-labelledby="cred-title">
 ${studs()}
-        <p class="eyebrow">${escapeHtml(c.kicker)}</p>
-        <h1 class="type-title" id="cred-title">${escapeHtml(c.title)}</h1>
-        <p class="recipient"><span class="lbl">${escapeHtml(c.intro)}</span>${escapeHtml(c.recipientName)}</p>
+${face.hero}
 
         <!-- Tier 1: the plain-language verdict — the hero sentence, server-rendered
              from the authoritative outcome so it is correct without JavaScript.
@@ -355,20 +450,15 @@ ${checksHtml}
 ${flourish()}
 
       <section class="facts" aria-labelledby="facts-h">
-        <h2 id="facts-h">Credential details</h2>
+        <h2 id="facts-h">${kind === 'certificate' ? 'Credential details' : 'Document details'}</h2>
         <dl class="grid">
-          <dt>Recipient</dt><dd>${escapeHtml(c.recipientName)}</dd>
-          <dt>Credential</dt><dd>${escapeHtml(c.kicker)} ${escapeHtml(c.title)}</dd>
-          <dt>Type</dt><dd>${escapeHtml(typeLabel)}</dd>
-          <dt>Issue date</dt><dd>${escapeHtml(issued)}</dd>
-          <dt>Issuer</dt><dd>${escapeHtml(issuer)}</dd>
-          <dt>Credential ID</dt><dd><code class="mono">${escapeHtml(id)}</code></dd>
+${face.detailRows}
           <dt>Status</dt><dd><span class="pill ${ssrStatusClass}">${ssrStatusLabel}</span></dd>
         </dl>
       </section>
 
       <section class="trust" aria-label="Trust statement">
-        <strong>${escapeHtml(issuerLegalName)}</strong> attests to this credential. The post-quantum
+        ${trustLead(kind, issuerLegalName)} The post-quantum
         cryptographic signature proves the attestation is authentic and unaltered, and the entry is
         recorded in a public, tamper-evident transparency log. This is a <strong>self-signed
         cryptographic attestation</strong> by an independent educational initiative; it is <strong>not</strong>

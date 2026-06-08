@@ -17,9 +17,11 @@
 import type {
   CredentialContent,
   CredentialRecord,
+  LetterContent,
   Section63Metadata,
+  UploadAttestation,
 } from '@dmjone/shared';
-import { titleCase } from '@dmjone/shared';
+import { documentKind, titleCase } from '@dmjone/shared';
 import { getFontFaceCss } from './assets.js';
 import { escapeHtml, formatIsoDate } from './html.js';
 
@@ -122,6 +124,76 @@ function row(label: string, valueHtml: string): string {
 }
 
 /**
+ * The Part-1 "Identification of the Electronic Record" rows, kind-aware. The
+ * legal structure (a labelled particulars table) and the surrounding Parts 2/3/A
+ * + disclosure are identical across kinds; only WHICH identity rows appear vary:
+ *
+ *   - certificate → ID, nature (type label), recipient, title borne, date.
+ *   - letter      → ID, nature ("Letterhead letter"), subject (if any),
+ *                   recipient (first address line, if any), date.
+ *   - upload      → ID, nature ("Uploaded document (attested)"), original file
+ *                   name, original SHA-256 (the hash of the uploaded bytes BEFORE
+ *                   stamping), page count, date.
+ *
+ * The id is `record.id` (= `credentialId` for certs, `documentId` for
+ * letter/upload), so this never reaches into the union's differing id field. The
+ * trailing "Current status" + "Stored as" rows are shared and appended by the
+ * caller. Every value is HTML-escaped.
+ */
+function part1Rows(record: CredentialRecord): string {
+  const id = `<span class="mono">${escapeHtml(record.id)}</span>`;
+  switch (documentKind(record)) {
+    case 'letter': {
+      const c = record.content as LetterContent;
+      const addressee = (c.recipientLines[0] ?? '').trim();
+      const subject = (c.subject ?? '').trim();
+      return (
+        row('Document ID', id) +
+        row('Nature of record', escapeHtml('Letterhead letter')) +
+        (subject ? row('Subject', escapeHtml(subject)) : '') +
+        (addressee ? row('Recipient', escapeHtml(addressee)) : '') +
+        row('Date of issue', escapeHtml(formatIsoDate(c.issueDate)))
+      );
+    }
+    case 'upload': {
+      const c = record.content as UploadAttestation;
+      return (
+        row('Document ID', id) +
+        row('Nature of record', escapeHtml('Uploaded document (attested)')) +
+        row('Original file name', escapeHtml(c.originalFilename)) +
+        row('Original SHA-256 (as uploaded)', `<span class="mono">${escapeHtml(c.originalSha256)}</span>`) +
+        row('Pages', escapeHtml(String(c.pageCount))) +
+        row('Date of issue', escapeHtml(formatIsoDate(c.issueDate)))
+      );
+    }
+    default: {
+      const c = record.content as CredentialContent;
+      const typeLabel = TYPE_LABEL[c.type] ?? titleCase(c.type);
+      return (
+        row('Credential ID', `<span class="mono">${escapeHtml(c.credentialId)}</span>`) +
+        row('Nature of record', escapeHtml(typeLabel)) +
+        row('Recipient', escapeHtml(c.recipientName)) +
+        row('Title borne', escapeHtml(`${c.kicker} ${c.title}`.trim())) +
+        row('Date of issue', escapeHtml(formatIsoDate(c.issueDate)))
+      );
+    }
+  }
+}
+
+/**
+ * How the record is described in the "Stored as" row + Part 3 framing. An
+ * uploaded document is the uploader's PDF carrying our stamp + signatures, which
+ * the honest disclosure already qualifies; a certificate/letter is rendered by
+ * us. The §63 disclosure (self-signed, not a licensed CA) is unchanged for all.
+ */
+function storedAsCopy(kind: ReturnType<typeof documentKind>): string {
+  if (kind === 'upload') {
+    return 'A user-supplied PDF document (Portable Document Format, ISO 32000), stamped with a validation identifier and digitally signed by the issuer, retained in the issuer&rsquo;s records. The document content is the uploader&rsquo;s.';
+  }
+  return 'A digitally-signed PDF document (Portable Document Format, ISO 32000) retained in the issuer&rsquo;s records.';
+}
+
+/**
  * Build the §63 certificate HTML for a stored credential record. Pulls the
  * record-identity fields from {@link CredentialRecord.content} and the hash /
  * production particulars from the supplied {@link Section63Metadata} (already
@@ -130,13 +202,12 @@ function row(label: string, valueHtml: string): string {
  */
 export function buildSection63Html(record: CredentialRecord, meta: Section63Metadata): string {
   const fontCss = getFontFaceCss();
-  // Phase 1 §63 certificate-of-authenticity renders the certificate identity;
-  // the content union is widened for the letter/upload backbone (Phase 2).
-  const content = record.content as CredentialContent;
-
-  // Preset types keep their §63 label; a custom (Mode-1) type falls back to its
-  // Title-Cased name so the lookup is always a defined string.
-  const typeLabel = TYPE_LABEL[content.type] ?? titleCase(content.type);
+  // The §63 certificate-of-authenticity applies to ANY electronic record. The
+  // legal scaffold (Parts 2/3/A, disclosure, signatures) is shared; only the
+  // Part-1 record-identity rows + the "Stored as" framing branch by kind. The
+  // signatory block is on every kind's content; `record.id` is the id for all.
+  const kind = documentKind(record);
+  const signatory = (record.content as { signatory: CredentialContent['signatory'] }).signatory;
   const issuerIdentity =
     'dmj.one Trust Services — Document Signing (X.509 subject CN=dmj.one Trust Services, OU=Document Signing, C=IN)';
 
@@ -164,13 +235,9 @@ ${SECTION63_CSS}
       <div class="sec">
         <h2>Part 1 &middot; Identification of the Electronic Record</h2>
         <table class="grid">
-          ${row('Credential ID', `<span class="mono">${escapeHtml(content.credentialId)}</span>`)}
-          ${row('Nature of record', escapeHtml(typeLabel))}
-          ${row('Recipient', escapeHtml(content.recipientName))}
-          ${row('Title borne', escapeHtml(`${content.kicker} ${content.title}`.trim()))}
-          ${row('Date of issue', escapeHtml(formatIsoDate(content.issueDate)))}
+          ${part1Rows(record)}
           ${row('Current status', escapeHtml(record.status === 'revoked' ? 'Revoked' : 'Valid'))}
-          ${row('Stored as', 'A digitally-signed PDF document (Portable Document Format, ISO 32000) retained in the issuer&rsquo;s records.')}
+          ${row('Stored as', storedAsCopy(kind))}
         </table>
       </div>
 
@@ -220,7 +287,7 @@ ${SECTION63_CSS}
         <div class="signbox">
           <div class="line"></div>
           <div class="who">For dmj.one Trust Services</div>
-          <div class="meta">${escapeHtml(content.signatory.name)} &middot; ${escapeHtml(content.signatory.role)}</div>
+          <div class="meta">${escapeHtml(signatory.name)} &middot; ${escapeHtml(signatory.role)}</div>
           <div class="meta">Part A &middot; operator of the computer system</div>
         </div>
         <div class="signbox">
@@ -231,7 +298,7 @@ ${SECTION63_CSS}
         </div>
       </div>
 
-      <div class="foot">dmj.one &middot; contact@dmj.one &middot; Verify at dmj.one/verify &middot; Credential ID ${escapeHtml(content.credentialId)}</div>
+      <div class="foot">dmj.one &middot; contact@dmj.one &middot; Verify at dmj.one/verify &middot; ${kind === 'certificate' ? 'Credential' : 'Document'} ID ${escapeHtml(record.id)}</div>
 
     </div>
   </div>

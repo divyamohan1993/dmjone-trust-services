@@ -21,6 +21,7 @@ import type {
   CredentialRecord,
   CredentialRepository,
   CredentialStatus,
+  LetterContent,
   LogLeaf,
   LogRepository,
   LogVerifier,
@@ -28,6 +29,7 @@ import type {
   PasswordHasher,
   SignatureVerifier,
   SignedTreeHead,
+  UploadAttestation,
 } from '@dmjone/shared';
 import { GENESIS_HEAD_HASH } from '@dmjone/shared';
 
@@ -76,6 +78,87 @@ export function makeRecord(overrides: Partial<CredentialRecord> = {}): Credentia
       generatedAt: '2026-06-04T10:00:00.000Z',
     },
     ...overrides,
+  };
+}
+
+/** The shared crypto / log / §63 block every kind carries (content + kind differ). */
+function cryptoBlock(id: string): Omit<CredentialRecord, 'content' | 'kind' | 'id' | 'status'> {
+  return {
+    createdAt: '2026-06-04T10:00:00.000Z',
+    pdfSha256: 'a'.repeat(64),
+    canonicalPayload: '{"v":1}',
+    canonicalSha256: 'b'.repeat(64),
+    mldsaSignature: 'BASE64SIG',
+    mldsaPublicKeyId: 'mldsa-key-1',
+    padesCertFingerprint: 'c'.repeat(64),
+    logSeq: 1,
+    logLeafHash: 'd'.repeat(64),
+    passwordHash: '$argon2id$v=19$stored-hash',
+    section63: {
+      hashValue: 'a'.repeat(64),
+      hashAlgorithm: 'SHA-256',
+      producedBy: 'dmj.one Trust Services',
+      productionMethod: 'Deterministic HTML→PDF render, hybrid PAdES + ML-DSA-87 signature',
+      deviceParticulars: 'Cloud Run container, asia-east1',
+      generatedAt: '2026-06-04T10:00:00.000Z',
+    },
+  };
+}
+
+const DEFAULT_SIGNATORY = {
+  name: 'Divya Mohan',
+  role: 'Founder · dmj.one',
+  phone: '+91 79799 30293',
+};
+
+/** A `kind:'letter'` record (Mode 2 letterhead) — same trust block, letter content. */
+export function makeLetterRecord(
+  contentOverrides: Partial<LetterContent> = {},
+  recordOverrides: Partial<CredentialRecord> = {},
+): CredentialRecord {
+  const content: LetterContent = {
+    documentId: 'DMJ-LTR-20260604-01',
+    issueDate: '2026-06-04',
+    reference: 'DMJ/2026/0042',
+    recipientLines: ['The Principal', 'Hindu College', 'University of Delhi'],
+    subject: 'Confirmation of Internship Completion',
+    salutation: 'Dear Sir/Madam,',
+    bodyParagraphs: ['This is to confirm that the bearer completed an internship with dmj.one.'],
+    valediction: 'Sincerely,',
+    signatory: DEFAULT_SIGNATORY,
+    ...contentOverrides,
+  };
+  return {
+    id: content.documentId,
+    kind: 'letter',
+    content,
+    status: 'valid',
+    ...cryptoBlock(content.documentId),
+    ...recordOverrides,
+  };
+}
+
+/** A `kind:'upload'` record (Mode 3 upload-&-attest) — same trust block, attestation. */
+export function makeUploadRecord(
+  contentOverrides: Partial<UploadAttestation> = {},
+  recordOverrides: Partial<CredentialRecord> = {},
+): CredentialRecord {
+  const content: UploadAttestation = {
+    documentId: 'DMJ-DOC-20260604-01',
+    issueDate: '2026-06-04',
+    originalFilename: 'offer-letter.pdf',
+    originalSha256: 'e'.repeat(64),
+    pageCount: 3,
+    signatory: DEFAULT_SIGNATORY,
+    ...contentOverrides,
+  };
+  return {
+    id: content.documentId,
+    kind: 'upload',
+    content,
+    status: 'valid',
+    ...cryptoBlock(content.documentId),
+    ...recordOverrides,
   };
 }
 

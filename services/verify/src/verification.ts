@@ -12,12 +12,15 @@ import type {
   AnchorRepository,
   CredentialContent,
   CredentialRecord,
+  LetterContent,
   LogRepository,
   LogVerifier,
   PublicCredentialFields,
+  UploadAttestation,
   VerificationChecks,
   VerificationOutcome,
 } from '@dmjone/shared';
+import { documentKind } from '@dmjone/shared';
 
 /**
  * Collapse the individual checks into one outcome.
@@ -48,21 +51,61 @@ export function deriveOutcome(checks: VerificationChecks): VerificationOutcome {
   return 'valid';
 }
 
-/** Project the record down to exactly the HR/legal subset shown without a password. */
+/**
+ * Project the record down to exactly the HR/legal subset shown without a
+ * password — the JSON `publicFields` of /api/verify.
+ *
+ * {@link PublicCredentialFields} is a frozen, certificate-shaped 7-field
+ * contract (shared), so the letter/upload arms MAP their identity onto those
+ * same slots rather than widening the shape: `kicker` becomes a one-word kind
+ * label, `title` the document's headline, `recipientName` a neutral summary,
+ * `type` the kind. The richer kind-specific detail (subject lines, SHA-256,
+ * page count, filename) is carried by {@link renderCredentialPage} and the §63
+ * certificate, both of which read the record directly — this JSON projection is
+ * deliberately the small, stable subset. `record.id` is the id for every kind
+ * (the pipelines store `id = credentialId | documentId`), so it is read here in
+ * place of the kind-specific `content.credentialId` / `content.documentId`.
+ */
 export function publicFieldsOf(record: CredentialRecord, issuer: string): PublicCredentialFields {
-  // Phase 1 only ever stores certificates; the public projection is the
-  // certificate face. (The content union is widened for the letter/upload
-  // backbone; their public pages are Phase 2.)
-  const content = record.content as CredentialContent;
-  return {
-    recipientName: content.recipientName,
-    kicker: content.kicker,
-    title: content.title,
-    type: content.type,
-    issueDate: content.issueDate,
-    issuer,
-    status: record.status,
-  };
+  const base = { issueDate: '', issuer, status: record.status };
+  switch (documentKind(record)) {
+    case 'letter': {
+      const c = record.content as LetterContent;
+      const headline = c.subject ?? c.recipientLines[0] ?? 'Letter';
+      return {
+        recipientName: c.recipientLines[0] ?? '',
+        kicker: 'Letterhead',
+        title: headline,
+        type: 'letter',
+        ...base,
+        issueDate: c.issueDate,
+      };
+    }
+    case 'upload': {
+      const c = record.content as UploadAttestation;
+      return {
+        // No person is invented for an uploaded document: the summary is the file.
+        recipientName: c.originalFilename || 'Uploaded document',
+        kicker: 'Attested document',
+        title: c.originalFilename || 'Uploaded document',
+        type: 'upload',
+        ...base,
+        issueDate: c.issueDate,
+      };
+    }
+    default: {
+      const content = record.content as CredentialContent;
+      return {
+        recipientName: content.recipientName,
+        kicker: content.kicker,
+        title: content.title,
+        type: content.type,
+        issueDate: content.issueDate,
+        issuer,
+        status: record.status,
+      };
+    }
+  }
 }
 
 /**

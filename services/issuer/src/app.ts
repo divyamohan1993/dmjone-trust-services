@@ -19,7 +19,9 @@ import { registerAdminUiRoutes } from './routes/admin-ui.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerCredentialRoutes } from './routes/credentials.js';
 import { registerHealthRoutes } from './routes/health.js';
+import { registerLetterRoutes } from './routes/letters.js';
 import { registerSuperAdminRoutes } from './routes/superadmin.js';
+import { registerUploadRoutes } from './routes/uploads.js';
 
 export type { IssuerDeps, SecretSealer } from './deps.js';
 
@@ -62,6 +64,8 @@ export function createIssuerApp(deps: IssuerDeps): Hono<IssuerHonoEnv> {
   registerHealthRoutes(app, deps);
   registerAuthRoutes(app, deps);
   registerCredentialRoutes(app, deps);
+  registerLetterRoutes(app, deps);
+  registerUploadRoutes(app, deps);
   registerSuperAdminRoutes(app, deps);
   registerAdminUiRoutes(app, deps);
 

@@ -19,13 +19,13 @@ import type {
   AuditLog,
   BlobKind,
   BlobStore,
-  CertificateRenderer,
   CredentialContent,
   CredentialRecord,
   CredentialRepository,
   CredentialStatus,
   HybridSignatureResult,
   HybridSigner,
+  LetterContent,
   LogLeaf,
   LogRepository,
   LogSigner,
@@ -36,6 +36,7 @@ import type {
   Section63Metadata,
   SignedTreeHead,
 } from '@dmjone/shared';
+import type { TrustedDocumentRenderer } from '@dmjone/render';
 import type { Logger } from 'pino';
 
 import type { IssuerDeps, SecretSealer } from '../src/deps.js';
@@ -255,14 +256,23 @@ export class FakePasswordHasher implements PasswordHasher {
   }
 }
 
-export class FakeRenderer implements CertificateRenderer {
+export class FakeRenderer implements TrustedDocumentRenderer {
+  /** Last opts seen by `render` (cert path). */
   lastOpts: RenderOptions | null = null;
+  /** Last opts seen by `renderLetter` (letter path) — lets letter tests assert the QR url. */
+  lastLetterOpts: RenderOptions | null = null;
   constructor(private readonly trace?: CallTrace) {}
   async render(content: CredentialContent, opts: RenderOptions): Promise<Uint8Array> {
     this.trace?.push('render');
     void content;
     this.lastOpts = opts;
     return new Uint8Array([0x75, 0x6e, 0x73, 0x67]); // "unsg" (unsigned)
+  }
+  async renderLetter(content: LetterContent, opts: RenderOptions): Promise<Uint8Array> {
+    this.trace?.push('renderLetter');
+    void content;
+    this.lastLetterOpts = opts;
+    return new Uint8Array([0x6c, 0x74, 0x72, 0x75]); // "ltru" (letter, unsigned)
   }
 }
 

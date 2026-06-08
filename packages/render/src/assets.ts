@@ -118,7 +118,7 @@ export function getBrandImages(): BrandImages {
   if (!imagesCache) {
     imagesCache = {
       logo: fileToDataUri(join(ASSETS_DIR, 'logo-round.png'), 'image/png'),
-      signature: fileToDataUri(join(ASSETS_DIR, 'signature.jpg'), 'image/jpeg'),
+      signature: fileToDataUri(join(ASSETS_DIR, 'signature.png'), 'image/png'),
       watermark: fileToDataUri(join(ASSETS_DIR, 'watermark.png'), 'image/png'),
     };
   }

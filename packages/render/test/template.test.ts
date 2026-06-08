@@ -58,9 +58,9 @@ describe('buildCertificateHtml', () => {
   });
 
   it('embeds the three brand images as base64 data-URIs', () => {
-    // watermark + logo are PNG, signature is JPEG.
-    expect(html).toContain('data:image/png;base64,');
-    expect(html).toContain('data:image/jpeg;base64,');
+    // logo, watermark, and the (now transparent) signature are all PNG data-URIs.
+    expect((html.match(/data:image\/png;base64,/g) ?? []).length).toBeGreaterThanOrEqual(3);
+    expect(html).not.toContain('data:image/jpeg');
     expect(html).toContain('class="watermark"');
     expect(html).toContain('class="logo"');
     expect(html).toContain('class="sig-img"');

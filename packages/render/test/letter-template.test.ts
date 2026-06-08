@@ -102,8 +102,9 @@ describe('buildLetterHtml', () => {
   });
 
   it('inlines the brand logo + signature images as base64 data-URIs', () => {
-    expect(html).toContain('data:image/png;base64,'); // logo (png)
-    expect(html).toContain('data:image/jpeg;base64,'); // signature (jpeg)
+    // logo + the (now transparent) signature are inlined as PNG data-URIs.
+    expect((html.match(/data:image\/png;base64,/g) ?? []).length).toBeGreaterThanOrEqual(2);
+    expect(html).not.toContain('data:image/jpeg');
     expect(html).toContain('class="logo"');
   });
 

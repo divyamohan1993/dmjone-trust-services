@@ -35,13 +35,23 @@ export const ARGON2_DEFAULTS = {
  */
 export const CREDENTIAL_ID_REGEX = /^DMJ-[A-Z]{2,4}-\d{8}-\d{2}$/;
 
-/** Two-letter type codes embedded in the credential ID. */
+/** Two-letter type codes embedded in the credential ID (certificates). */
 export const CREDENTIAL_TYPE_CODES = {
   internship: 'IC',
   completion: 'CC',
   appreciation: 'AC',
   experience: 'EC',
   participation: 'PC',
+} as const;
+
+/**
+ * Document-ID prefixes for the non-certificate kinds. They share the same
+ * `DMJ-<CODE>-YYYYMMDD-NN` shape (and the same per-day sequence counter) as
+ * certificates; `CREDENTIAL_ID_REGEX` already matches these 3-letter codes.
+ */
+export const DOCUMENT_ID_PREFIX = {
+  letter: 'LTR',
+  upload: 'DOC',
 } as const;
 
 /** Firestore single-document limit is 1 MiB; chunk well under it. */

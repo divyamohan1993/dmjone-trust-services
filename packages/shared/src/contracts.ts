@@ -62,12 +62,21 @@ export interface VerifyingKeys {
  *   1. (caller) render → unsignedPdf
  *   2. embed PAdES PKCS#7 placeholder + sign → signedPdf   (FINAL — never mutate after)
  *   3. pdfSha256     = SHA-256(signedPdf)
- *   4. canonical     = computeCanonicalPayload(content, pdfSha256)   (from @dmjone/shared)
+ *   4. canonical     = buildCanonicalPayload(pdfSha256)    (caller-supplied; e.g. computeCanonicalPayload(content, pdfSha256))
  *   5. mldsaSignature = ML-DSA-87.sign(UTF8(canonical))    (DETACHED — not written into the PDF)
  *   6. canonicalSha256 = SHA-256(UTF8(canonical))          (for the log leaf)
+ *
+ * The canonical payload binds `pdfSha256`, which only exists AFTER step 2, so
+ * the signer cannot receive a precomputed string. The caller instead supplies a
+ * `buildCanonicalPayload` callback that the signer invokes with the real
+ * `pdfSha256` once it is known. This keeps the signer agnostic to document kind
+ * (certificate / letter / upload all pass a different builder).
  */
 export interface HybridSigner {
-  sign(unsignedPdf: Uint8Array, content: CredentialContent): Promise<HybridSignatureResult>;
+  sign(
+    unsignedPdf: Uint8Array,
+    buildCanonicalPayload: (pdfSha256: string) => string,
+  ): Promise<HybridSignatureResult>;
 }
 
 export interface PadesVerifyResult {
@@ -79,11 +88,20 @@ export interface PadesVerifyResult {
 
 export interface SignatureVerifier {
   /**
-   * Verify the detached ML-DSA signature. Internally rebuilds the signed bytes
-   * via the shared computeCanonicalPayload(content, pdfSha256) — identical to
-   * issue-time — then checks the signature with the ML-DSA public key.
+   * Verify the detached ML-DSA signature for a CERTIFICATE. Internally rebuilds
+   * the signed bytes via the shared computeCanonicalPayload(content, pdfSha256)
+   * — identical to issue-time — then checks the signature with the ML-DSA public
+   * key. (Frozen certificate path; the bytes must not change.)
    */
   verifyMldsa(content: CredentialContent, pdfSha256: string, signatureB64: string): boolean;
+  /**
+   * Verify the detached ML-DSA signature for any stored record, recomputing the
+   * signed bytes BY KIND via the shared computeCanonicalPayloadForRecord(record)
+   * — so certificates, letters, and uploads all verify against the exact bytes
+   * the issuer signed. For a certificate record (kind absent or 'certificate')
+   * this is byte-identical to {@link verifyMldsa}. Never throws.
+   */
+  verifyMldsaForRecord(record: CredentialRecord): boolean;
   /** Verify the embedded PAdES PKCS#7 (only meaningful in the file-upload flow). */
   verifyPdfPades(signedPdf: Uint8Array): Promise<PadesVerifyResult>;
 }

@@ -31,6 +31,19 @@ All notable changes to this project are documented here. Format follows
 
 ### Added
 
+- 2026-06-08: **Trusted-documents foundation** (Phase 1 of a 3-mode issuer:
+  certificate / letterhead / upload-&-attest). Generalized the record with a
+  `kind` discriminator (`certificate | letter | upload`; absent ⇒ certificate, so
+  stored data is unchanged), added `LetterContent` / `UploadAttestation` /
+  `SignaturePlacement` types, per-kind canonical signing payloads
+  (`computeLetterCanonicalPayload` / `computeUploadCanonicalPayload` /
+  `computeCanonicalPayloadForRecord`), and decoupled the hybrid signer to
+  `sign(unsignedPdf, buildCanonicalPayload)` so all kinds share one crypto
+  backbone. The **certificate canonical payload is frozen byte-for-byte**, guarded
+  by a golden-vector test, so every already-issued certificate still verifies
+  (proven end-to-end through real ML-DSA-87 + PAdES). Verify recomputes by kind via
+  `verifyMldsaForRecord`. Foundation only; the per-mode routes/templates/UI follow.
+  Contract: `docs/specs/2026-06-08-trusted-documents-foundation.md`.
 - 2026-06-08: **Rich-text certificate body + exact pre-issue preview.** The issue form's
   body is now a live "type-inside-the-render" editor: per-run **Bold** / *Italic* /
   _Underline_ (in-band `**`/`*`/`__` markup compiled by a real tokenizer with a

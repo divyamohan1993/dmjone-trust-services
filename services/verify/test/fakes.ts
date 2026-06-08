@@ -152,6 +152,10 @@ export class FakeSignatureVerifier implements SignatureVerifier {
     return this.mldsaValid;
   }
 
+  verifyMldsaForRecord(_record: CredentialRecord): boolean {
+    return this.mldsaValid;
+  }
+
   verifyPdfPades(_signedPdf: Uint8Array): Promise<PadesVerifyResult> {
     return Promise.resolve(this.padesResult);
   }

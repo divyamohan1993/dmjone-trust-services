@@ -552,11 +552,9 @@ async function buildChecks(
     checkLogInclusion(record, deps.logRepo, deps.logVerifier),
     checkAnchor(record, deps.anchorRepo),
   ]);
-  const mldsaSignature = deps.verifier.verifyMldsa(
-    record.content,
-    record.pdfSha256,
-    record.mldsaSignature,
-  );
+  // Recompute the signed bytes BY KIND (cert/letter/upload) and verify. For a
+  // certificate record this is byte-identical to the frozen cert path.
+  const mldsaSignature = deps.verifier.verifyMldsaForRecord(record);
   return {
     mldsaSignature,
     hashMatch: true,

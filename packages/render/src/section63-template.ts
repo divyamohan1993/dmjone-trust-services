@@ -14,7 +14,12 @@
  * interpolated field is HTML-escaped.
  */
 
-import type { CredentialRecord, CredentialType, Section63Metadata } from '@dmjone/shared';
+import type {
+  CredentialContent,
+  CredentialRecord,
+  CredentialType,
+  Section63Metadata,
+} from '@dmjone/shared';
 import { getFontFaceCss } from './assets.js';
 import { escapeHtml, formatIsoDate } from './html.js';
 
@@ -125,7 +130,9 @@ function row(label: string, valueHtml: string): string {
  */
 export function buildSection63Html(record: CredentialRecord, meta: Section63Metadata): string {
   const fontCss = getFontFaceCss();
-  const { content } = record;
+  // Phase 1 §63 certificate-of-authenticity renders the certificate identity;
+  // the content union is widened for the letter/upload backbone (Phase 2).
+  const content = record.content as CredentialContent;
 
   const typeLabel = TYPE_LABEL[content.type];
   const issuerIdentity =

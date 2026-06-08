@@ -3,10 +3,15 @@
  *
  * Two independent checks, mirroring the two halves of the hybrid signature:
  *
- *  - {@link SignatureVerifier.verifyMldsa}: the authoritative check. Rebuilds the
- *    canonical payload via the SHARED computeCanonicalPayload (byte-identical to
- *    issue-time) and verifies the detached ML-DSA-87 signature. Never throws —
- *    any malformed input is a verification failure, not an exception.
+ *  - {@link SignatureVerifier.verifyMldsa}: the authoritative check for a
+ *    certificate. Rebuilds the canonical payload via the SHARED
+ *    computeCanonicalPayload (byte-identical to issue-time) and verifies the
+ *    detached ML-DSA-87 signature. Never throws — any malformed input is a
+ *    verification failure, not an exception.
+ *  - {@link SignatureVerifier.verifyMldsaForRecord}: the same check for ANY
+ *    stored record, rebuilding the payload BY KIND via the SHARED
+ *    computeCanonicalPayloadForRecord (byte-identical to verifyMldsa for a
+ *    certificate). This is what the verify service calls on an id lookup.
  *  - {@link SignatureVerifier.verifyPdfPades}: only meaningful in the file-upload
  *    flow. Parses the embedded PKCS#7, recomputes the ByteRange digest and
  *    checks it against the signed messageDigest, and verifies the RSA signature
@@ -19,7 +24,9 @@
 import { ml_dsa87 } from '@noble/post-quantum/ml-dsa.js';
 import {
   computeCanonicalPayload,
+  computeCanonicalPayloadForRecord,
   type CredentialContent,
+  type CredentialRecord,
   type PadesVerifyResult,
   type SignatureVerifier,
   type VerifyingKeys,
@@ -32,16 +39,31 @@ import { binaryStringToBytes } from './pades-util.js';
 const BYTE_RANGE_RE = /\/ByteRange\s*\[\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*\]/;
 
 export function createSignatureVerifier(keys: VerifyingKeys): SignatureVerifier {
+  /**
+   * Verify the detached ML-DSA-87 signature over an already-derived canonical
+   * payload string. The single place the verify-side check runs; both the
+   * certificate path and the by-kind path funnel through it so the bytes are
+   * treated identically. Never throws — any malformed input is a failure.
+   */
+  function verifyCanonical(canonical: string, signatureB64: string): boolean {
+    try {
+      const sig = base64ToBytes(signatureB64);
+      return ml_dsa87.verify(sig, toUtf8Bytes(canonical), keys.mldsaPublicKey);
+    } catch {
+      // Malformed signature / inputs → not verified. Never leak details.
+      return false;
+    }
+  }
+
   return {
     verifyMldsa(content: CredentialContent, pdfSha256: string, signatureB64: string): boolean {
-      try {
-        const canonical = computeCanonicalPayload(content, pdfSha256);
-        const sig = base64ToBytes(signatureB64);
-        return ml_dsa87.verify(sig, toUtf8Bytes(canonical), keys.mldsaPublicKey);
-      } catch {
-        // Malformed signature / inputs → not verified. Never leak details.
-        return false;
-      }
+      return verifyCanonical(computeCanonicalPayload(content, pdfSha256), signatureB64);
+    },
+
+    verifyMldsaForRecord(record: CredentialRecord): boolean {
+      // Recompute the signed bytes BY KIND. For a certificate record this is
+      // byte-identical to verifyMldsa(record.content, record.pdfSha256, …).
+      return verifyCanonical(computeCanonicalPayloadForRecord(record), record.mldsaSignature);
     },
 
     async verifyPdfPades(signedPdf: Uint8Array): Promise<PadesVerifyResult> {

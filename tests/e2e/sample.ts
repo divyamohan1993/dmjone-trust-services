@@ -13,6 +13,7 @@ import {
 } from '@dmjone/crypto';
 import { createCertificateRenderer, createSection63Generator } from '@dmjone/render';
 import {
+  computeCanonicalPayload,
   DEFAULT_SIGNATORY,
   type CredentialContent,
   type CredentialRecord,
@@ -53,7 +54,7 @@ const signer = createHybridSigner(signingKeys);
 const unsigned = await renderer.render(content, {
   qrUrl: `https://verify.dmj.one/c/${content.credentialId}`,
 });
-const sig = await signer.sign(unsigned, content);
+const sig = await signer.sign(unsigned, (h) => computeCanonicalPayload(content, h));
 
 const record: CredentialRecord = {
   id: content.credentialId,

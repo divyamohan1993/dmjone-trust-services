@@ -19,6 +19,13 @@ export type CredentialType =
   | 'experience'
   | 'participation';
 
+/**
+ * The trust backbone serves three document modes; `kind` discriminates them on
+ * the stored record. A record with no `kind` is a certificate (see
+ * {@link documentKind}), so existing certificate data reads unchanged.
+ */
+export type DocumentKind = 'certificate' | 'letter' | 'upload';
+
 // ───────────────────────────── Certificate content ─────────────────────────
 
 /** The fixed signatory block (the sole issuer). */
@@ -50,6 +57,69 @@ export interface CredentialContent {
   bodyParagraphs: string[];
   /** Optional centered italic closing line. */
   closingLine?: string;
+  signatory: Signatory;
+}
+
+// ──────────────────────────── Letterhead letter ────────────────────────────
+
+/**
+ * Letterhead letter content (rich body reuses the cert body markup grammar:
+ * the `[[align:…]]` directive + ** /* /__ inline marks, compiled by
+ * compileParagraph).
+ */
+export interface LetterContent {
+  /** `DMJ-LTR-YYYYMMDD-NN`. */
+  documentId: string;
+  /** ISO-8601 date (YYYY-MM-DD). */
+  issueDate: string;
+  /** Optional "Ref:" line. */
+  reference?: string;
+  /** The "To" address block, 0..8 lines (each <=120 chars). */
+  recipientLines: string[];
+  /** Optional "Subject:" line. */
+  subject?: string;
+  /** "Dear Sir/Madam,". */
+  salutation?: string;
+  /** Rich body, 1..40 paragraphs (long letter; same markup as cert body). */
+  bodyParagraphs: string[];
+  /** "Sincerely,". */
+  valediction?: string;
+  /** Reuse DEFAULT_SIGNATORY. */
+  signatory: Signatory;
+}
+
+// ──────────────────────────── Upload-&-attest ──────────────────────────────
+
+/**
+ * Where on the uploaded PDF the handwritten signature image was stamped. All
+ * coordinates are FRACTIONS of the page box (origin = top-left), so they are
+ * resolution-independent; height is derived from the image aspect ratio.
+ */
+export interface SignaturePlacement {
+  /** 1-based page index. */
+  page: number;
+  /** 0..1 left edge / page width. */
+  xPct: number;
+  /** 0..1 top edge / page height. */
+  yPct: number;
+  /** 0..1 signature width / page width. */
+  wPct: number;
+}
+
+/** Attestation metadata for an uploaded-&-signed PDF (no rendered content). */
+export interface UploadAttestation {
+  /** `DMJ-DOC-YYYYMMDD-NN` (the visible "document number"). */
+  documentId: string;
+  /** ISO-8601 date (YYYY-MM-DD). */
+  issueDate: string;
+  /** Sanitized basename, <=200 chars. */
+  originalFilename: string;
+  /** Hex SHA-256 of the uploaded bytes BEFORE any stamping. */
+  originalSha256: string;
+  /** Pages in the uploaded PDF. */
+  pageCount: number;
+  /** Present iff the handwritten signature was stamped. */
+  signaturePlacement?: SignaturePlacement;
   signatory: Signatory;
 }
 
@@ -91,10 +161,21 @@ export interface Section63Metadata {
   generatedAt: string;
 }
 
-/** The full stored record for one credential. */
+/**
+ * The full stored record for one trusted document. The crypto block, status,
+ * transparency-log linkage, gated download, and §63 metadata are SHARED across
+ * all kinds; only `content` varies by `kind`.
+ *
+ * The name is kept (it predates the multi-kind generalization) to minimize
+ * churn. `kind` is optional: an absent `kind` reads as `'certificate'` (see
+ * {@link documentKind}), so records written before the generalization stay
+ * valid unchanged.
+ */
 export interface CredentialRecord {
   id: string;
-  content: CredentialContent;
+  /** Absent ⇒ `'certificate'`. */
+  kind?: DocumentKind;
+  content: CredentialContent | LetterContent | UploadAttestation;
   status: CredentialStatus;
   createdAt: string;
   revokedAt?: string;
@@ -112,6 +193,16 @@ export interface CredentialRecord {
   passwordHash: string;
   // legal
   section63: Section63Metadata;
+}
+
+/**
+ * The kind of a stored record, defaulting an absent `kind` to `'certificate'`
+ * so pre-generalization records (which have no `kind` field) read correctly.
+ * The single place this default is applied; use it instead of reading
+ * `record.kind` directly.
+ */
+export function documentKind(record: Pick<CredentialRecord, 'kind'>): DocumentKind {
+  return record.kind ?? 'certificate';
 }
 
 // ─────────────────────────── Transparency log ──────────────────────────────

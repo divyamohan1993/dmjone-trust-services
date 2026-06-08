@@ -18,10 +18,12 @@
  * the tests assert.
  */
 
-import type {
-  CredentialContent,
-  CredentialRecord,
-  IssueCredentialInput,
+import {
+  computeCanonicalPayload,
+  CREDENTIAL_TYPE_CODES,
+  type CredentialContent,
+  type CredentialRecord,
+  type IssueCredentialInput,
 } from '@dmjone/shared';
 
 import type { IssuerDeps } from '../deps.js';
@@ -47,10 +49,12 @@ export async function issueCredential(
 ): Promise<IssueOutcome> {
   const now = new Date().toISOString();
 
-  // 1. Allocate a unique, well-formed credential id for the issue date.
+  // 1. Allocate a unique, well-formed credential id for the issue date. Certs
+  //    use the per-type code (e.g. internship → IC); the allocator takes the
+  //    explicit prefix so letters/uploads can share the same sequence space.
   const credentialId = await allocateCredentialId(
     deps.credentialRepo,
-    input.type,
+    CREDENTIAL_TYPE_CODES[input.type],
     input.issueDate,
   );
 
@@ -66,7 +70,8 @@ export async function issueCredential(
   const unsignedPdf = await deps.renderer.render(content, { qrUrl });
 
   // 3. Hybrid-sign: PAdES embedded + detached ML-DSA over canonical(content, pdfSha256).
-  const sig = await deps.signer.sign(unsignedPdf, content);
+  //    The signer supplies pdfSha256 (known only after PAdES) to this builder.
+  const sig = await deps.signer.sign(unsignedPdf, (h) => computeCanonicalPayload(content, h));
 
   // 4. §63 Part-A metadata over the final signed pdf hash (sync).
   const s63meta = deps.section63.metadata(content, sig.pdfSha256);

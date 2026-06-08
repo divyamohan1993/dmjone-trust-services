@@ -10,6 +10,7 @@
 
 import type {
   AnchorRepository,
+  CredentialContent,
   CredentialRecord,
   LogRepository,
   LogVerifier,
@@ -49,12 +50,16 @@ export function deriveOutcome(checks: VerificationChecks): VerificationOutcome {
 
 /** Project the record down to exactly the HR/legal subset shown without a password. */
 export function publicFieldsOf(record: CredentialRecord, issuer: string): PublicCredentialFields {
+  // Phase 1 only ever stores certificates; the public projection is the
+  // certificate face. (The content union is widened for the letter/upload
+  // backbone; their public pages are Phase 2.)
+  const content = record.content as CredentialContent;
   return {
-    recipientName: record.content.recipientName,
-    kicker: record.content.kicker,
-    title: record.content.title,
-    type: record.content.type,
-    issueDate: record.content.issueDate,
+    recipientName: content.recipientName,
+    kicker: content.kicker,
+    title: content.title,
+    type: content.type,
+    issueDate: content.issueDate,
     issuer,
     status: record.status,
   };

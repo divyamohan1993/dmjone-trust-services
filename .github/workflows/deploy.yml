@@ -50,8 +50,13 @@ jobs:
             --service-account="issuer-sa@$PROJECT.iam.gserviceaccount.com" \
             --min-instances=0 --max-instances=2 --cpu=1 --memory=1Gi \
             --concurrency=4 --timeout=120 --allow-unauthenticated \
-            --set-env-vars="SERVICE_ROLE=issuer,DATA_BACKEND=firestore,GCP_PROJECT_ID=$PROJECT,GCP_REGION=$REGION,FIRESTORE_DATABASE_ID=trust,ISSUER_PUBLIC_URL=https://issue.dmj.one,VERIFY_PUBLIC_URL=https://verify.dmj.one,WEBAUTHN_RP_ID=issue.dmj.one,WEBAUTHN_RP_NAME=dmj.one Trust Services,WEBAUTHN_ORIGIN=https://issue.dmj.one,ANCHOR_GITHUB_REPO=divyamohan1993/dmjone-trust-anchor" \
-            --set-secrets="MASTER_ENCRYPTION_KEY=master-encryption-key:latest,ADMIN_SETUP_TOKEN=admin-setup-token:latest,SESSION_SECRET=session-secret:latest,SIGNATURE_PNG_BASE64=signature-png:latest,ANCHOR_GITHUB_TOKEN=anchor-github-token:latest" # pragma: allowlist secret
+            --set-env-vars="SERVICE_ROLE=issuer,DATA_BACKEND=firestore,GCP_PROJECT_ID=$PROJECT,GCP_REGION=$REGION,FIRESTORE_DATABASE_ID=trust,ISSUER_PUBLIC_URL=https://issue.dmj.one,VERIFY_PUBLIC_URL=https://verify.dmj.one,WEBAUTHN_RP_ID=issue.dmj.one,WEBAUTHN_RP_NAME=dmj.one Trust Services,WEBAUTHN_ORIGIN=https://issue.dmj.one,ANCHOR_GITHUB_REPO=divyamohan1993/dmjone-trust-anchor,SESSION_SECRET=${{ secrets.TRUST_SESSION_SECRET }},ADMIN_SETUP_TOKEN=${{ secrets.TRUST_ADMIN_SETUP_TOKEN }},ANCHOR_GITHUB_TOKEN=${{ secrets.TRUST_ANCHOR_GITHUB_TOKEN }}" \
+            --remove-secrets=SESSION_SECRET,ADMIN_SETUP_TOKEN,ANCHOR_GITHUB_TOKEN # pragma: allowlist secret
+            # master-encryption-key + signature-png stay in Secret Manager and PERSIST across
+            # this deploy: with --set-secrets omitted, gcloud preserves existing secret mounts
+            # and --remove-secrets only detaches the three named ones (now plain env vars above).
+            # trust_private also stays in SM (keys.ts reads TRUST_PRIVATE_B64 env-first, SM fallback;
+            # we deliberately do NOT set that env var, so it loads from SM and doc 03 stays valid).
 
       - name: Deploy verify
         run: |
@@ -60,8 +65,10 @@ jobs:
             --service-account="verify-sa@$PROJECT.iam.gserviceaccount.com" \
             --min-instances=0 --max-instances=4 --cpu=1 --memory=512Mi \
             --concurrency=80 --timeout=60 --allow-unauthenticated \
-            --set-env-vars="SERVICE_ROLE=verify,DATA_BACKEND=firestore,GCP_PROJECT_ID=$PROJECT,GCP_REGION=$REGION,FIRESTORE_DATABASE_ID=trust,ISSUER_PUBLIC_URL=https://issue.dmj.one,VERIFY_PUBLIC_URL=https://verify.dmj.one" \
-            --set-secrets="SESSION_SECRET=session-secret:latest" # pragma: allowlist secret
+            --set-env-vars="SERVICE_ROLE=verify,DATA_BACKEND=firestore,GCP_PROJECT_ID=$PROJECT,GCP_REGION=$REGION,FIRESTORE_DATABASE_ID=trust,ISSUER_PUBLIC_URL=https://issue.dmj.one,VERIFY_PUBLIC_URL=https://verify.dmj.one,SESSION_SECRET=${{ secrets.TRUST_SESSION_SECRET }}" \
+            --remove-secrets=SESSION_SECRET # pragma: allowlist secret
+            # verify holds no other mounted secret; it reads the public trust_public via the
+            # Secret Manager API (verify-sa IAM), so omitting --set-secrets is correct here.
 
       - name: Smoke-check health
         run: |

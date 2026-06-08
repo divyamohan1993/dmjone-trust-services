@@ -181,16 +181,20 @@ function part1Rows(record: CredentialRecord): string {
 }
 
 /**
- * How the record is described in the "Stored as" row + Part 3 framing. An
- * uploaded document is the uploader's PDF carrying our stamp + signatures, which
- * the honest disclosure already qualifies; a certificate/letter is rendered by
- * us. The §63 disclosure (self-signed, not a licensed CA) is unchanged for all.
+ * How the record is described in the "Stored as" row + Part 3 framing. The
+ * delivered PDF carries NO embedded digital-signature object; it bears a stamped
+ * validation identifier + QR, and its integrity/authenticity are bound by a
+ * DETACHED ML-DSA-87 signature retained in the issuer&rsquo;s records and public
+ * transparency log (described in the Issuer Trust Identity + Honest Disclosure
+ * blocks below). An uploaded document is the uploader&rsquo;s PDF carrying our
+ * stamp; a certificate/letter is rendered by us. The §63 disclosure (self-signed,
+ * not a licensed CA) is unchanged for all.
  */
 function storedAsCopy(kind: ReturnType<typeof documentKind>): string {
   if (kind === 'upload') {
-    return 'A user-supplied PDF document (Portable Document Format, ISO 32000), stamped with a validation identifier and digitally signed by the issuer, retained in the issuer&rsquo;s records. The document content is the uploader&rsquo;s.';
+    return 'A user-supplied PDF document (Portable Document Format, ISO 32000), stamped by the issuer with a validation identifier and QR, retained in the issuer&rsquo;s records. The document content is the uploader&rsquo;s.';
   }
-  return 'A digitally-signed PDF document (Portable Document Format, ISO 32000) retained in the issuer&rsquo;s records.';
+  return 'A PDF document (Portable Document Format, ISO 32000), bearing a validation identifier and QR linking to the public verification service, retained in the issuer&rsquo;s records.';
 }
 
 /**
@@ -208,8 +212,12 @@ export function buildSection63Html(record: CredentialRecord, meta: Section63Meta
   // signatory block is on every kind's content; `record.id` is the id for all.
   const kind = documentKind(record);
   const signatory = (record.content as { signatory: CredentialContent['signatory'] }).signatory;
+  // The authenticating identity for the DELIVERED record is the issuer's
+  // post-quantum ML-DSA-87 signing key, NOT an embedded X.509/PKCS#7 signer
+  // certificate (the delivered PDF embeds no signature object). Naming an X.509
+  // subject here would imply a certificate-backed PDF signature we do not apply.
   const issuerIdentity =
-    'dmj.one Trust Services — Document Signing (X.509 subject CN=dmj.one Trust Services, OU=Document Signing, C=IN)';
+    'dmj.one Trust Services, Document Signing function (country: IN), signing with a post-quantum ML-DSA-87 (NIST FIPS 204) key held by the issuer';
 
   return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
@@ -247,7 +255,7 @@ ${SECTION63_CSS}
           ${row('Hash algorithm', escapeHtml(meta.hashAlgorithm))}
           ${row('Hash value (hex)', `<span class="mono">${escapeHtml(meta.hashValue)}</span>`)}
         </table>
-        <p class="lede" style="margin-top:2.6mm; font-size:9.2pt; color:var(--ink-soft);">The hash above is computed over the complete, digitally-signed PDF as retained by the issuer. Any alteration of a single bit of that document yields a different hash, by which tampering is detected. The same value is published in the issuer&rsquo;s append-only transparency log.</p>
+        <p class="lede" style="margin-top:2.6mm; font-size:9.2pt; color:var(--ink-soft);">The hash above is computed over the complete delivered PDF, exactly as issued and retained by the issuer. Any alteration of a single bit of that document yields a different hash, by which tampering is detected. This same hash value is bound into the canonical record over which the detached ML-DSA-87 signature is computed, and is recorded in the issuer&rsquo;s public, append-only transparency log.</p>
       </div>
 
       <div class="sec">
@@ -275,12 +283,12 @@ ${SECTION63_CSS}
 
       <div class="sec">
         <h2>Issuer Trust Identity</h2>
-        <p class="lede" style="font-size:9.6pt;">${escapeHtml(issuerIdentity)}. The signed PDF carries an embedded PAdES (PKCS#7) signature object bearing this subject, and a detached post-quantum ML-DSA-87 (NIST FIPS&nbsp;204) signature covering the document hash, retained in the issuer&rsquo;s records and transparency log.</p>
+        <p class="lede" style="font-size:9.6pt;">${escapeHtml(issuerIdentity)}. The delivered PDF carries no embedded digital-signature object; instead, the issuer computes a detached post-quantum ML-DSA-87 (NIST FIPS&nbsp;204) signature over the canonical record of this document &mdash; which includes the SHA-256 hash stated in Part 2 &mdash; and records the entry in a public, append-only transparency log whose successive heads are themselves ML-DSA-87 signed (a tamper-evident hash chain). Where external anchoring is enabled, each such head may additionally be published to a public GitHub repository (github.com/divyamohan1993/dmjone-trust-anchor), yielding an externally-hosted, publicly-timestamped commit record of the log&rsquo;s state. Anyone may check this, without a password, at verify.dmj.one (by scanning the stamped QR or entering the document identifier).</p>
       </div>
 
       <div class="disclosure">
         <h2>Honest Disclosure &middot; Nature &amp; Limits of this Attestation</h2>
-        <p>dmj.one is an independent educational initiative; it is <strong>not</strong> a Government body, a recognised University, or a licensed Certifying Authority. The cryptographic signatures on the record are <strong>self-signed</strong> attestations by dmj.one: they prove that this credential was issued by dmj.one and has not been altered. They are <strong>not</strong> a digital signature backed by a licensed Certifying Authority under the Information Technology Act, 2000, and therefore do not carry the statutory presumption attaching to such signatures. Tamper-evidence is provided by the post-quantum ML-DSA-87 signature together with a public, append-only transparency log; authenticity may be verified independently and without any password at the issuer&rsquo;s verification service.</p>
+        <p>dmj.one is an independent educational initiative; it is <strong>not</strong> a Government body, a recognised University, or a licensed Certifying Authority. The detached ML-DSA-87 signature over this record is a <strong>self-signed</strong> attestation by dmj.one: it evidences that this document was issued by dmj.one and has not been altered since, no more and no less. The delivered PDF contains <strong>no</strong> embedded digital-signature object. It is <strong>not</strong> a digital signature issued or certified by a Certifying Authority licensed under the Information Technology Act, 2000, and is not a &ldquo;secure electronic signature&rdquo; within the meaning of that Act; it therefore attracts no statutory presumption of authenticity or integrity (such as that available, for a secure electronic record or secure electronic signature, under Section 86 of the Bharatiya Sakshya Adhiniyam, 2023) and is offered as evidence to be weighed on its own merits. Tamper-evidence rests on the post-quantum ML-DSA-87 signature and on inclusion in a public, append-only transparency log: an ordered hash chain of ML-DSA-87-signed heads. Where external anchoring is enabled, the issuer additionally publishes each new signed head to a public GitHub repository (github.com/divyamohan1993/dmjone-trust-anchor), yielding an externally-hosted, publicly-timestamped commit record; because the log is an append-only chain of signed heads, any attempt to silently rewrite or back-date it then becomes detectable by anyone who has recorded an earlier head. This external publication is best-effort and non-blocking &mdash; the in-log signed head remains the primary evidence, and the per-document publication status (published or pending) is shown on the verification page. Authenticity may be checked by anyone, without any password, at <strong>verify.dmj.one</strong>.</p>
       </div>
 
       <div class="signrow">

@@ -1,93 +1,61 @@
 /**
  * The hybrid signing pipeline — the cryptographic heart of issuance.
  *
+ * The delivered PDF carries NO embedded digital signature (no PAdES / PKCS#7
+ * dictionary). A self-signed PAdES object made common readers (Edge/Chrome
+ * built-in viewers) flash an "Invalid Signature / Document modified" banner that
+ * alarmed recipients, so it was removed. Authenticity now rests SOLELY on:
+ *   - the DETACHED post-quantum ML-DSA-87 (FIPS 204) signature over the canonical
+ *     record — stored server-side + recorded in the public append-only
+ *     transparency log (+ external anchor); and
+ *   - the visible validation-ID QR stamped on the document → verify.dmj.one.
+ *
  * Order is LOCKED by the {@link HybridSigner} contract; any reordering breaks
  * upload-verify or makes ML-DSA cover the wrong bytes:
  *
- *   1. (caller renders)              → unsignedPdf
- *   2. embed PAdES placeholder + sign → signedPdf   (FINAL — never mutated after)
- *   3. pdfSha256      = SHA-256(signedPdf)
- *   4. canonical      = buildCanonicalPayload(pdfSha256)   (caller-supplied, by kind)
- *   5. mldsaSignature = ML-DSA-87.sign(UTF8(canonical))   (DETACHED — never in the PDF)
- *   6. canonicalSha256 = SHA-256(UTF8(canonical))
+ *   1. (caller renders)              → unsignedPdf  (the stamped/rendered PDF)
+ *   2. signedPdf       = unsignedPdf  (delivered AS-IS — never mutated)
+ *   3. pdfSha256       = SHA-256(unsignedPdf)
+ *   4. canonical       = buildCanonicalPayload(pdfSha256)   (caller-supplied, by kind)
+ *   5. mldsaSignature  = ML-DSA-87.sign(UTF8(canonical))    (DETACHED — never in the PDF)
+ *   6. canonicalSha256 = SHA-256(UTF8(canonical))           (the transparency-log leaf input)
  *
- * Because ML-DSA covers pdfSha256, and pdfSha256 is the hash of the already
- * PAdES-signed bytes, the post-quantum signature transitively covers the PAdES
- * signature too. The ML-DSA signature is detached on purpose: writing it into
- * the PDF would change pdfSha256 and break the 1-bit upload-verify guarantee.
+ * The ML-DSA signature is detached on purpose: writing it into the PDF would
+ * change pdfSha256 and break the 1-bit upload-verify guarantee. Because the
+ * delivered bytes ARE the rendered bytes, pdfSha256 is the hash of exactly what
+ * the recipient holds, which is what upload-verify (file hash) checks.
  */
 
 import { ml_dsa87 } from '@noble/post-quantum/ml-dsa.js';
-import { SignPdf } from '@signpdf/signpdf';
 import {
   type HybridSignatureResult,
   type HybridSigner,
   type SigningKeys,
 } from '@dmjone/shared';
-import { plainAddPlaceholder } from '@signpdf/placeholder-plain';
 import { bytesToBase64, sha256Hex, toUtf8Bytes } from './hash.js';
-import { certFingerprint } from './pades-util.js';
-import { ForgePadesSigner } from './pades-signer.js';
 import type { TsaOptions } from './tsa.js';
-
-/**
- * Reserved bytes for the PAdES signature window. Sized to fit the self-signed
- * PKCS#7 (~2 KB) plus an RFC-3161 timestamp token + TSA cert chain (PAdES-B-T).
- */
-const PADES_SIGNATURE_BYTES = 30000;
-
-/** Placeholder metadata embedded in the PAdES signature dictionary. */
-const PLACEHOLDER_META = {
-  // ASCII only: a non-ASCII glyph (e.g. an em dash) makes the signer emit the
-  // Reason as a UTF-16 PDF string, which some readers mis-decode into mojibake.
-  reason: 'Document authenticity by dmj.one Trust Services',
-  contactInfo: 'verify.dmj.one',
-  name: 'dmj.one Trust Services',
-  location: 'IN',
-} as const;
-
-/**
- * Embed a PAdES placeholder into the (Chromium-rendered) PDF and sign it with
- * the detached PKCS#7 signer. Returns the FINAL signed bytes — never mutated.
- *
- * Uses @signpdf/placeholder-plain, which performs an INCREMENTAL UPDATE: it
- * appends the signature dictionary + a fresh xref section to the END of the
- * original bytes, leaving them byte-for-byte intact. This preserves the
- * pixel-faithful Chromium output exactly (a full pdf-lib re-serialize could
- * silently alter appearance) and is the standard PAdES approach. It requires the
- * input PDF to carry a classic cross-reference TABLE (which Chromium emits).
- */
-async function embedAndSignPades(
-  unsignedPdf: Uint8Array,
-  keys: SigningKeys,
-  tsa?: TsaOptions,
-): Promise<Uint8Array> {
-  const withPlaceholder = plainAddPlaceholder({
-    pdfBuffer: Buffer.from(unsignedPdf),
-    ...PLACEHOLDER_META,
-    signatureLength: PADES_SIGNATURE_BYTES,
-  });
-
-  const signer = new ForgePadesSigner(keys.padesCertPem, keys.padesKeyPem, tsa);
-  const signed = await new SignPdf().sign(withPlaceholder, signer);
-  return new Uint8Array(signed);
-}
 
 /**
  * Build a {@link HybridSigner} bound to the issuer's decrypted signing keys.
  * Constructed only inside the issuer service; the verify service never has the
  * secret material to call this.
+ *
+ * `opts.tsa` is accepted for call-site compatibility (the issuer composition
+ * root and the LTV smoke still pass it) but is IGNORED: with no embedded PAdES
+ * there is no PKCS#7 signature to timestamp. The trusted timestamp is the
+ * transparency-log head (+ external anchor), not an RFC-3161 token.
  */
 export function createHybridSigner(keys: SigningKeys, opts?: { tsa?: TsaOptions }): HybridSigner {
+  void opts; // accepted for compatibility; no PAdES ⇒ no TSA timestamp to embed.
   return {
     async sign(
       unsignedPdf: Uint8Array,
       buildCanonicalPayload: (pdfSha256: string) => string,
     ): Promise<HybridSignatureResult> {
-      // 2. PAdES sign → FINAL signed PDF (PAdES-B-T when a TSA is configured).
-      const signedPdf = await embedAndSignPades(unsignedPdf, keys, opts?.tsa);
+      // 2. The delivered PDF is the rendered PDF, byte-for-byte. No embedding.
+      const signedPdf = unsignedPdf;
 
-      // 3. Hash the final signed bytes.
+      // 3. Hash the delivered (== rendered) bytes — what upload-verify checks.
       const pdfSha256 = sha256Hex(signedPdf);
 
       // 4. Canonical payload — built by the caller from pdfSha256 (by document
@@ -108,7 +76,9 @@ export function createHybridSigner(keys: SigningKeys, opts?: { tsa?: TsaOptions 
         canonicalSha256,
         mldsaSignature,
         mldsaPublicKeyId: keys.mldsaPublicKeyId,
-        padesCertFingerprint: certFingerprint(keys.padesCertPem),
+        // No embedded certificate — authenticity is the detached ML-DSA
+        // signature + transparency log + QR, not a PKCS#7 signer cert.
+        padesCertFingerprint: '',
       };
     },
   };

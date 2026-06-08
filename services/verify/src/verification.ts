@@ -43,6 +43,16 @@ import { documentKind } from '@dmjone/shared';
  * periodic (hourly), so a freshly-issued, perfectly valid credential has no
  * anchor yet. It is surfaced as an informational check (anchored vs pending),
  * never as a reason to downgrade a verdict.
+ *
+ * NOTE: `padesSignature` is ALSO deliberately NOT a gate, and is not even read
+ * here. Our issued documents now carry NO embedded PKCS#7/PAdES object (the
+ * browser "signature could not be verified" banner alarmed recipients), so
+ * authenticity rests SOLELY on the detached ML-DSA-87 signature over the
+ * canonical record + the transparency log + revocation status. The PAdES check
+ * is an optional bonus that only the file-upload flow even populates, and only
+ * when an uploaded PDF happens to carry one signed by our pinned cert. Its
+ * absence (`undefined` on the id flow) or falsity (`false` for a clean,
+ * unsigned PDF) MUST NEVER make the outcome tampered/unknown.
  */
 export function deriveOutcome(checks: VerificationChecks): VerificationOutcome {
   if (!checks.hashMatch) return 'tampered';
@@ -131,18 +141,37 @@ export async function checkLogInclusion(
 }
 
 /**
- * Is this credential's log entry covered by an external anchor yet?
+ * Is this credential's log entry covered by an EXTERNALLY-PUBLISHED anchor yet?
  *
- * The truer "covered" test is `latest anchored head seq >= this credential's
- * log seq`, because not every head is individually anchored — only periodic
- * heads are. Swappable: at integration the orchestrator can point this at
- * `anchorRepo.forHead(seq)` instead if the data layer anchors every head.
- * Either way this is informational only and never gates the outcome.
+ * Two conditions, both required:
+ *  1. `latest.headSeq >= record.logSeq` — the most recent anchored head is at or
+ *     past this credential's log position. Not every head is individually
+ *     anchored (only periodic heads are), so we use the latest covering head.
+ *  2. `latest.github != null` — the anchor was ACTUALLY published to the public
+ *     external store (GitHub). The publisher returns a BARE proof (head identity
+ *     + timestamp, no `github`) when GitHub publishing is unconfigured OR fails;
+ *     issuance saves that bare proof regardless because anchoring is best-effort
+ *     and never blocks issuance. Without (2), a bare proof would make this read
+ *     `true` even though nothing was externally anchored — a false "anchored"
+ *     claim on the public page (every pre-activation record falls here). The
+ *     `github` sub-object survives the anchor-repo round-trip (Firestore
+ *     rowToAnchor copies it; the in-memory repo structuredClones the proof), so
+ *     a genuinely-published proof reads `true` after a save→load cycle.
+ *
+ * Soft-edge (acceptable — this is informational, never a gate): `latest()` is
+ * the single highest-seq proof, so if the NEWEST head's publish failed (bare
+ * proof) while an OLDER head was published, an earlier record reads `false`
+ * (pending) until the next successful publish. That is the SAFE direction (an
+ * under-claim, never a false green); we do not add an exact "highest published
+ * head >= logSeq" lookup for a non-gating check.
+ *
+ * `false` here is surfaced as the soft "pending" state on the page, NEVER as a
+ * failed check. Informational only — it never gates {@link deriveOutcome}.
  */
 export async function checkAnchor(
   record: CredentialRecord,
   anchorRepo: AnchorRepository,
 ): Promise<boolean> {
   const latest = await anchorRepo.latest();
-  return latest !== null && latest.headSeq >= record.logSeq;
+  return latest !== null && latest.headSeq >= record.logSeq && latest.github != null;
 }

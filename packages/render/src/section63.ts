@@ -32,18 +32,25 @@ export interface Section63GeneratorDeps extends ChromiumRendererOptions {
 const PRODUCED_BY = 'dmj.one Trust Services (Google Cloud Run, asia-east1)';
 
 const PRODUCTION_METHOD =
-  'The certificate content was rendered to a PDF by a headless Chromium browser; ' +
-  'the PDF was then signed in-place with an embedded PAdES (PKCS#7) signature, and a ' +
-  'detached post-quantum ML-DSA-87 (NIST FIPS 204) signature was computed over the ' +
-  'SHA-256 hash of the signed PDF and retained in the issuer records and the public ' +
-  'append-only transparency log.';
+  'The electronic record is a PDF document produced by the issuer in one of two ways: ' +
+  'a certificate or letter is rendered from structured field data by a headless Chromium ' +
+  'browser, while an uploaded document is stamped with a validation identifier and QR. ' +
+  'The resulting PDF is retained byte-for-byte and is not modified in place thereafter; ' +
+  'the delivered PDF carries no embedded digital-signature object. Its SHA-256 hash is ' +
+  'computed, and a detached post-quantum ML-DSA-87 (NIST FIPS 204) signature is produced ' +
+  'over the canonical record of the document, which includes that SHA-256 hash. The record ' +
+  'and signature are retained in the issuer records and appended to a public, append-only, ' +
+  'tamper-evident transparency log (a hash chain of ML-DSA-87-signed heads). Verification is ' +
+  'public and password-free at verify.dmj.one, by scanning the QR or entering the ' +
+  'document identifier.';
 
 const DEVICE_PARTICULARS =
   'Google Cloud Run managed compute (Linux x86-64 container), region asia-east1; ' +
-  'system Chromium (headless) for rendering; Node.js runtime performing PAdES signing ' +
-  '(node-forge / @signpdf) and ML-DSA-87 signing (@noble/post-quantum); signing keys ' +
-  'held encrypted at rest (AES-256-GCM) in Google Secret Manager and loaded only by the ' +
-  'issuer service at issue-time.';
+  'Node.js runtime; system Chromium (headless) for rendering certificates and letters; ' +
+  'pdf-lib for PDF stamping and QR embedding; @noble/post-quantum for detached ML-DSA-87 ' +
+  'signing; signing keys held encrypted at rest (AES-256-GCM) in Google Secret Manager and ' +
+  'loaded only by the issuer service at issue-time; Google Cloud Firestore for the record ' +
+  'and transparency-log storage.';
 
 /** Build a {@link Section63Generator}. Pure DI; no globals. */
 export function createSection63Generator(deps: Section63GeneratorDeps = {}): Section63Generator {

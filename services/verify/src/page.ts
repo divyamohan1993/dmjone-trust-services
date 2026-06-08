@@ -345,7 +345,7 @@ ${flourish()}
       </section>
       <section class="explainer" aria-labelledby="he">
         <h2 id="he">How verification works</h2>
-        <p>Each credential carries a post-quantum signature (ML-DSA-87) over its exact bytes, is recorded in a public, tamper-evident transparency log, and is anchored externally. Change a single bit and verification reports <strong>TAMPERED</strong>. This is a self-signed cryptographic attestation by an independent educational initiative, not a licensed certifying-authority signature.</p>
+        <p>Each credential is bound by a detached post-quantum signature (ML-DSA-87) over a canonical record that includes the document&rsquo;s exact-bytes hash (SHA-256), and is entered in a public, append-only, tamper-evident transparency log whose successive signed heads form a hash chain. Where external anchoring is enabled, each new head may additionally be published to a public GitHub repository (github.com/divyamohan1993/dmjone-trust-anchor), giving a publicly-timestamped, externally-hosted commit record; because the log is an append-only chain of signed heads, any silent rewrite or back-dating is then detectable by anyone who has recorded an earlier head. (Publication is best-effort; this page shows whether the credential&rsquo;s head is published or still pending.) Change a single bit and verification reports <strong>TAMPERED</strong>. This is a self-signed cryptographic attestation by an independent educational initiative, not a licensed certifying-authority signature; the document itself carries no embedded signature.</p>
       </section>
     </main>
     <footer class="foot">
@@ -391,7 +391,7 @@ export function renderCredentialPage(input: CredentialPageInput): string {
   const checkRows: Array<{ key: keyof VerificationChecks; label: string }> = [
     { key: 'mldsaSignature', label: 'Post-quantum signature (ML-DSA-87)' },
     { key: 'logInclusion', label: 'Transparency-log inclusion' },
-    { key: 'anchorProof', label: 'External anchor (GitHub · OpenTimestamps)' },
+    { key: 'anchorProof', label: 'External anchor (public GitHub log)' },
     { key: 'notRevoked', label: 'Not revoked by issuer' },
   ];
   const checksHtml = checkRows
@@ -458,12 +458,18 @@ ${face.detailRows}
       </section>
 
       <section class="trust" aria-label="Trust statement">
-        ${trustLead(kind, issuerLegalName)} The post-quantum
-        cryptographic signature proves the attestation is authentic and unaltered, and the entry is
-        recorded in a public, tamper-evident transparency log. This is a <strong>self-signed
-        cryptographic attestation</strong> by an independent educational initiative; it is <strong>not</strong>
-        a licensed certifying-authority Digital Signature Certificate and makes no claim of government
-        accreditation. A BSA 2023 §63 certificate of authenticity is available below for legal use.
+        ${trustLead(kind, issuerLegalName)} A detached post-quantum
+        cryptographic signature (ML-DSA-87) over the exact record establishes that it was issued by
+        dmj.one and is unaltered, and the entry is recorded in a public, append-only, tamper-evident
+        transparency log whose successive signed heads may, where external anchoring is enabled,
+        additionally be published to a public GitHub repository
+        (github.com/divyamohan1993/dmjone-trust-anchor) as an externally-hosted, publicly-timestamped
+        commit record (best-effort; this credential&rsquo;s head shows above as published or still
+        pending). This is a
+        <strong>self-signed cryptographic attestation</strong> by an independent educational initiative;
+        it is <strong>not</strong> a licensed certifying-authority Digital Signature Certificate, the
+        document carries no embedded signature, and no claim of government accreditation is made.
+        A BSA 2023 §63 certificate of authenticity is available below for legal use.
       </section>
 
       <div class="actions">

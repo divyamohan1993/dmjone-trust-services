@@ -6,9 +6,9 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { deriveOutcome, publicFieldsOf } from '../src/verification.js';
-import { makeRecord, makeLetterRecord, makeUploadRecord } from './fakes.js';
-import type { VerificationChecks } from '@dmjone/shared';
+import { checkAnchor, deriveOutcome, publicFieldsOf } from '../src/verification.js';
+import { FakeAnchorRepository, makeRecord, makeLetterRecord, makeUploadRecord } from './fakes.js';
+import type { AnchorProof, VerificationChecks } from '@dmjone/shared';
 
 const allGood: VerificationChecks = {
   mldsaSignature: true,
@@ -51,6 +51,80 @@ describe('deriveOutcome', () => {
   it('prefers unknown over revoked when the signature itself is broken', () => {
     // If we cannot even trust the bytes, "revoked" would be an overclaim.
     expect(deriveOutcome({ ...allGood, mldsaSignature: false, notRevoked: false })).toBe('unknown');
+  });
+
+  it('is VALID when no PAdES key is present (by-id shape: ML-DSA is authoritative)', () => {
+    // The by-id flow produces a checks object with no padesSignature key at all.
+    // `allGood` already omits it; this pins that the absence of PAdES is VALID,
+    // never unknown/tampered — authenticity is the detached ML-DSA signature.
+    expect('padesSignature' in allGood).toBe(false);
+    expect(deriveOutcome({ ...allGood })).toBe('valid');
+  });
+
+  it('is VALID when padesSignature is explicitly false (clean PDF, no embedded sig)', () => {
+    // Our own documents now ship with NO embedded PAdES, so the file-upload flow
+    // sets padesSignature:false. That is informational only and MUST NOT
+    // downgrade the verdict: ML-DSA + hash + log + notRevoked are authoritative.
+    expect(deriveOutcome({ ...allGood, padesSignature: false })).toBe('valid');
+  });
+
+  it('treats padesSignature as a non-gate: true vs false vs absent all yield VALID', () => {
+    // The single invariant LEGAL relies on: PAdES never changes the outcome.
+    expect(deriveOutcome({ ...allGood, padesSignature: true })).toBe('valid');
+    expect(deriveOutcome({ ...allGood, padesSignature: false })).toBe('valid');
+    expect(deriveOutcome({ ...allGood })).toBe('valid');
+  });
+});
+
+describe('checkAnchor', () => {
+  // A record at log position 1 (makeRecord default logSeq).
+  const record = makeRecord();
+
+  /** A proof covering the record, EXTERNALLY published to GitHub. */
+  const publishedProof: AnchorProof = {
+    headSeq: 1,
+    headHash: 'h'.repeat(64),
+    anchoredAt: '2026-06-08T00:00:00.000Z',
+    github: {
+      repo: 'divyamohan1993/dmjone-trust-anchor',
+      commitSha: 'c'.repeat(40),
+      url: 'https://github.com/divyamohan1993/dmjone-trust-anchor/blob/main/heads/1.json',
+    },
+  };
+
+  /** A BARE proof: same head, but GitHub publishing was unconfigured or failed. */
+  const bareProof: AnchorProof = {
+    headSeq: 1,
+    headHash: 'h'.repeat(64),
+    anchoredAt: '2026-06-08T00:00:00.000Z',
+  };
+
+  it('is true only when a GitHub-published anchor covers the record', async () => {
+    const repo = new FakeAnchorRepository();
+    repo.add(publishedProof);
+    await expect(checkAnchor(record, repo)).resolves.toBe(true);
+  });
+
+  it('is false for a BARE proof (saved on publish failure / no GitHub configured)', async () => {
+    // The crux of the loophole: a proof with headSeq >= logSeq but NO github
+    // field must NOT read as externally anchored. This is the every-pre-activation
+    // case — issuance saved a bare proof because anchoring is best-effort.
+    const repo = new FakeAnchorRepository();
+    repo.add(bareProof);
+    await expect(checkAnchor(record, repo)).resolves.toBe(false);
+  });
+
+  it('is false when no anchor proof exists at all', async () => {
+    const repo = new FakeAnchorRepository();
+    await expect(checkAnchor(record, repo)).resolves.toBe(false);
+  });
+
+  it('is false when the latest published head is BEHIND the record (not yet covered)', async () => {
+    // A published proof for an earlier head does not cover a later record.
+    const laterRecord = makeRecord({ logSeq: 5 });
+    const repo = new FakeAnchorRepository();
+    repo.add(publishedProof); // headSeq 1 < logSeq 5
+    await expect(checkAnchor(laterRecord, repo)).resolves.toBe(false);
   });
 });
 

@@ -3,10 +3,15 @@
  * working trust system. Uses REAL crypto + REAL Chromium rendering + the REAL
  * verify service, over the in-memory data layer. No mocks in the trust path.
  *
+ * Our issued documents carry NO embedded digital signature (no PAdES/PKCS#7):
+ * authenticity is the DETACHED ML-DSA-87 signature over the canonical record +
+ * the transparency log + the validation-ID QR. The PDF is delivered exactly as
+ * rendered, so upload-verify is a pure file-hash match.
+ *
  *   issue (render → hybrid-sign → log → store)
  *     → verify-by-id            → VALID + public fields
- *     → password download        → exact signed bytes
- *     → upload-verify (intact)    → VALID (+ PAdES pinned to our cert)
+ *     → password download        → exact delivered bytes
+ *     → upload-verify (intact)    → VALID (file hash matches the recorded one)
  *     → upload-verify (1-bit flip)→ TAMPERED
  *     → public credential page    → SSR'd VALID, recipient shown, NO signature image
  *     → wrong password            → generic 403
@@ -15,7 +20,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { createInMemoryStores } from '@dmjone/data';
 import {
-  certFingerprint,
   createHybridSigner,
   createLogSigner,
   createLogVerifier,
@@ -182,21 +186,26 @@ beforeAll(async () => {
 }, SLOW);
 
 describe('issue → verify → download → tamper', () => {
-  it('renders a real signed A4 PDF', () => {
+  it('renders a real A4 PDF, delivered as-is with no embedded signature', () => {
     expect(Buffer.from(issued.signedPdf.subarray(0, 5)).toString()).toBe('%PDF-');
     expect(issued.signedPdf.byteLength).toBeGreaterThan(20_000);
+    // No PAdES/PKCS#7 dictionary in the document we hand to recipients.
+    expect(Buffer.from(issued.signedPdf).toString('latin1')).not.toContain('/ByteRange');
   });
 
-  it('crypto: ML-DSA + PAdES both verify, fingerprint matches our cert', async () => {
+  it('crypto: ML-DSA verifies; the issued doc carries NO embedded PAdES', async () => {
     const verifier = createSignatureVerifier(verifyingKeys);
     expect(
       verifier.verifyMldsa(issued.record.content, issued.record.pdfSha256, issued.record.mldsaSignature),
     ).toBe(true);
+
+    // The record carries no signer-cert fingerprint (there is no embedded cert).
+    expect(issued.record.padesCertFingerprint).toBe('');
+
+    // And the delivered PDF has no PKCS#7 signature for the verifier to find.
     const pades = await verifier.verifyPdfPades(issued.signedPdf);
-    expect(pades.present).toBe(true);
-    expect(pades.intact).toBe(true);
-    expect(pades.certFingerprint).toBe(padesFingerprint);
-    expect(certFingerprint(verifyingKeys.padesCertPem)).toBe(padesFingerprint);
+    expect(pades.present).toBe(false);
+    expect(pades.intact).toBe(false);
   });
 
   it('verify-by-id → VALID with public fields', async () => {

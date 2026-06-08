@@ -190,6 +190,59 @@ describe('GET /api/verify/:credentialId', () => {
     expect(body.verifiedAt).toBeTruthy();
   });
 
+  it('verifies by id as VALID with NO PAdES check at all (id flow never inspects a PDF)', async () => {
+    // The by-id flow has no uploaded bytes to inspect, so it never runs the
+    // PAdES check: padesSignature is absent (undefined), and the verdict rests
+    // entirely on the detached ML-DSA signature + transparency log + revocation
+    // status. A document with no embedded PDF signature is therefore VALID here
+    // by construction — there is nothing PAdES-shaped in this path to downgrade.
+    const { app } = makeHarness();
+    const res = await app.request(`/api/verify/${ID}`);
+    const body = await asJson(res);
+    expect(body.outcome).toBe('valid');
+    expect(body.checks.padesSignature).toBeUndefined();
+    expect(body.checks.mldsaSignature).toBe(true);
+    expect(body.checks.hashMatch).toBe(true);
+    expect(body.checks.logInclusion).toBe(true);
+    expect(body.checks.notRevoked).toBe(true);
+  });
+
+  it('reports anchorProof=true when a GitHub-published anchor covers the record', async () => {
+    // The "External anchor" check is GREEN only when the head was actually
+    // published to the public external store, not merely recorded as a bare proof.
+    const h = makeHarness();
+    h.anchorRepo.add({
+      headSeq: h.record.logSeq,
+      headHash: 'h'.repeat(64),
+      anchoredAt: '2026-06-08T00:00:00.000Z',
+      github: {
+        repo: 'divyamohan1993/dmjone-trust-anchor',
+        commitSha: 'c'.repeat(40),
+        url: 'https://github.com/divyamohan1993/dmjone-trust-anchor/blob/main/heads/1.json',
+      },
+    });
+    const res = await h.app.request(`/api/verify/${ID}`);
+    const body = await asJson(res);
+    expect(body.checks.anchorProof).toBe(true);
+    expect(body.outcome).toBe('valid'); // anchorProof is informational; still valid.
+  });
+
+  it('reports anchorProof=false (pending) for a BARE proof, never a false green', async () => {
+    // A bare proof (no github field) is saved when external publishing is
+    // unconfigured or fails. It must NOT make the public "External anchor" check
+    // read as anchored — that was the loophole. The verdict stays VALID (soft).
+    const h = makeHarness();
+    h.anchorRepo.add({
+      headSeq: h.record.logSeq,
+      headHash: 'h'.repeat(64),
+      anchoredAt: '2026-06-08T00:00:00.000Z',
+    });
+    const res = await h.app.request(`/api/verify/${ID}`);
+    const body = await asJson(res);
+    expect(body.checks.anchorProof).toBe(false);
+    expect(body.outcome).toBe('valid'); // still valid — anchor never gates.
+  });
+
   it('never includes signature material or a download link in the JSON payload', async () => {
     const { app, record } = makeHarness();
     const res = await app.request(`/api/verify/${ID}`);
@@ -316,6 +369,28 @@ describe('POST /api/verify/file', () => {
     const res = await h.app.request('/api/verify/file', { method: 'POST', body: form(ID, h.pdfBytes) });
     const body = await asJson(res);
     expect(body.outcome).toBe('valid');
+    expect(body.checks.padesSignature).toBe(false);
+  });
+
+  it('verifies a CLEAN PDF with NO embedded PAdES signature as VALID (the normal case now)', async () => {
+    // Our issuer now ships documents with NO embedded PKCS#7/PAdES object (the
+    // browser "signature could not be verified" banner scared recipients).
+    // Authenticity rests SOLELY on the detached ML-DSA-87 signature over the
+    // canonical record + the public transparency log + the validation QR. A
+    // file carrying no /ByteRange yields verifyPdfPades → present:false; that is
+    // the EXPECTED shape for our own documents and MUST NOT downgrade the
+    // verdict. (present:false is the absence of a signature, not a failed one.)
+    const h = makeHarness();
+    h.verifier.padesResult = { present: false, intact: false };
+    const res = await h.app.request('/api/verify/file', { method: 'POST', body: form(ID, h.pdfBytes) });
+    const body = await asJson(res);
+    expect(body.outcome).toBe('valid');
+    // The authoritative checks all hold; the informational PAdES check is simply absent.
+    expect(body.checks.mldsaSignature).toBe(true);
+    expect(body.checks.hashMatch).toBe(true);
+    expect(body.checks.logInclusion).toBe(true);
+    expect(body.checks.notRevoked).toBe(true);
+    // padesSignature is false (no embedded sig) — informational only, never a gate.
     expect(body.checks.padesSignature).toBe(false);
   });
 

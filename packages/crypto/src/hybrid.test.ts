@@ -6,7 +6,7 @@ import { createSignatureVerifier } from './verifier.js';
 import { buildSmallPdf, makeTestKeys, sampleContent } from './test-helpers.js';
 
 describe('hybrid sign → verify round-trip', () => {
-  it('signs a real PDF and verifies both ML-DSA and PAdES', async () => {
+  it('delivers the rendered PDF as-is (no embedded signature) and the ML-DSA verifies', async () => {
     const { signing, verifying } = makeTestKeys();
     const content = sampleContent();
     const unsignedPdf = await buildSmallPdf();
@@ -15,28 +15,34 @@ describe('hybrid sign → verify round-trip', () => {
     const result = await signer.sign(unsignedPdf, (h) => computeCanonicalPayload(content, h));
 
     // The result fields follow the locked pipeline.
+    expect(result.pdfSha256).toBe(sha256Hex(unsignedPdf));
     expect(result.pdfSha256).toBe(sha256Hex(result.signedPdf));
     expect(result.canonicalPayload).toBe(computeCanonicalPayload(content, result.pdfSha256));
     expect(result.canonicalSha256).toBe(sha256Hex(result.canonicalPayload));
     expect(result.mldsaSignature).toMatch(/^[A-Za-z0-9+/]+=*$/);
     expect(result.mldsaPublicKeyId).toBe(signing.mldsaPublicKeyId);
-    expect(result.padesCertFingerprint).toMatch(/^[0-9a-f]{64}$/);
+    // No embedded cert anymore — the fingerprint field is intentionally empty.
+    expect(result.padesCertFingerprint).toBe('');
+
+    // The delivered bytes ARE the rendered bytes, verbatim.
+    expect(Buffer.from(result.signedPdf).equals(Buffer.from(unsignedPdf))).toBe(true);
+
+    // And there is NO PAdES signature dictionary in the delivered PDF.
+    const pdfText = Buffer.from(result.signedPdf).toString('latin1');
+    expect(pdfText).not.toContain('/ByteRange');
 
     const verifier = createSignatureVerifier(verifying);
 
     // ML-DSA verifies against the same content + pdf hash.
     expect(verifier.verifyMldsa(content, result.pdfSha256, result.mldsaSignature)).toBe(true);
 
-    // PAdES is present and intact, signed by our identity.
+    // Confirming the absence the structural way: the verifier sees no PAdES.
     const pades = await verifier.verifyPdfPades(result.signedPdf);
-    expect(pades.present).toBe(true);
-    expect(pades.intact).toBe(true);
-    expect(pades.certFingerprint).toBe(result.padesCertFingerprint);
-    expect(pades.signerSubject).toContain('CN=dmj.one Trust Services');
-    expect(pades.signerSubject).toContain('OU=Document Signing');
+    expect(pades.present).toBe(false);
+    expect(pades.intact).toBe(false);
   });
 
-  it('produces a signed PDF that is a valid PDF and larger than the input', async () => {
+  it('produces a valid PDF the same size as the rendered input', async () => {
     const { signing } = makeTestKeys();
     const unsignedPdf = await buildSmallPdf();
     const content = sampleContent();
@@ -47,22 +53,8 @@ describe('hybrid sign → verify round-trip', () => {
 
     const header = Buffer.from(result.signedPdf.subarray(0, 5)).toString('latin1');
     expect(header).toBe('%PDF-');
-    expect(result.signedPdf.length).toBeGreaterThan(unsignedPdf.length);
-  });
-
-  it('preserves the original (rendered) PDF bytes verbatim as a prefix', async () => {
-    // Incremental-update signing appends to the end and never rewrites the
-    // original bytes — this is what keeps the Chromium output pixel-faithful.
-    const { signing } = makeTestKeys();
-    const unsignedPdf = await buildSmallPdf();
-    const content = sampleContent();
-    const result = await createHybridSigner(signing).sign(
-      unsignedPdf,
-      (h) => computeCanonicalPayload(content, h),
-    );
-
-    const prefix = result.signedPdf.subarray(0, unsignedPdf.length);
-    expect(Buffer.from(prefix).equals(Buffer.from(unsignedPdf))).toBe(true);
+    // Delivered as-is: identical bytes, identical length (no appended signature).
+    expect(result.signedPdf.length).toBe(unsignedPdf.length);
   });
 
   it('does NOT embed the ML-DSA signature into the PDF (it stays detached)', async () => {
@@ -79,8 +71,8 @@ describe('hybrid sign → verify round-trip', () => {
 });
 
 describe('1-bit tamper detection', () => {
-  it('flipping one byte of the signed PDF changes the hash and breaks PAdES intactness', async () => {
-    const { signing, verifying } = makeTestKeys();
+  it('flipping one byte of the delivered PDF changes the recorded hash', async () => {
+    const { signing } = makeTestKeys();
     const content = sampleContent();
     const result = await createHybridSigner(signing).sign(
       await buildSmallPdf(),
@@ -88,17 +80,14 @@ describe('1-bit tamper detection', () => {
     );
 
     const tampered = new Uint8Array(result.signedPdf);
-    // Flip a byte inside the first ByteRange segment (well past the header).
+    // Flip a byte well past the header.
     const idx = 60;
     tampered[idx] = (tampered[idx]! ^ 0xff) & 0xff;
 
-    // The hash of the distributed bytes no longer matches the recorded one.
+    // The hash of the distributed bytes no longer matches the recorded one, so
+    // upload-verify (file hash) will report TAMPERED — the document-integrity
+    // guarantee now rests entirely on this recorded pdfSha256.
     expect(sha256Hex(tampered)).not.toBe(result.pdfSha256);
-
-    // And the embedded PAdES signature is no longer intact.
-    const pades = await createSignatureVerifier(verifying).verifyPdfPades(tampered);
-    expect(pades.present).toBe(true);
-    expect(pades.intact).toBe(false);
   });
 });
 

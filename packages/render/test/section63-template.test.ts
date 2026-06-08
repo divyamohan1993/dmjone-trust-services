@@ -77,10 +77,17 @@ describe('buildSection63Html', () => {
     expect(html).toContain('Part B');
   });
 
-  it('carries the issuer trust identity', () => {
+  it('carries the issuer trust identity as the detached ML-DSA-87 signer (no embedded PDF signature)', () => {
     expect(html).toContain('dmj.one Trust Services');
     expect(html).toContain('Document Signing');
     expect(html).toContain('ML-DSA-87');
+    // The delivered PDF must NOT be described as carrying an embedded signature object.
+    expect(html).toContain('detached');
+    expect(html).toContain('no embedded digital-signature object');
+    // The retired, now-FALSE claims must be gone.
+    expect(html).not.toContain('PAdES');
+    expect(html).not.toContain('PKCS#7');
+    expect(html).not.toMatch(/X\.509 subject/);
   });
 
   it('makes the honest disclosure (not a licensed-CA DSC; self-signed; tamper-evident)', () => {
@@ -88,6 +95,43 @@ describe('buildSection63Html', () => {
     expect(html).toContain('self-signed');
     expect(html).toContain('Certifying Authority');
     expect(html).toContain('Information Technology Act, 2000');
+  });
+
+  it('states the limit of the attestation accurately (no statutory presumption; correct BSA §86; verifiable)', () => {
+    // It must disclaim the statutory presumption, citing the CORRECT BSA 2023
+    // provision (§86 = successor to IEA §85B), not the retired IEA numbering.
+    expect(html).toContain('secure electronic signature');
+    expect(html).toContain('Section 86 of the Bharatiya Sakshya Adhiniyam, 2023');
+    expect(html).not.toContain('Section 85B'); // IEA numbering — wrong for the BSA
+    // Authenticity rests on detached ML-DSA-87 + public transparency log + external
+    // anchor, independently checkable without a password at verify.dmj.one.
+    expect(html).toContain('append-only transparency log');
+    expect(html).toContain('verify.dmj.one');
+    expect(html).toContain('without any password');
+  });
+
+  it('states the external GitHub anchor CONDITIONALLY + NAMED, with the per-document best-effort caveat (no third-party / no Bitcoin overclaim)', () => {
+    // The anchor is NAMED (concrete repo closes the "who operates it" loophole),
+    // described as an externally-hosted, publicly-timestamped commit record.
+    expect(html).toContain('public GitHub repository');
+    expect(html).toContain('github.com/divyamohan1993/dmjone-trust-anchor');
+    expect(html).toContain('externally-hosted, publicly-timestamped commit record');
+    // CONDITIONAL (LOCKED): the GitHub anchor token expires (≤1yr) and is best-effort,
+    // so affirmative prose ("the issuer publishes each head…") would silently become
+    // FALSE on token lapse — a maintenance-dependent loophole. Conditional phrasing
+    // ("where … enabled", "may additionally") stays literally true in EVERY state
+    // (enabled / disabled / expired) with zero document maintenance.
+    expect(html).toMatch(/where external anchoring is enabled/i);
+    expect(html).toMatch(/may additionally be published/i);
+    // Per-document honesty caveat (best-effort; published-or-pending) is retained.
+    expect(html).toContain('best-effort');
+    expect(html).toMatch(/published or pending/i);
+    // GUARDRAIL: the repo is operated BY dmj.one, so it must NOT be framed as an
+    // independent third party, and the inactive OTS/Bitcoin path must not appear.
+    expect(html).not.toMatch(/independent (public |external )?(repository|system)/i);
+    expect(html).not.toMatch(/OpenTimestamps|Bitcoin/i);
+    // The rewrite/back-date consequence is tied to an observer with an earlier head.
+    expect(html).toContain('recorded an earlier head');
   });
 
   it('uses the brand fonts (embedded, no Google Fonts) and renders the operator name', () => {
@@ -120,9 +164,22 @@ describe('createSection63Generator.metadata', () => {
     expect(meta.hashAlgorithm).toBe('SHA-256');
     expect(meta.producedBy).toContain('Cloud Run');
     expect(meta.producedBy).toContain('asia-east1');
-    expect(meta.productionMethod).toContain('PAdES');
+    // Part 3 must describe the REAL production, true for ALL THREE modes (this
+    // metadata cannot branch on kind): a certificate/letter is RENDERED by
+    // Chromium, an upload is STAMPED; the delivered PDF carries no embedded
+    // signature; a detached ML-DSA-87 covers the canonical record.
     expect(meta.productionMethod).toContain('ML-DSA-87');
+    expect(meta.productionMethod).toContain('no embedded digital-signature object');
+    expect(meta.productionMethod).toContain('rendered');
+    expect(meta.productionMethod).toContain('stamped');
+    expect(meta.productionMethod).not.toContain('PAdES');
+    expect(meta.productionMethod).not.toContain('PKCS');
+    // Device particulars must name the REAL tools (no node-forge/@signpdf PAdES).
     expect(meta.deviceParticulars).toContain('Chromium');
+    expect(meta.deviceParticulars).toContain('pdf-lib');
+    expect(meta.deviceParticulars).toContain('@noble/post-quantum');
+    expect(meta.deviceParticulars).not.toContain('PAdES');
+    expect(meta.deviceParticulars).not.toContain('@signpdf');
     expect(meta.generatedAt).toBe('2026-06-04T00:00:00.000Z');
   });
 

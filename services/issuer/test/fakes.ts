@@ -195,10 +195,16 @@ export class FakeSecretStore implements SecretStore {
 
 export class FakeSigner implements HybridSigner {
   constructor(private readonly trace?: CallTrace) {}
-  async sign(unsignedPdf: Uint8Array, content: CredentialContent): Promise<HybridSignatureResult> {
+  async sign(
+    unsignedPdf: Uint8Array,
+    buildCanonicalPayload: (pdfSha256: string) => string,
+  ): Promise<HybridSignatureResult> {
     this.trace?.push('sign');
     void unsignedPdf;
-    void content;
+    // Exercise the builder with the fixed pdf hash this fake "produces", so the
+    // call-site contract (sign supplies pdfSha256 → builder) is honoured; the
+    // returned record values stay fixed for deterministic assertions.
+    void buildCanonicalPayload('a'.repeat(64));
     return {
       signedPdf: new Uint8Array([0x25, 0x50, 0x44, 0x46]), // "%PDF"
       pdfSha256: 'a'.repeat(64),

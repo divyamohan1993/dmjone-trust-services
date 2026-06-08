@@ -16,6 +16,7 @@ import {
 } from '@dmjone/crypto';
 import { createCertificateRenderer } from '@dmjone/render';
 import {
+  computeCanonicalPayload,
   DEFAULT_SIGNATORY,
   type CredentialContent,
   type SigningKeys,
@@ -65,7 +66,10 @@ const content: CredentialContent = {
 const unsigned = await createCertificateRenderer().render(content, {
   qrUrl: `https://verify.dmj.one/c/${content.credentialId}`,
 });
-const sig = await createHybridSigner(signingKeys, { tsa: { url: TSA } }).sign(unsigned, content);
+const sig = await createHybridSigner(signingKeys, { tsa: { url: TSA } }).sign(
+  unsigned,
+  (h) => computeCanonicalPayload(content, h),
+);
 console.log(`signed cert PDF: ${(sig.signedPdf.length / 1024).toFixed(0)} KB`);
 
 // DER value bytes of id-aa-timeStampToken (1.2.840.113549.1.9.16.2.14). The

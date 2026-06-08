@@ -27,6 +27,7 @@
 
 import { IDENTITY, designSystemCss } from '@dmjone/brand';
 import type {
+  CredentialContent,
   CredentialRecord,
   CredentialType,
   VerificationChecks,
@@ -267,7 +268,9 @@ ${flourish()}
 /** Render the full public credential page for a known record. */
 export function renderCredentialPage(input: CredentialPageInput): string {
   const { record, issuer, issuerLegalName, nonce } = input;
-  const c = record.content;
+  // Phase 1 renders the certificate face; the union is widened for the
+  // letter/upload backbone (their pages are Phase 2).
+  const c = record.content as CredentialContent;
   const id = c.credentialId;
   const typeLabel = TYPE_LABEL[c.type];
   const issued = formatIssueDate(c.issueDate);

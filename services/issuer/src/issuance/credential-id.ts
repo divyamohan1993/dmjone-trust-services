@@ -1,19 +1,27 @@
 /**
- * Credential id allocation: `DMJ-<TYPE>-<YYYYMMDD>-<NN>`.
+ * Document id allocation: `DMJ-<CODE>-<YYYYMMDD>-<NN>`.
  *
- * `<TYPE>` is the two-letter code for the credential type; `<YYYYMMDD>` is the
- * issue date; `<NN>` is the next free per-day sequence. The repository exposes
- * only `exists(id)` (no date-range query), so we probe upward from `01` until a
- * free slot is found. The single-admin model makes the probe→create window a
- * non-issue (no concurrent issuance), and `credentialRepo.create` is the final
- * authority on uniqueness.
+ * `<CODE>` is a 2–4 letter prefix identifying the document kind (a certificate
+ * type code like `IC`, or a reserved kind prefix like `LTR`/`DOC`); `<YYYYMMDD>`
+ * is the issue date; `<NN>` is the next free per-day sequence. All kinds share
+ * the same per-day sequence space. The repository exposes only `exists(id)` (no
+ * date-range query), so we probe upward from `01` until a free slot is found.
+ * The single-admin model makes the probe→create window a non-issue (no
+ * concurrent issuance), and `credentialRepo.create` is the final authority on
+ * uniqueness.
+ *
+ * Certificate callers pass `CREDENTIAL_TYPE_CODES[type]`; letter/upload callers
+ * pass `DOCUMENT_ID_PREFIX.letter` / `DOCUMENT_ID_PREFIX.upload`.
  */
 
-import { AppError, CREDENTIAL_TYPE_CODES, ERROR_CODE } from '@dmjone/shared';
-import type { CredentialRepository, CredentialType } from '@dmjone/shared';
+import { AppError, CREDENTIAL_ID_REGEX, ERROR_CODE } from '@dmjone/shared';
+import type { CredentialRepository } from '@dmjone/shared';
 
-/** Max per-day sequence; `NN` is two digits, so 99 credentials/type/day. */
+/** Max per-day sequence; `NN` is two digits, so 99 documents/prefix/day. */
 const MAX_DAILY_SEQ = 99;
+
+/** A 2–4 uppercase-letter document-id prefix (matches CREDENTIAL_ID_REGEX). */
+const PREFIX_RE = /^[A-Z]{2,4}$/;
 
 /** Strip dashes from an ISO date (`2026-06-05` → `20260605`). */
 function compactDate(isoDate: string): string {
@@ -26,25 +34,35 @@ function pad2(n: number): string {
 }
 
 /**
- * Allocate the next unused credential id for `type` on `issueDate`.
+ * Allocate the next unused document id for `prefix` on `issueDate`.
+ * @param prefix a 2–4 uppercase-letter code (cert type code or kind prefix).
  * @throws AppError(CREDENTIAL_EXISTS) when all 99 daily slots are taken.
  */
 export async function allocateCredentialId(
   repo: CredentialRepository,
-  type: CredentialType,
+  prefix: string,
   issueDate: string,
 ): Promise<string> {
-  const typeCode = CREDENTIAL_TYPE_CODES[type];
+  // Defence in depth: the prefix is the only caller-influenced segment of the
+  // id, and a malformed one would mint ids that fail CREDENTIAL_ID_REGEX. All
+  // current callers pass a constant, so a bad prefix is a programming error.
+  if (!PREFIX_RE.test(prefix)) {
+    throw new AppError(ERROR_CODE.INTERNAL, `Invalid document-id prefix: ${prefix}`, 500);
+  }
   const datePart = compactDate(issueDate);
   for (let seq = 1; seq <= MAX_DAILY_SEQ; seq += 1) {
-    const candidate = `DMJ-${typeCode}-${datePart}-${pad2(seq)}`;
+    const candidate = `DMJ-${prefix}-${datePart}-${pad2(seq)}`;
     if (!(await repo.exists(candidate))) {
+      // Final invariant: the assembled id must match the shared id grammar.
+      if (!CREDENTIAL_ID_REGEX.test(candidate)) {
+        throw new AppError(ERROR_CODE.INTERNAL, `Malformed document id: ${candidate}`, 500);
+      }
       return candidate;
     }
   }
   throw new AppError(
     ERROR_CODE.CREDENTIAL_EXISTS,
-    `No free credential-id slot for ${typeCode} on ${datePart}`,
+    `No free document-id slot for ${prefix} on ${datePart}`,
     409,
   );
 }

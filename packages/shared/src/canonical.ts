@@ -11,7 +11,13 @@
  * unicode-normalization corner cases.
  */
 
-import type { CredentialContent } from './types.js';
+import type {
+  CredentialContent,
+  CredentialRecord,
+  LetterContent,
+  UploadAttestation,
+} from './types.js';
+import { documentKind } from './types.js';
 
 /** Canonical JSON: recursively sorted keys, no insignificant whitespace. */
 export function canonicalJson(value: unknown): string {
@@ -47,4 +53,76 @@ export function computeCanonicalPayload(content: CredentialContent, pdfSha256: s
     pdfSha256,
   };
   return canonicalJson(payload);
+}
+
+/** Canonical-payload schema version for letterhead letters. Bump only with a migration plan. */
+export const LETTER_PAYLOAD_VERSION = 1;
+
+/**
+ * Build the exact UTF-8 string the ML-DSA signature covers for a letter.
+ * Same `canonicalJson` and optional-normalization style as the certificate
+ * branch; optional fields collapse to `''` so the signed bytes are unambiguous.
+ *
+ * @param c         the letter content (authored fields)
+ * @param pdfSha256 hex SHA-256 of the FINAL signed PDF bytes (after PAdES)
+ */
+export function computeLetterCanonicalPayload(c: LetterContent, pdfSha256: string): string {
+  return canonicalJson({
+    v: LETTER_PAYLOAD_VERSION,
+    kind: 'letter',
+    documentId: c.documentId,
+    issueDate: c.issueDate,
+    reference: c.reference ?? '',
+    recipientLines: c.recipientLines,
+    subject: c.subject ?? '',
+    salutation: c.salutation ?? '',
+    bodyParagraphs: c.bodyParagraphs,
+    valediction: c.valediction ?? '',
+    signatory: c.signatory,
+    pdfSha256,
+  });
+}
+
+/** Canonical-payload schema version for upload-&-attest documents. Bump only with a migration plan. */
+export const UPLOAD_PAYLOAD_VERSION = 1;
+
+/**
+ * Build the exact UTF-8 string the ML-DSA signature covers for an
+ * uploaded-&-attested document. An absent signature placement collapses to
+ * `null` so the signed bytes are unambiguous.
+ *
+ * @param a         the upload attestation metadata
+ * @param pdfSha256 hex SHA-256 of the FINAL signed PDF bytes (after PAdES)
+ */
+export function computeUploadCanonicalPayload(a: UploadAttestation, pdfSha256: string): string {
+  return canonicalJson({
+    v: UPLOAD_PAYLOAD_VERSION,
+    kind: 'upload',
+    documentId: a.documentId,
+    issueDate: a.issueDate,
+    originalFilename: a.originalFilename,
+    originalSha256: a.originalSha256,
+    pageCount: a.pageCount,
+    signaturePlacement: a.signaturePlacement ?? null,
+    signatory: a.signatory,
+    pdfSha256,
+  });
+}
+
+/**
+ * Dispatch to the right canonical-payload builder by record kind. Used by BOTH
+ * the issuer (sign-time) and the verifier (recompute-time), so the bytes are
+ * identical on both sides regardless of kind. For a certificate record (kind
+ * absent or `'certificate'`) this is byte-for-byte identical to
+ * {@link computeCanonicalPayload}, so existing certificates verify unchanged.
+ */
+export function computeCanonicalPayloadForRecord(record: CredentialRecord): string {
+  switch (documentKind(record)) {
+    case 'certificate':
+      return computeCanonicalPayload(record.content as CredentialContent, record.pdfSha256);
+    case 'letter':
+      return computeLetterCanonicalPayload(record.content as LetterContent, record.pdfSha256);
+    case 'upload':
+      return computeUploadCanonicalPayload(record.content as UploadAttestation, record.pdfSha256);
+  }
 }

@@ -28,6 +28,7 @@ import { createCertificateRenderer, createSection63Generator } from '@dmjone/ren
 import { createVerifyApp } from '@dmjone/verify';
 import {
   ARGON2_DEFAULTS,
+  computeCanonicalPayload,
   DEFAULT_SIGNATORY,
   GENESIS_HEAD_HASH,
   loadEnv,
@@ -126,7 +127,7 @@ beforeAll(async () => {
   const unsignedPdf = await renderer.render(content, {
     qrUrl: `${env.VERIFY_PUBLIC_URL}/c/${CREDENTIAL_ID}`,
   });
-  const sig = await signer.sign(unsignedPdf, content);
+  const sig = await signer.sign(unsignedPdf, (h) => computeCanonicalPayload(content, h));
 
   // transparency log append (issuer's retry loop, single-threaded here)
   const prev = await stores.log.getHead();

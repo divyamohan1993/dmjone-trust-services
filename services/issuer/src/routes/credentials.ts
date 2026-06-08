@@ -15,7 +15,7 @@ import {
   issueCredentialSchema,
   revokeSchema,
 } from '@dmjone/shared';
-import type { CredentialRecord } from '@dmjone/shared';
+import type { CredentialContent, CredentialRecord, CredentialType } from '@dmjone/shared';
 
 import type { IssuerDeps } from '../deps.js';
 import type { IssuerHonoEnv } from '../http/context.js';
@@ -42,19 +42,22 @@ async function readJson(c: { req: { json(): Promise<unknown> } }): Promise<unkno
 /** The public, list-safe projection of a stored record (no password hash, no payload). */
 function toListItem(record: CredentialRecord): {
   credentialId: string;
-  type: CredentialRecord['content']['type'];
+  type: CredentialType;
   recipientName: string;
   status: CredentialRecord['status'];
   issueDate: string;
   createdAt: string;
   logSeq: number;
 } {
+  // Phase 1 lists certificates only; the union is widened for the letter/upload
+  // backbone (their listing is Phase 2).
+  const content = record.content as CredentialContent;
   return {
     credentialId: record.id,
-    type: record.content.type,
-    recipientName: record.content.recipientName,
+    type: content.type,
+    recipientName: content.recipientName,
     status: record.status,
-    issueDate: record.content.issueDate,
+    issueDate: content.issueDate,
     createdAt: record.createdAt,
     logSeq: record.logSeq,
   };

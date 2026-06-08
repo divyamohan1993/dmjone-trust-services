@@ -12,7 +12,7 @@ describe('hybrid sign → verify round-trip', () => {
     const unsignedPdf = await buildSmallPdf();
 
     const signer = createHybridSigner(signing);
-    const result = await signer.sign(unsignedPdf, content);
+    const result = await signer.sign(unsignedPdf, (h) => computeCanonicalPayload(content, h));
 
     // The result fields follow the locked pipeline.
     expect(result.pdfSha256).toBe(sha256Hex(result.signedPdf));
@@ -39,7 +39,11 @@ describe('hybrid sign → verify round-trip', () => {
   it('produces a signed PDF that is a valid PDF and larger than the input', async () => {
     const { signing } = makeTestKeys();
     const unsignedPdf = await buildSmallPdf();
-    const result = await createHybridSigner(signing).sign(unsignedPdf, sampleContent());
+    const content = sampleContent();
+    const result = await createHybridSigner(signing).sign(
+      unsignedPdf,
+      (h) => computeCanonicalPayload(content, h),
+    );
 
     const header = Buffer.from(result.signedPdf.subarray(0, 5)).toString('latin1');
     expect(header).toBe('%PDF-');
@@ -51,7 +55,11 @@ describe('hybrid sign → verify round-trip', () => {
     // original bytes — this is what keeps the Chromium output pixel-faithful.
     const { signing } = makeTestKeys();
     const unsignedPdf = await buildSmallPdf();
-    const result = await createHybridSigner(signing).sign(unsignedPdf, sampleContent());
+    const content = sampleContent();
+    const result = await createHybridSigner(signing).sign(
+      unsignedPdf,
+      (h) => computeCanonicalPayload(content, h),
+    );
 
     const prefix = result.signedPdf.subarray(0, unsignedPdf.length);
     expect(Buffer.from(prefix).equals(Buffer.from(unsignedPdf))).toBe(true);
@@ -59,7 +67,11 @@ describe('hybrid sign → verify round-trip', () => {
 
   it('does NOT embed the ML-DSA signature into the PDF (it stays detached)', async () => {
     const { signing } = makeTestKeys();
-    const result = await createHybridSigner(signing).sign(await buildSmallPdf(), sampleContent());
+    const content = sampleContent();
+    const result = await createHybridSigner(signing).sign(
+      await buildSmallPdf(),
+      (h) => computeCanonicalPayload(content, h),
+    );
     const pdfText = Buffer.from(result.signedPdf).toString('latin1');
     expect(pdfText).not.toContain(result.mldsaSignature);
     expect(pdfText).not.toContain(result.canonicalSha256);
@@ -69,7 +81,11 @@ describe('hybrid sign → verify round-trip', () => {
 describe('1-bit tamper detection', () => {
   it('flipping one byte of the signed PDF changes the hash and breaks PAdES intactness', async () => {
     const { signing, verifying } = makeTestKeys();
-    const result = await createHybridSigner(signing).sign(await buildSmallPdf(), sampleContent());
+    const content = sampleContent();
+    const result = await createHybridSigner(signing).sign(
+      await buildSmallPdf(),
+      (h) => computeCanonicalPayload(content, h),
+    );
 
     const tampered = new Uint8Array(result.signedPdf);
     // Flip a byte inside the first ByteRange segment (well past the header).
@@ -90,7 +106,10 @@ describe('content-field tamper detection (ML-DSA)', () => {
   it('verifyMldsa fails when a content field is altered', async () => {
     const { signing, verifying } = makeTestKeys();
     const content = sampleContent();
-    const result = await createHybridSigner(signing).sign(await buildSmallPdf(), content);
+    const result = await createHybridSigner(signing).sign(
+      await buildSmallPdf(),
+      (h) => computeCanonicalPayload(content, h),
+    );
     const verifier = createSignatureVerifier(verifying);
 
     // Genuine content passes.
@@ -109,7 +128,10 @@ describe('content-field tamper detection (ML-DSA)', () => {
   it('verifyMldsa returns false (never throws) on a malformed signature', async () => {
     const { signing, verifying } = makeTestKeys();
     const content = sampleContent();
-    const result = await createHybridSigner(signing).sign(await buildSmallPdf(), content);
+    const result = await createHybridSigner(signing).sign(
+      await buildSmallPdf(),
+      (h) => computeCanonicalPayload(content, h),
+    );
     const verifier = createSignatureVerifier(verifying);
 
     expect(verifier.verifyMldsa(content, result.pdfSha256, 'not-base64-!!!')).toBe(false);

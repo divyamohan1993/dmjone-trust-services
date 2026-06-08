@@ -7,7 +7,7 @@
  *   1. (caller renders)              → unsignedPdf
  *   2. embed PAdES placeholder + sign → signedPdf   (FINAL — never mutated after)
  *   3. pdfSha256      = SHA-256(signedPdf)
- *   4. canonical      = computeCanonicalPayload(content, pdfSha256)   (shared)
+ *   4. canonical      = buildCanonicalPayload(pdfSha256)   (caller-supplied, by kind)
  *   5. mldsaSignature = ML-DSA-87.sign(UTF8(canonical))   (DETACHED — never in the PDF)
  *   6. canonicalSha256 = SHA-256(UTF8(canonical))
  *
@@ -20,8 +20,6 @@
 import { ml_dsa87 } from '@noble/post-quantum/ml-dsa.js';
 import { SignPdf } from '@signpdf/signpdf';
 import {
-  computeCanonicalPayload,
-  type CredentialContent,
   type HybridSignatureResult,
   type HybridSigner,
   type SigningKeys,
@@ -82,7 +80,7 @@ export function createHybridSigner(keys: SigningKeys, opts?: { tsa?: TsaOptions 
   return {
     async sign(
       unsignedPdf: Uint8Array,
-      content: CredentialContent,
+      buildCanonicalPayload: (pdfSha256: string) => string,
     ): Promise<HybridSignatureResult> {
       // 2. PAdES sign → FINAL signed PDF (PAdES-B-T when a TSA is configured).
       const signedPdf = await embedAndSignPades(unsignedPdf, keys, opts?.tsa);
@@ -90,8 +88,9 @@ export function createHybridSigner(keys: SigningKeys, opts?: { tsa?: TsaOptions 
       // 3. Hash the final signed bytes.
       const pdfSha256 = sha256Hex(signedPdf);
 
-      // 4. Canonical payload (shared definition — identical on verify side).
-      const canonicalPayload = computeCanonicalPayload(content, pdfSha256);
+      // 4. Canonical payload — built by the caller from pdfSha256 (by document
+      //    kind). The shared builders keep this identical on the verify side.
+      const canonicalPayload = buildCanonicalPayload(pdfSha256);
       const canonicalBytes = toUtf8Bytes(canonicalPayload);
 
       // 5. Detached ML-DSA-87 signature over the canonical bytes.

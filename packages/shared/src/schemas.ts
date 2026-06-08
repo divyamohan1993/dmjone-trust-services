@@ -29,6 +29,42 @@ export const issueCredentialSchema = z.object({
 });
 export type IssueCredentialInput = z.infer<typeof issueCredentialSchema>;
 
+/** Issue a new letterhead letter (issuer, authenticated). The rich body reuses
+ *  the certificate body markup grammar. */
+export const issueLetterSchema = z.object({
+  issueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'expected YYYY-MM-DD'),
+  reference: z.string().trim().max(120).optional(),
+  recipientLines: z.array(z.string().trim().max(120)).max(8).default([]),
+  subject: z.string().trim().max(160).optional(),
+  salutation: z.string().trim().max(120).optional(),
+  bodyParagraphs: z.array(z.string().trim().min(1).max(1200)).min(1).max(40),
+  valediction: z.string().trim().max(80).optional(),
+  /** The recipient's private download password (gates the signed PDF). */
+  password: z.string().min(8).max(128),
+});
+export type IssueLetterInput = z.infer<typeof issueLetterSchema>;
+
+/**
+ * Metadata accompanying an uploaded-&-signed PDF (issuer, authenticated). The
+ * PDF bytes themselves are validated by the Phase-2 route, not here; this
+ * covers only the attestation fields and the optional signature placement.
+ */
+export const signUploadSchema = z.object({
+  originalFilename: z.string().min(1).max(200),
+  placeHandwrittenSignature: z.boolean().default(false),
+  signaturePlacement: z
+    .object({
+      page: z.number().int().min(1),
+      xPct: z.number().min(0).max(1),
+      yPct: z.number().min(0).max(1),
+      wPct: z.number().min(0.02).max(1),
+    })
+    .optional(),
+  /** The recipient's private download password (gates the signed PDF). */
+  password: z.string().min(8).max(128),
+});
+export type SignUploadInput = z.infer<typeof signUploadSchema>;
+
 /** Password-gated download (public verify service). */
 export const downloadSchema = z.object({
   credentialId: z.string().regex(CREDENTIAL_ID_REGEX),

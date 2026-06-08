@@ -92,18 +92,19 @@ export async function attestUpload(
   });
 
   // 3. Stamp every page with the validation mark (QR → verify URL), plus the
-  //    handwritten-signature PNG when requested. The placement on the
-  //    attestation is present iff the request asked to place AND supplied one.
+  //    handwritten-signature PNG when requested. The placements on the
+  //    attestation are present (non-empty) iff the request asked to place AND
+  //    supplied at least one; the signature is drawn once per placement page.
   const verifyUrl = `${deps.env.VERIFY_PUBLIC_URL}/c/${documentId}`;
   const stamped = await stampAttestation({
     pdfBytes,
     documentId,
     verifyUrl,
     issueDateIso: issueDate,
-    ...(attestation.signaturePlacement !== undefined && {
+    ...(attestation.signaturePlacements !== undefined && {
       signature: {
         pngBytes: SIGNATURE_PNG_BYTES,
-        placement: attestation.signaturePlacement,
+        placements: attestation.signaturePlacements,
       },
     }),
   });
@@ -187,7 +188,7 @@ export async function attestUpload(
       logSeq: append.logSeq,
       by: ctx.actor,
       pages: pageCount,
-      signed: attestation.signaturePlacement !== undefined,
+      signed: (attestation.signaturePlacements?.length ?? 0) > 0,
     },
   });
 

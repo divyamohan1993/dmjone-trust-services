@@ -164,7 +164,7 @@ describe('POST /api/uploads/preview', () => {
     const signed = await authedPost(app, cookie, PREVIEW_PATH, {
       pdfBase64: ONE_PAGE_PDF_B64,
       placeHandwrittenSignature: true,
-      signaturePlacement: { page: 1, xPct: 0.6, yPct: 0.8, wPct: 0.25 },
+      signaturePlacements: [{ page: 1, xPct: 0.6, yPct: 0.8, wPct: 0.25 }],
     });
 
     const plainLen = (await plain.arrayBuffer()).byteLength;
@@ -172,6 +172,49 @@ describe('POST /api/uploads/preview', () => {
     expect(signed.status).toBe(200);
     // The embedded signature PNG adds bytes over the stamp-only preview.
     expect(signedLen).toBeGreaterThan(plainLen);
+  });
+
+  it('draws the signature on EACH placement page (two placements > one)', async () => {
+    const deps = buildDeps();
+    const app = createIssuerApp(deps);
+    const cookie = await mintSessionCookie(deps.env);
+
+    const onePage = await authedPost(app, cookie, PREVIEW_PATH, {
+      pdfBase64: TWO_PAGE_PDF_B64,
+      placeHandwrittenSignature: true,
+      signaturePlacements: [{ page: 1, xPct: 0.6, yPct: 0.8, wPct: 0.25 }],
+    });
+    const twoPages = await authedPost(app, cookie, PREVIEW_PATH, {
+      pdfBase64: TWO_PAGE_PDF_B64,
+      placeHandwrittenSignature: true,
+      signaturePlacements: [
+        { page: 1, xPct: 0.6, yPct: 0.8, wPct: 0.25 },
+        { page: 2, xPct: 0.1, yPct: 0.1, wPct: 0.3 },
+      ],
+    });
+
+    expect(onePage.status).toBe(200);
+    expect(twoPages.status).toBe(200);
+    const oneLen = (await onePage.arrayBuffer()).byteLength;
+    const twoLen = (await twoPages.arrayBuffer()).byteLength;
+    // A second drawn instance of the (already-embedded) signature adds a content-
+    // stream draw op on page 2, so the two-placement render is strictly larger.
+    expect(twoLen).toBeGreaterThan(oneLen);
+  });
+
+  it('rejects a malformed placement element with a uniform 400', async () => {
+    const deps = buildDeps();
+    const app = createIssuerApp(deps);
+    const cookie = await mintSessionCookie(deps.env);
+
+    const res = await authedPost(app, cookie, PREVIEW_PATH, {
+      pdfBase64: ONE_PAGE_PDF_B64,
+      placeHandwrittenSignature: true,
+      // page 0 is out of bounds (min 1).
+      signaturePlacements: [{ page: 0, xPct: 0.5, yPct: 0.5, wPct: 0.25 }],
+    });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { code: string }).code).toBe(ERROR_CODE.VALIDATION_FAILED);
   });
 
   it('is side-effect-free (no sign/allocate/store/log/audit)', async () => {
@@ -189,7 +232,7 @@ describe('POST /api/uploads/preview', () => {
     const res = await authedPost(app, cookie, PREVIEW_PATH, {
       pdfBase64: ONE_PAGE_PDF_B64,
       placeHandwrittenSignature: true,
-      signaturePlacement: { page: 1, xPct: 0.6, yPct: 0.8, wPct: 0.25 },
+      signaturePlacements: [{ page: 1, xPct: 0.6, yPct: 0.8, wPct: 0.25 }],
     });
     expect(res.status).toBe(200);
 
@@ -266,8 +309,8 @@ describe('POST /api/uploads — the attest pipeline', () => {
     expect(content.originalSha256).toBe(
       createHash('sha256').update(bytesOf(ONE_PAGE_PDF_B64)).digest('hex'),
     );
-    // No signature was requested → no placement recorded.
-    expect('signaturePlacement' in content).toBe(false);
+    // No signature was requested → no placements recorded.
+    expect('signaturePlacements' in content).toBe(false);
 
     expect(await deps.blobStore.get(documentId, 'certificate')).not.toBeNull();
     expect(await deps.blobStore.get(documentId, 'section63')).not.toBeNull();
@@ -289,7 +332,7 @@ describe('POST /api/uploads — the attest pipeline', () => {
     expect(signedInput.byteLength).toBeGreaterThan(bytesOf(ONE_PAGE_PDF_B64).byteLength);
   });
 
-  it('records the placement when the handwritten signature is requested', async () => {
+  it('records the placements when the handwritten signature is requested', async () => {
     const deps = buildDeps();
     const app = createIssuerApp(deps);
     const cookie = await mintSessionCookie(deps.env);
@@ -300,13 +343,44 @@ describe('POST /api/uploads — the attest pipeline', () => {
       SIGN_PATH,
       signBody({
         placeHandwrittenSignature: true,
-        signaturePlacement: { page: 1, xPct: 0.6, yPct: 0.82, wPct: 0.22 },
+        signaturePlacements: [{ page: 1, xPct: 0.6, yPct: 0.82, wPct: 0.22 }],
       }),
     );
     const documentId = res.headers.get('x-document-id')!;
     const record = await deps.credentialRepo.getById(documentId);
     const content = record?.content as UploadAttestation;
-    expect(content.signaturePlacement).toEqual({ page: 1, xPct: 0.6, yPct: 0.82, wPct: 0.22 });
+    expect(content.signaturePlacements).toEqual([{ page: 1, xPct: 0.6, yPct: 0.82, wPct: 0.22 }]);
+  });
+
+  it('records MULTIPLE per-page placements (each its own position + size)', async () => {
+    const deps = buildDeps();
+    const app = createIssuerApp(deps);
+    const cookie = await mintSessionCookie(deps.env);
+
+    const res = await authedPost(
+      app,
+      cookie,
+      SIGN_PATH,
+      signBody({
+        pdfBase64: TWO_PAGE_PDF_B64,
+        placeHandwrittenSignature: true,
+        // Sent out of page order; the canonical builder sorts by page.
+        signaturePlacements: [
+          { page: 2, xPct: 0.1, yPct: 0.1, wPct: 0.3 },
+          { page: 1, xPct: 0.6, yPct: 0.82, wPct: 0.22 },
+        ],
+      }),
+    );
+    const documentId = res.headers.get('x-document-id')!;
+    const record = await deps.credentialRepo.getById(documentId);
+    const content = record?.content as UploadAttestation;
+    expect(content.signaturePlacements).toEqual([
+      { page: 2, xPct: 0.1, yPct: 0.1, wPct: 0.3 },
+      { page: 1, xPct: 0.6, yPct: 0.82, wPct: 0.22 },
+    ]);
+    // The audit marks it signed (≥1 placement).
+    const ev = deps.auditLog.events.find((e) => e.action === 'upload.attest');
+    expect(ev?.meta?.signed).toBe(true);
   });
 
   it('sanitizes a path-y / unsafe filename to a safe basename', async () => {

@@ -77,31 +77,43 @@ function requirePdfBase64(obj: Record<string, unknown>, what: string): string {
   return v;
 }
 
+/** Max number of per-page signature placements (mirrors `signUploadSchema`). */
+const MAX_PLACEMENTS = 50;
+
 /**
- * Parse the optional preview signature placement: present only when
- * `placeHandwrittenSignature` is true AND a well-formed placement object is
- * supplied. Mirrors `signUploadSchema.signaturePlacement` bounds (page≥1,
- * x/y∈[0,1], w∈[0.02,1]). Returns `undefined` when no signature is to be placed;
- * throws a uniform 400 when a placement is present but malformed.
+ * Parse the optional preview signature placements: present only when
+ * `placeHandwrittenSignature` is true AND a well-formed, non-empty array is
+ * supplied. Mirrors `signUploadSchema.signaturePlacements` bounds (1..50 items;
+ * each page≥1 int, x/y∈[0,1], w∈[0.02,1]). Returns `undefined` when no signature
+ * is to be placed (absent / non-array / empty → stamp-only preview); throws a
+ * uniform 400 when any element is present but malformed (or the array overflows).
  */
-function parsePreviewPlacement(obj: Record<string, unknown>): SignaturePlacement | undefined {
+function parsePreviewPlacements(obj: Record<string, unknown>): SignaturePlacement[] | undefined {
   if (obj['placeHandwrittenSignature'] !== true) return undefined;
-  const p = obj['signaturePlacement'];
-  if (typeof p !== 'object' || p === null) return undefined;
-  const { page, xPct, yPct, wPct } = p as Record<string, unknown>;
+  const arr = obj['signaturePlacements'];
+  if (!Array.isArray(arr) || arr.length === 0) return undefined;
+  if (arr.length > MAX_PLACEMENTS) {
+    throw new AppError(ERROR_CODE.VALIDATION_FAILED, 'Too many signature placements', 400);
+  }
   const inRange = (n: unknown, lo: number, hi: number): n is number =>
     typeof n === 'number' && Number.isFinite(n) && n >= lo && n <= hi;
-  if (
-    typeof page !== 'number' ||
-    !Number.isInteger(page) ||
-    page < 1 ||
-    !inRange(xPct, 0, 1) ||
-    !inRange(yPct, 0, 1) ||
-    !inRange(wPct, 0.02, 1)
-  ) {
-    throw new AppError(ERROR_CODE.VALIDATION_FAILED, 'Invalid signaturePlacement', 400);
-  }
-  return { page, xPct, yPct, wPct };
+  return arr.map((p): SignaturePlacement => {
+    if (typeof p !== 'object' || p === null) {
+      throw new AppError(ERROR_CODE.VALIDATION_FAILED, 'Invalid signaturePlacements', 400);
+    }
+    const { page, xPct, yPct, wPct } = p as Record<string, unknown>;
+    if (
+      typeof page !== 'number' ||
+      !Number.isInteger(page) ||
+      page < 1 ||
+      !inRange(xPct, 0, 1) ||
+      !inRange(yPct, 0, 1) ||
+      !inRange(wPct, 0.02, 1)
+    ) {
+      throw new AppError(ERROR_CODE.VALIDATION_FAILED, 'Invalid signaturePlacements', 400);
+    }
+    return { page, xPct, yPct, wPct };
+  });
 }
 
 /**
@@ -186,7 +198,7 @@ export function registerUploadRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps)
   api.post('/preview', async (c) => {
     const obj = asObject(await readJson(c), 'preview');
     const bytes = decodePdf(requirePdfBase64(obj, 'preview'));
-    const placement = parsePreviewPlacement(obj);
+    const placements = parsePreviewPlacements(obj);
 
     // Defence in depth: confirm it parses as a PDF before stamping (stamp also
     // loads via pdf-lib, but inspect gives the uniform 400 mapping first).
@@ -206,8 +218,8 @@ export function registerUploadRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps)
         documentId: PREVIEW_UPLOAD_ID,
         verifyUrl: `${deps.env.VERIFY_PUBLIC_URL}/c/${PREVIEW_UPLOAD_ID}`,
         issueDateIso: new Date().toISOString().slice(0, 10),
-        ...(placement !== undefined
-          ? { signature: { pngBytes: SIGNATURE_PNG_BYTES, placement } }
+        ...(placements !== undefined
+          ? { signature: { pngBytes: SIGNATURE_PNG_BYTES, placements } }
           : {}),
       });
     } catch (err) {

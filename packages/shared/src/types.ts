@@ -101,7 +101,9 @@ export interface LetterContent {
 // ──────────────────────────── Upload-&-attest ──────────────────────────────
 
 /**
- * Where on the uploaded PDF the handwritten signature image was stamped. All
+ * Where on ONE page of the uploaded PDF the handwritten signature image was
+ * stamped. An {@link UploadAttestation} carries an array of these — one per
+ * page the signature was placed on, each with its OWN position and size. All
  * coordinates are FRACTIONS of the page box (origin = top-left), so they are
  * resolution-independent; height is derived from the image aspect ratio.
  */
@@ -128,8 +130,9 @@ export interface UploadAttestation {
   originalSha256: string;
   /** Pages in the uploaded PDF. */
   pageCount: number;
-  /** Present iff the handwritten signature was stamped. */
-  signaturePlacement?: SignaturePlacement;
+  /** Present (non-empty) iff the handwritten signature was stamped; one entry
+   *  per page it was placed on, each with its own position AND size. */
+  signaturePlacements?: SignaturePlacement[];
   signatory: Signatory;
 }
 

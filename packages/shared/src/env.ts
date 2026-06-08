@@ -79,6 +79,13 @@ const issuerEnvSchema = z.object({
    * to the bundled non-personal "Specimen" placeholder. Consumed by @dmjone/render.
    */
   SIGNATURE_PNG_BASE64: z.string().optional(),
+  /**
+   * The AES-256-GCM-sealed signing-key blob (`trust_private`) as base64, injected
+   * from a CI secret into the Cloud Run container instead of Secret Manager. Read
+   * by provisionIssuerKeys (env first, then the SecretStore). Sealed + useless
+   * without MASTER_ENCRYPTION_KEY, which stays in Secret Manager.
+   */
+  TRUST_PRIVATE_B64: z.string().optional(),
 });
 
 export type BaseEnv = z.infer<typeof baseEnvSchema>;

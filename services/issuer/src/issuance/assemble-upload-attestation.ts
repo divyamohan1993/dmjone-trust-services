@@ -43,20 +43,23 @@ export interface UploadDerived {
 }
 
 /**
- * Assemble the `UploadAttestation` for one validated upload. `signaturePlacement`
+ * Assemble the `UploadAttestation` for one validated upload. `signaturePlacements`
  * is included ONLY when the request both asked to place the signature AND
- * supplied a placement (mirrors the `signaturePlacement ?? null` normalization
- * in `computeUploadCanonicalPayload`); omitted otherwise so the object matches
- * the canonical payload and typechecks under `exactOptionalPropertyTypes`.
+ * supplied at least one placement; omitted otherwise (never stored as `[]`) so
+ * the object matches the `signaturePlacements ?? null` canonical normalization
+ * — an empty array is truthy and would wrongly emit `[]` rather than `null` —
+ * and typechecks under `exactOptionalPropertyTypes`.
  */
 export function assembleUploadAttestation(
   input: SignUploadInput,
   documentId: string,
   derived: UploadDerived,
 ): UploadAttestation {
-  const placement: SignaturePlacement | undefined =
-    input.placeHandwrittenSignature && input.signaturePlacement
-      ? input.signaturePlacement
+  const placements: SignaturePlacement[] | undefined =
+    input.placeHandwrittenSignature &&
+    input.signaturePlacements &&
+    input.signaturePlacements.length > 0
+      ? input.signaturePlacements
       : undefined;
 
   return {
@@ -65,7 +68,7 @@ export function assembleUploadAttestation(
     originalFilename: sanitizeFilename(input.originalFilename),
     originalSha256: derived.originalSha256,
     pageCount: derived.pageCount,
-    ...(placement !== undefined && { signaturePlacement: placement }),
+    ...(placements !== undefined && { signaturePlacements: placements }),
     signatory: { ...DEFAULT_SIGNATORY },
   };
 }

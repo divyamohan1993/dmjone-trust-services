@@ -88,8 +88,11 @@ export const UPLOAD_PAYLOAD_VERSION = 1;
 
 /**
  * Build the exact UTF-8 string the ML-DSA signature covers for an
- * uploaded-&-attested document. An absent signature placement collapses to
- * `null` so the signed bytes are unambiguous.
+ * uploaded-&-attested document. Absent signature placements collapse to `null`;
+ * present placements are sorted by page (a copy, never mutating the input) so
+ * the signed bytes are independent of the order the UI sent them — and the
+ * verifier, sorting the same stored array, recomputes byte-identical bytes.
+ * `canonicalJson` preserves array order, so this sort IS the determinism.
  *
  * @param a         the upload attestation metadata
  * @param pdfSha256 hex SHA-256 of the FINAL signed PDF bytes (after PAdES)
@@ -103,7 +106,9 @@ export function computeUploadCanonicalPayload(a: UploadAttestation, pdfSha256: s
     originalFilename: a.originalFilename,
     originalSha256: a.originalSha256,
     pageCount: a.pageCount,
-    signaturePlacement: a.signaturePlacement ?? null,
+    signaturePlacements: a.signaturePlacements
+      ? [...a.signaturePlacements].sort((x, y) => x.page - y.page)
+      : null,
     signatory: a.signatory,
     pdfSha256,
   });

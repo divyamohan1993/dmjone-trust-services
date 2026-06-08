@@ -71,18 +71,24 @@ export type IssueLetterInput = z.infer<typeof issueLetterSchema>;
 /**
  * Metadata accompanying an uploaded-&-signed PDF (issuer, authenticated). The
  * PDF bytes themselves are validated by the Phase-2 route, not here; this
- * covers only the attestation fields and the optional signature placement.
+ * covers only the attestation fields and the optional per-page signature
+ * placements (one entry per page the signature is stamped on, each with its
+ * own position and size).
  */
 export const signUploadSchema = z.object({
   originalFilename: z.string().min(1).max(200),
   placeHandwrittenSignature: z.boolean().default(false),
-  signaturePlacement: z
-    .object({
-      page: z.number().int().min(1),
-      xPct: z.number().min(0).max(1),
-      yPct: z.number().min(0).max(1),
-      wPct: z.number().min(0.02).max(1),
-    })
+  signaturePlacements: z
+    .array(
+      z.object({
+        page: z.number().int().min(1),
+        xPct: z.number().min(0).max(1),
+        yPct: z.number().min(0).max(1),
+        wPct: z.number().min(0.02).max(1),
+      }),
+    )
+    .min(1)
+    .max(50)
     .optional(),
   /** The recipient's private download password (gates the signed PDF). */
   password: z.string().min(8).max(128),

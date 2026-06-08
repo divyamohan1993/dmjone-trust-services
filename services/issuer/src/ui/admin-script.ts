@@ -710,6 +710,14 @@ var uploadPdfBase64 = null;   // base64 of the picked PDF (no data: prefix)
 var uploadFilename = '';      // original file name (rides signUploadSchema)
 var uploadPages = [];         // [{widthPt,heightPt}] from /inspect
 var STAGE_MAX_PX = 420;       // longest stage edge; the page is scaled to fit
+// Per-page signature placements: 1-based page number -> {xPct,yPct,wPct}
+// (TOP-LEFT fractions). A page is in this map iff the signature is placed on it;
+// uploadPlacements() turns it into the sorted array the backend signs over.
+var sigBoxes = {};
+// The page whose box geometry the stage currently shows. The <select> 'change'
+// event fires AFTER .value updates, so the handler reads the NEW page from the
+// select; this var remembers the OLD page so its box can be saved first.
+var activeSigPage = 1;
 function uEl(id){ return document.getElementById(id); }
 function clampNum(n, lo, hi){ return n < lo ? lo : (n > hi ? hi : n); }
 // The signature image's natural aspect (height/width); the stamp uses the SAME
@@ -773,24 +781,77 @@ function reclampBox(){
   box.style.left = left + 'px';
   box.style.top = top + 'px';
 }
-// Box geometry -> SignaturePlacement fractions (TOP-LEFT origin), schema-clamped.
-function uploadPlacement(){
+// Current box geometry -> {xPct,yPct,wPct} fractions (TOP-LEFT origin),
+// schema-clamped. null when the stage/box is not measurable yet.
+function boxFractions(){
   var stage = uEl('upload-stage'), box = uEl('upload-sigbox');
   if(!stage || !box) return null;
   var sw = stage.clientWidth, sh = stage.clientHeight;
   if(!(sw > 0) || !(sh > 0)) return null;
-  var wPct = clampNum(box.offsetWidth / sw, 0.02, 1);
-  var xPct = clampNum(box.offsetLeft / sw, 0, 1);
-  var yPct = clampNum(box.offsetTop / sh, 0, 1);
-  return {page: uploadPage(), xPct: xPct, yPct: yPct, wPct: wPct};
+  return {
+    xPct: clampNum(box.offsetLeft / sw, 0, 1),
+    yPct: clampNum(box.offsetTop / sh, 0, 1),
+    wPct: clampNum(box.offsetWidth / sw, 0.02, 1)
+  };
+}
+// Position/size the box on the (already-sized) stage from stored fractions.
+// CSSOM only; height follows the signature aspect (reclampBox enforces it).
+function setBoxFromFractions(fr){
+  var stage = uEl('upload-stage'), box = uEl('upload-sigbox');
+  if(!stage || !box || !fr) return;
+  var sw = stage.clientWidth, sh = stage.clientHeight;
+  if(!(sw > 0) || !(sh > 0)) return;
+  box.style.width = (fr.wPct * sw) + 'px';
+  box.style.height = (fr.wPct * sw * sigAspect()) + 'px';
+  box.style.left = (fr.xPct * sw) + 'px';
+  box.style.top = (fr.yPct * sh) + 'px';
+  reclampBox();
+}
+// The per-page "place on this page" checkbox state.
+function thisPageOn(){ var c = uEl('upload-sig-thispage'); return !!(c && c.checked); }
+function setThisPage(on){ var c = uEl('upload-sig-thispage'); if(c) c.checked = !!on; }
+// Record (or clear) the current box for the CURRENT page, honouring the
+// per-page checkbox: checked -> store its fractions; unchecked -> remove it.
+function storeCurrentBox(){
+  if(thisPageOn()){
+    var fr = boxFractions();
+    if(fr) sigBoxes[activeSigPage] = fr;
+  } else {
+    delete sigBoxes[activeSigPage];
+  }
+  updateSigSummary();
+}
+// The pages with a signature, ascending (numeric, not lexical).
+function sigPagesSorted(){
+  var keys = Object.keys(sigBoxes).map(Number);
+  keys.sort(function(a, b){ return a - b; });
+  return keys;
+}
+// Live "Signature on pages: 1, 3" summary (or a hint when none yet).
+function updateSigSummary(){
+  var el = uEl('upload-sig-summary'); if(!el) return;
+  var pages = sigPagesSorted();
+  el.textContent = pages.length
+    ? 'Signature on page' + (pages.length === 1 ? ' ' : 's ') + pages.join(', ') + '.'
+    : 'Tick a page above to place the signature there.';
+}
+// All per-page placements -> the sorted array the backend signs over. Saves the
+// page on screen first so its latest geometry is captured. [] when none.
+function uploadPlacements(){
+  storeCurrentBox();
+  return sigPagesSorted().map(function(p){
+    var fr = sigBoxes[p];
+    return {page: p, xPct: fr.xPct, yPct: fr.yPct, wPct: fr.wPct};
+  });
 }
 function placingSignature(){ var c = uEl('upload-place'); return !!(c && c.checked); }
-// Show/hide the placement UI from the checkbox + whether a PDF is inspected.
+// Show/hide the placement UI from the master checkbox + whether a PDF is
+// inspected. When shown, reflect the current page's stored state onto the stage.
 function syncUploadPlacement(){
   var wrap = uEl('upload-placement'); if(!wrap) return;
   var on = placingSignature() && uploadPages.length > 0;
   wrap.hidden = !on;
-  if(on){ sizeStage(); reclampBox(); }
+  if(on) loadPage(activeSigPage);
 }
 // Populate the page <select> from the inspected page count; show it only when
 // there is more than one page to choose between.
@@ -805,12 +866,41 @@ function fillUploadPages(){
   }
   if(row) row.hidden = uploadPages.length <= 1;
 }
+// Reflect a page's stored state onto the stage: size the stage to the page,
+// then either restore its saved box (+ tick the checkbox) or fall back to the
+// default box position (+ untick). Show/hide the box per the checkbox. Used on
+// inspect, on the place-toggle, and after a page switch (the new page).
+function loadPage(page){
+  activeSigPage = page;
+  sizeStage();
+  var box = uEl('upload-sigbox');
+  if(sigBoxes[page]){
+    setThisPage(true);
+    setBoxFromFractions(sigBoxes[page]);
+  } else {
+    setThisPage(false);
+    placeBoxDefault();
+  }
+  if(box) box.hidden = !thisPageOn();
+  updateSigSummary();
+}
+// Switch the visible page: save the page currently on screen first (so its box
+// is captured/cleared per its checkbox), then load the newly selected page. The
+// <select> 'change' fires after .value updates, so uploadPage() is the NEW page;
+// activeSigPage still holds the OLD page until loadPage() advances it.
+function switchToPage(newPage){
+  storeCurrentBox();
+  loadPage(newPage);
+}
 // Read the picked PDF as STANDARD base64 (data-URL tail; NOT the base64url
 // bufToB64u, which the server's Buffer.from('base64') need not accept), then
 // POST /api/uploads/inspect for the page count + each page's box.
 function onUploadFile(input){
   var file = input && input.files && input.files[0];
+  // A fresh file drops every prior per-page placement (a page-5 box from a
+  // previous 10-page PDF must never leak onto a new, shorter document).
   uploadPdfBase64 = null; uploadFilename = ''; uploadPages = [];
+  sigBoxes = {}; activeSigPage = 1;
   fillUploadPages(); syncUploadPlacement();
   if(!file){ setStatus('No file selected.'); var m0 = uEl('upload-meta'); if(m0) m0.textContent = 'No file selected.'; return; }
   uploadFilename = file.name || 'document.pdf';
@@ -829,8 +919,19 @@ function onUploadFile(input){
         if(meta) meta.textContent = uploadFilename + ' — ' + n + (n === 1 ? ' page' : ' pages');
         setStatus('Inspected ' + uploadFilename + ' (' + n + (n === 1 ? ' page).' : ' pages).'));
         fillUploadPages();
+        activeSigPage = 1;
+        var sel = uEl('upload-page'); if(sel) sel.value = '1';
+        // Default UX: when placing is already on, start with page 1 included so
+        // the common single-page case needs no extra clicks. loadPage(1) sizes
+        // the stage + positions the default box; tick + store seeds sigBoxes[1].
+        // syncUploadPlacement() below then shows the placement UI (and, with the
+        // page now in sigBoxes, reveals the box) from a single code path.
+        if(placingSignature()){
+          loadPage(1);
+          setThisPage(true);
+          storeCurrentBox();
+        }
         syncUploadPlacement();
-        placeBoxDefault();
       })
       .catch(function(e){
         uploadPdfBase64 = null; uploadPages = [];
@@ -842,12 +943,15 @@ function onUploadFile(input){
   reader.readAsDataURL(file);
 }
 // Preview the REAL stamped result (placeholder id) via the shared blob viewer.
+// Signature is placed only when the master checkbox is on AND at least one page
+// was chosen; otherwise a stamp-only preview (placeHandwrittenSignature=false).
 function previewUpload(){
   if(!uploadPdfBase64){ setStatus('Choose a PDF first.', true); return; }
   var host = uEl('upload-preview-host');
-  var place = placingSignature() ? uploadPlacement() : null;
-  var payload = {pdfBase64: uploadPdfBase64, placeHandwrittenSignature: placingSignature()};
-  if(place) payload.signaturePlacement = place;
+  var places = placingSignature() ? uploadPlacements() : [];
+  var on = places.length > 0;
+  var payload = {pdfBase64: uploadPdfBase64, placeHandwrittenSignature: on};
+  if(on) payload.signaturePlacements = places;
   return blobPreview('/api/uploads/preview', payload, host, 'Exact stamped PDF preview');
 }
 // Sign & download. /api/uploads does NOT return JSON: it returns the SIGNED PDF
@@ -858,12 +962,13 @@ function signUpload(){
   if(!uploadPdfBase64){ setStatus('Choose a PDF first.', true); return; }
   var pwEl = uEl('upload-pw'); var password = pwEl ? pwEl.value : '';
   if(!password || password.length < 8){ setStatus('Enter a download password (at least 8 characters).', true); return; }
-  var place = placingSignature() ? uploadPlacement() : null;
+  var places = placingSignature() ? uploadPlacements() : [];
+  var on = places.length > 0;
   var payload = {
     pdfBase64: uploadPdfBase64, originalFilename: uploadFilename,
-    placeHandwrittenSignature: placingSignature(), password: password
+    placeHandwrittenSignature: on, password: password
   };
-  if(place) payload.signaturePlacement = place;
+  if(on) payload.signaturePlacements = places;
   setStatus('Signing & sealing the document…');
   return fetch('/api/uploads', {
     method:'POST', credentials:'same-origin',
@@ -934,6 +1039,8 @@ function uploadPointerUp(ev){
   var box = uEl('upload-sigbox');
   try{ if(box) box.releasePointerCapture(uDrag.pointerId); }catch(e){}
   uDrag = null;
+  // Persist the just-moved/resized box to the current page (when it's included).
+  storeCurrentBox();
 }
 // Keyboard: arrows move (Shift+arrows resize width). Steps are a few px; the box
 // is re-clamped inside the stage after each step.
@@ -965,15 +1072,35 @@ function uploadBoxKeydown(ev){
     box.style.top = clampNum(top, 0, Math.max(0, sh - h)) + 'px';
   }
   reclampBox();
+  // Persist the just-nudged/resized box to the current page (when it's included).
+  storeCurrentBox();
 }
 (function wireUpload(){
   var form = uEl('upload-form'); if(!form) return;
   var file = uEl('upload-file');
   if(file) file.addEventListener('change', function(ev){ onUploadFile(ev.target); });
+  // Master "place my signature" toggle: show/hide the placement UI and reflect
+  // the current page's stored state (loadPage runs inside syncUploadPlacement).
   var place = uEl('upload-place');
-  if(place) place.addEventListener('change', function(){ syncUploadPlacement(); placeBoxDefault(); });
+  if(place) place.addEventListener('change', function(){ syncUploadPlacement(); });
+  // Page switch: save the page on screen, then load the newly chosen one.
   var pageSel = uEl('upload-page');
-  if(pageSel) pageSel.addEventListener('change', function(){ sizeStage(); placeBoxDefault(); });
+  if(pageSel) pageSel.addEventListener('change', function(){ switchToPage(uploadPage()); });
+  // Per-page toggle: include/exclude THIS page. Checked -> show the box + record
+  // its fractions for the page; unchecked -> drop the page + hide the box.
+  var thisPage = uEl('upload-sig-thispage');
+  if(thisPage) thisPage.addEventListener('change', function(){
+    var box2 = uEl('upload-sigbox');
+    if(thisPageOn()){
+      if(box2) box2.hidden = false;
+      reclampBox();
+      storeCurrentBox();
+    } else {
+      delete sigBoxes[activeSigPage];
+      if(box2) box2.hidden = true;
+      updateSigSummary();
+    }
+  });
   var box = uEl('upload-sigbox');
   if(box){
     box.addEventListener('pointerdown', uploadPointerDown);

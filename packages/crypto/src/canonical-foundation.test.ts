@@ -174,14 +174,14 @@ describe('letter canonical payload (new branch)', () => {
 });
 
 describe('upload canonical payload (new branch)', () => {
-  const placement = { page: 1, xPct: 0.1, yPct: 0.8, wPct: 0.2 };
+  const placements = [{ page: 1, xPct: 0.1, yPct: 0.8, wPct: 0.2 }];
   const upload: UploadAttestation = {
     documentId: 'DMJ-DOC-20260605-01',
     issueDate: '2026-06-05',
     originalFilename: 'agreement.pdf',
     originalSha256: 'e'.repeat(64),
     pageCount: 3,
-    signaturePlacement: placement,
+    signaturePlacements: placements,
     signatory: { name: 'Divya Mohan', role: 'Founder · dmj.one', phone: '+91 79799 30293' },
   };
   const pdf = 'd'.repeat(64);
@@ -200,12 +200,50 @@ describe('upload canonical payload (new branch)', () => {
     expect(computeCanonicalPayloadForRecord(record)).toBe(direct);
   });
 
-  it('normalizes an absent signaturePlacement to null', () => {
-    const { signaturePlacement: _omit, ...withoutPlacement } = upload;
+  it('normalizes absent signaturePlacements to null', () => {
+    const { signaturePlacements: _omit, ...withoutPlacements } = upload;
     void _omit;
     const parsed = JSON.parse(
-      computeUploadCanonicalPayload(withoutPlacement, pdf),
+      computeUploadCanonicalPayload(withoutPlacements, pdf),
     ) as Record<string, unknown>;
-    expect(parsed['signaturePlacement']).toBeNull();
+    expect(parsed['signaturePlacements']).toBeNull();
+  });
+
+  it('sorts MULTIPLE per-page placements by page, independent of input order', () => {
+    // Two placements on different pages, supplied OUT of page order.
+    const unsorted: UploadAttestation = {
+      ...upload,
+      pageCount: 3,
+      signaturePlacements: [
+        { page: 3, xPct: 0.2, yPct: 0.2, wPct: 0.2 },
+        { page: 1, xPct: 0.1, yPct: 0.8, wPct: 0.2 },
+      ],
+    };
+    const parsed = JSON.parse(computeUploadCanonicalPayload(unsorted, pdf)) as {
+      signaturePlacements: Array<{ page: number }>;
+    };
+    // Canonical output is page-sorted, so sign and verify agree regardless of
+    // the order the UI sent the placements in.
+    expect(parsed.signaturePlacements.map((p) => p.page)).toEqual([1, 3]);
+
+    // Same two placements in the OTHER order produce byte-identical canonical bytes.
+    const reversed: UploadAttestation = {
+      ...unsorted,
+      signaturePlacements: [unsorted.signaturePlacements![1]!, unsorted.signaturePlacements![0]!],
+    };
+    expect(computeUploadCanonicalPayload(reversed, pdf)).toBe(
+      computeUploadCanonicalPayload(unsorted, pdf),
+    );
+  });
+
+  it('does not mutate the input placements array when sorting', () => {
+    const input = [
+      { page: 3, xPct: 0.2, yPct: 0.2, wPct: 0.2 },
+      { page: 1, xPct: 0.1, yPct: 0.8, wPct: 0.2 },
+    ];
+    const att: UploadAttestation = { ...upload, signaturePlacements: input };
+    computeUploadCanonicalPayload(att, pdf);
+    // The caller's array order is preserved (sort runs on a copy).
+    expect(input.map((p) => p.page)).toEqual([3, 1]);
   });
 });

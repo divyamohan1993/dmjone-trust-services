@@ -3,7 +3,8 @@
  * NO Chromium). Every page gets a compact validation stamp in the bottom margin
  * (a small QR encoding the verify URL + a one-line caption), sitting inside the
  * page's bottom margin so it never overlaps the document's own content. An
- * optional handwritten-signature PNG is drawn once, on its placement page.
+ * optional handwritten-signature PNG is embedded once and drawn on each of its
+ * placement pages, every page at its own position and size.
  *
  * The output is saved with `useObjectStreams:false` so it carries a CLASSIC
  * cross-reference TABLE — the PAdES signer (`@signpdf/placeholder-plain`,
@@ -31,8 +32,9 @@ export interface StampInput {
   verifyUrl: string;
   /** ISO-8601 `YYYY-MM-DD`; shown in the validation stamp caption on every page. */
   issueDateIso: string;
-  /** Optional handwritten-signature stamp: a transparent PNG + where to place it. */
-  signature?: { pngBytes: Uint8Array; placement: SignaturePlacement };
+  /** Optional handwritten-signature stamp: a transparent PNG + one placement
+   *  per page it is drawn on (each its own position and size). */
+  signature?: { pngBytes: Uint8Array; placements: SignaturePlacement[] };
 }
 
 /** One PDF point per millimetre: 1 mm = 72/25.4 pt. */
@@ -129,7 +131,7 @@ function drawValidationStamp(
 }
 
 /**
- * Draw the optional handwritten-signature PNG on its placement page. The
+ * Draw the optional handwritten-signature PNG on one placement page. The
  * placement fractions are TOP-LEFT origin (UI space); pdf-lib is BOTTOM-LEFT,
  * so `pdfY = H - (yPct·H) - height`. Width is `wPct·W`; height follows the
  * image's own aspect ratio.
@@ -151,8 +153,8 @@ function drawSignature(
 
 /**
  * Stamp an uploaded PDF with the visible validation mark on every page (+ an
- * optional handwritten-signature stamp on its placement page) and return NEW
- * bytes carrying a classic xref table.
+ * optional handwritten-signature stamp on each of its placement pages) and
+ * return NEW bytes carrying a classic xref table.
  *
  * @throws if the input cannot be parsed by pdf-lib (the route validates the
  * `%PDF-` header / runs {@link inspectPdf} first, so a malformed upload is
@@ -174,13 +176,16 @@ export async function stampAttestation(input: StampInput): Promise<Uint8Array> {
     drawValidationStamp(page, qrImage, documentId, issueDateIso, font);
   }
 
-  // Optional handwritten signature: embed once, draw on its 1-based page.
+  // Optional handwritten signature: embed the PNG once, then draw it on each of
+  // its placement pages at that page's own position and size. Out-of-range pages
+  // are skipped (defence in depth; the route bounds page>=1 but not <=pageCount).
   if (signature !== undefined) {
     const sigImage = await pdf.embedPng(signature.pngBytes);
-    const pageIndex = signature.placement.page - 1;
-    const target = pages[pageIndex];
-    if (target !== undefined) {
-      drawSignature(target, sigImage, signature.placement);
+    for (const placement of signature.placements) {
+      const target = pages[placement.page - 1];
+      if (target !== undefined) {
+        drawSignature(target, sigImage, placement);
+      }
     }
   }
 

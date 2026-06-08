@@ -124,7 +124,7 @@ describe('stampAttestation', () => {
       issueDateIso: ISSUE_DATE,
       signature: {
         pngBytes: sigPng,
-        placement: { page: 1, xPct: 0.55, yPct: 0.7, wPct: 0.3 },
+        placements: [{ page: 1, xPct: 0.55, yPct: 0.7, wPct: 0.3 }],
       },
     });
 
@@ -137,6 +137,37 @@ describe('stampAttestation', () => {
     expect(reload.getPageCount()).toBe(2);
   });
 
+  it('draws the signature on EACH placement page (two placements > one)', async () => {
+    const input = await buildMultiPagePdf(2);
+    const sigPng = await tinyPng();
+
+    const onePage = await stampAttestation({
+      pdfBytes: input,
+      documentId: DOC_ID,
+      verifyUrl: VERIFY_URL,
+      issueDateIso: ISSUE_DATE,
+      signature: { pngBytes: sigPng, placements: [{ page: 1, xPct: 0.55, yPct: 0.7, wPct: 0.3 }] },
+    });
+    const twoPages = await stampAttestation({
+      pdfBytes: input,
+      documentId: DOC_ID,
+      verifyUrl: VERIFY_URL,
+      issueDateIso: ISSUE_DATE,
+      signature: {
+        pngBytes: sigPng,
+        placements: [
+          { page: 1, xPct: 0.55, yPct: 0.7, wPct: 0.3 },
+          { page: 2, xPct: 0.1, yPct: 0.1, wPct: 0.2 },
+        ],
+      },
+    });
+
+    // The PNG is embedded once; a second placement adds a draw op on page 2, so
+    // the two-placement render is strictly larger. Both re-load as 2-page PDFs.
+    expect(twoPages.byteLength).toBeGreaterThan(onePage.byteLength);
+    expect((await inspectPdf(twoPages)).pageCount).toBe(2);
+  });
+
   it('tolerates an out-of-range signature page without throwing (ignores it)', async () => {
     const input = await buildMultiPagePdf(1);
     const sigPng = await tinyPng();
@@ -145,7 +176,7 @@ describe('stampAttestation', () => {
       documentId: DOC_ID,
       verifyUrl: VERIFY_URL,
       issueDateIso: ISSUE_DATE,
-      signature: { pngBytes: sigPng, placement: { page: 9, xPct: 0.1, yPct: 0.1, wPct: 0.2 } },
+      signature: { pngBytes: sigPng, placements: [{ page: 9, xPct: 0.1, yPct: 0.1, wPct: 0.2 }] },
     });
     expect(startsWithPdfMagic(out)).toBe(true);
     expect((await inspectPdf(out)).pageCount).toBe(1);

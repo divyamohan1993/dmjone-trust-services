@@ -324,8 +324,15 @@ function uploadPanel(): ReturnType<typeof html> {
         <label for="upload-page">Signature page</label>
         <select id="upload-page" name="page" aria-describedby="upload-stage-hint"></select>
       </div>
+      <div class="upload-sign-row">
+        <input id="upload-sig-thispage" name="signatureThisPage" type="checkbox" />
+        <label for="upload-sig-thispage">Place the signature on this page</label>
+      </div>
+      <p class="muted upload-sig-summary" id="upload-sig-summary" role="status"
+        aria-live="polite"></p>
       <p class="muted body-hint" id="upload-stage-hint">Drag the signature to position it; drag the
-      corner handle to resize. Or focus it and use the arrow keys to move, Shift+arrows to resize.</p>
+      corner handle to resize. Or focus it and use the arrow keys to move, Shift+arrows to resize.
+      Each page keeps its own position and size.</p>
       <div class="upload-stage" id="upload-stage">
         <div class="upload-sigbox" id="upload-sigbox" role="application" tabindex="0"
           aria-label="Signature placement: drag to move, arrow keys to nudge, Shift+arrows to resize">

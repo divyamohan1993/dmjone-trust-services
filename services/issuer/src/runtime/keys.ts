@@ -53,11 +53,32 @@ const b64 = (b: Uint8Array): string => Buffer.from(b).toString('base64');
 const unb64 = (s: string): Uint8Array => new Uint8Array(Buffer.from(s, 'base64'));
 
 /** Idempotent: load the key material, generating + persisting it on first run. */
+/**
+ * `trust_private` may be supplied as a base64 env var (`TRUST_PRIVATE_B64`,
+ * injected from a CI secret into the Cloud Run container) instead of Secret
+ * Manager — read from env FIRST, then the SecretStore. The blob is
+ * AES-256-GCM-sealed and useless without the master key (which stays in Secret
+ * Manager), so holding the sealed bytes in the container env is safe defense in
+ * depth, not a downgrade.
+ */
+function trustPrivateFromEnv(): string | null {
+  const b64 = process.env['TRUST_PRIVATE_B64'];
+  return b64 && b64.length > 0 ? Buffer.from(b64, 'base64').toString('utf8') : null;
+}
+
 export async function provisionIssuerKeys(
   store: SecretStore,
   masterKey: Uint8Array,
 ): Promise<IssuerKeyMaterial> {
-  if (await store.get(TRUST_PRIVATE_SECRET)) return loadIssuerKeys(store, masterKey);
+  // Load when key material already exists: trust_private from the env var or the
+  // store; trust_public always from the store. Generate + persist only on a
+  // truly fresh issuer (neither source has the private blob).
+  const privRaw = trustPrivateFromEnv() ?? (await store.get(TRUST_PRIVATE_SECRET));
+  if (privRaw) {
+    const pubRaw = await store.get(TRUST_PUBLIC_SECRET);
+    if (!pubRaw) throw new Error('trust_public missing in SecretStore; re-provision required');
+    return assemble(JSON.parse(pubRaw) as PublicBlob, JSON.parse(privRaw) as PrivateBlob, masterKey);
+  }
 
   const cred = generateMldsaKeypair();
   const pades = generateSelfSignedPadesCert();
@@ -78,17 +99,6 @@ export async function provisionIssuerKeys(
   await store.set(TRUST_PRIVATE_SECRET, JSON.stringify(priv));
 
   return assemble(pub, priv, masterKey);
-}
-
-async function loadIssuerKeys(store: SecretStore, masterKey: Uint8Array): Promise<IssuerKeyMaterial> {
-  const [pubRaw, privRaw] = await Promise.all([
-    store.get(TRUST_PUBLIC_SECRET),
-    store.get(TRUST_PRIVATE_SECRET),
-  ]);
-  if (!pubRaw || !privRaw) {
-    throw new Error('key material incomplete in SecretStore; re-provision required');
-  }
-  return assemble(JSON.parse(pubRaw) as PublicBlob, JSON.parse(privRaw) as PrivateBlob, masterKey);
 }
 
 function assemble(pub: PublicBlob, priv: PrivateBlob, masterKey: Uint8Array): IssuerKeyMaterial {

@@ -20,7 +20,7 @@
 
 import {
   computeCanonicalPayload,
-  CREDENTIAL_TYPE_CODES,
+  credentialTypeCode,
   type CredentialContent,
   type CredentialRecord,
   type IssueCredentialInput,
@@ -54,7 +54,7 @@ export async function issueCredential(
   //    explicit prefix so letters/uploads can share the same sequence space.
   const credentialId = await allocateCredentialId(
     deps.credentialRepo,
-    CREDENTIAL_TYPE_CODES[input.type],
+    credentialTypeCode(input.type),
     input.issueDate,
   );
 

@@ -8,7 +8,7 @@
  */
 
 export { createCertificateRenderer } from './renderer.js';
-export type { CertificateRendererOptions } from './renderer.js';
+export type { CertificateRendererOptions, TrustedDocumentRenderer } from './renderer.js';
 
 export { createSection63Generator } from './section63.js';
 export type { Section63GeneratorDeps } from './section63.js';
@@ -22,9 +22,17 @@ export type { ChromiumRendererOptions, HtmlToPdf } from './chromium.js';
 // launching a browser.
 export { buildCertificateHtml } from './template.js';
 export type { CertificateTemplateInput } from './template.js';
+export { buildLetterHtml } from './letter-template.js';
+export type { LetterTemplateInput } from './letter-template.js';
 export { buildSection63Html } from './section63-template.js';
 export { getBrandImages, getFontFaceCss } from './assets.js';
 export type { BrandImages } from './assets.js';
+
+// Mode 3 — stamp an uploaded PDF (pure pdf-lib; no Chromium) + inspect it.
+export { stampAttestation, renderQrPng } from './stamp.js';
+export type { StampInput } from './stamp.js';
+export { inspectPdf, PdfInspectError } from './pdf-inspect.js';
+export type { PdfInspection } from './pdf-inspect.js';
 export {
   escapeHtml,
   escapeHtmlWithEmphasis,

@@ -31,6 +31,17 @@ All notable changes to this project are documented here. Format follows
 
 ### Added
 
+- 2026-06-08: **Phase 2A — render layer for letterhead + uploads, and custom certificate
+  types.** `@dmjone/render` gains `buildLetterHtml` (a flowing, multi-page dmj.one
+  letterhead with the rich body), `renderer.renderLetter`, `stampAttestation` (pure
+  pdf-lib: a per-page validation-ID QR + caption in the page margin, plus an optional
+  placed/resized handwritten-signature image — saved with a CLASSIC xref table so the
+  PAdES signer accepts it), and `inspectPdf` (page count + sizes for the placement UI).
+  Certificates may now use a **custom free-text type** (not only the five presets) via
+  `credentialTypeCode` / `labelForType`; preset codes, labels, and ids are byte-identical,
+  and render/verify/§63 derive labels through the helper (custom types → Title-Cased).
+  Render layer + schema only; the issuer routes, verify-page variants, and 3-mode console
+  follow in Phase 2B. Contract: `docs/specs/2026-06-08-trusted-documents-modes.md`.
 - 2026-06-08: **Trusted-documents foundation** (Phase 1 of a 3-mode issuer:
   certificate / letterhead / upload-&-attest). Generalized the record with a
   `kind` discriminator (`certificate | letter | upload`; absent ⇒ certificate, so

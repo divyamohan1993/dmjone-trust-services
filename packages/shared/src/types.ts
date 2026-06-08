@@ -12,12 +12,22 @@ export type CredentialStatus = (typeof CREDENTIAL_STATUS)[number];
 export type VerificationOutcome = (typeof VERIFICATION_OUTCOME)[number];
 export type ServiceRole = (typeof SERVICE_ROLE)[number];
 
-export type CredentialType =
+/** The five preset certificate types (suggested values; offered in the UI). */
+export type CredentialTypePreset =
   | 'internship'
   | 'completion'
   | 'appreciation'
   | 'experience'
   | 'participation';
+
+/**
+ * A certificate type. One of the presets, or any custom free-text type (Mode 1
+ * "certificate of any type"). The `(string & {})` keeps preset autocomplete while
+ * accepting arbitrary strings; the boundary schema (`issueCredentialTypeSchema`)
+ * constrains the charset, and `labelForType`/`credentialTypeCode` handle display
+ * + id-code derivation for custom values.
+ */
+export type CredentialType = CredentialTypePreset | (string & {});
 
 /**
  * The trust backbone serves three document modes; `kind` discriminates them on

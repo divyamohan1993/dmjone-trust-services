@@ -22,6 +22,7 @@
     "@fontsource/great-vibes": "^5.2.8",
     "@fontsource/marcellus": "^5.2.8",
     "@fontsource/playfair-display": "^5.2.8",
+    "pdf-lib": "^1.17.1",
     "puppeteer": "^25.1.0",
     "qrcode": "^1.5.4"
   },

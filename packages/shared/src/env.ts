@@ -72,6 +72,13 @@ const issuerEnvSchema = z.object({
    * http://timestamp.digicert.com
    */
   TSA_URL: z.string().url().optional(),
+  /**
+   * The dmj.one handwritten-signature PNG as base64, mounted from the Secret
+   * Manager secret `signature-png`. The real signature is NEVER committed to the
+   * repo (the public GitHub mirror would leak it); unset (local/test) falls back
+   * to the bundled non-personal "Specimen" placeholder. Consumed by @dmjone/render.
+   */
+  SIGNATURE_PNG_BASE64: z.string().optional(),
 });
 
 export type BaseEnv = z.infer<typeof baseEnvSchema>;

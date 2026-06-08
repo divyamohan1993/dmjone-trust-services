@@ -29,6 +29,16 @@ All notable changes to this project are documented here. Format follows
 
 ### Security
 
+- 2026-06-08: **Handwritten signature moved to Secret Manager; removed from the repo.**
+  The dmj.one signature is now provided at runtime via `SIGNATURE_PNG_BASE64` (mounted
+  from the Secret Manager secret `signature-png` onto the issuer); the real signature
+  image is no longer committed and is gitignored — a public GitHub mirror would otherwise
+  let anyone scrape it. Local dev + tests use a bundled, non-personal "Specimen"
+  placeholder (`packages/render/src/placeholder-signature.ts`). A pasted signature image
+  cannot forge a *verifiable* dmj.one document (authenticity rests on the ML-DSA + PAdES
+  signature, the transparency log, and the validation-ID QR), but the image is personal
+  and shouldn't be scrapable. (It remained in git history from earlier commits — rotating
+  to a fresh signature is recommended; see the deploy notes.)
 - 2026-06-08: **Issuer CSP gains `frame-src 'self' blob:`** so the admin can frame the
   same-origin `blob:` PDF of the exact pre-issue preview. Minimal widening — blob URLs
   are same-origin and only script-creatable, and script is already nonce-gated;

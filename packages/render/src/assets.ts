@@ -16,6 +16,8 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
+import { PLACEHOLDER_SIGNATURE_PNG_BASE64 } from './placeholder-signature.js';
+
 const require = createRequire(import.meta.url);
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -30,6 +32,23 @@ const ASSETS_DIR = join(here, '..', 'assets');
 function fileToDataUri(absPath: string, mime: string): string {
   const b64 = readFileSync(absPath).toString('base64');
   return `data:${mime};base64,${b64}`;
+}
+
+/**
+ * The handwritten-signature PNG as base64. In PRODUCTION this is the
+ * `SIGNATURE_PNG_BASE64` env var, mounted from the Secret Manager secret
+ * `signature-png` — the real signature is NEVER committed to this repo (it would
+ * be scraped from the public GitHub mirror). When the env var is absent (local
+ * dev / tests) the non-personal "Specimen" placeholder is used instead.
+ */
+function signaturePngBase64(): string {
+  const fromEnv = process.env['SIGNATURE_PNG_BASE64'];
+  return fromEnv && fromEnv.length > 0 ? fromEnv : PLACEHOLDER_SIGNATURE_PNG_BASE64;
+}
+
+/** The signature PNG bytes — the env-provided real signature, else the placeholder. */
+export function getSignaturePngBytes(): Uint8Array {
+  return new Uint8Array(Buffer.from(signaturePngBase64(), 'base64'));
 }
 
 /** One @font-face source: a resolvable @fontsource woff2 + its CSS descriptors. */
@@ -118,7 +137,7 @@ export function getBrandImages(): BrandImages {
   if (!imagesCache) {
     imagesCache = {
       logo: fileToDataUri(join(ASSETS_DIR, 'logo-round.png'), 'image/png'),
-      signature: fileToDataUri(join(ASSETS_DIR, 'signature.png'), 'image/png'),
+      signature: `data:image/png;base64,${signaturePngBase64()}`,
       watermark: fileToDataUri(join(ASSETS_DIR, 'watermark.png'), 'image/png'),
     };
   }

@@ -24,6 +24,14 @@ secrets/
 .keys/
 service-account*.json
 
+# The REAL handwritten signature — provided at runtime via SIGNATURE_PNG_BASE64
+# (Secret Manager secret `signature-png`). NEVER commit it; the public GitHub
+# mirror would leak it. Dev/tests use packages/render/src/placeholder-signature.ts.
+assets/signature.jpg
+assets/signature.png
+packages/render/assets/signature.jpg
+packages/render/assets/signature.png
+
 # Render assets generated at build (bundled fonts cache)
 .fonts-cache/
 

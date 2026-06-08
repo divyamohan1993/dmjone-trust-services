@@ -1,24 +1,19 @@
 /**
- * The dmj.one handwritten-signature image, as a clean transparent PNG, for the
- * Mode-3 upload-&-attest stamp (embedded via pdf-lib's `embedPng`).
+ * The dmj.one handwritten-signature PNG bytes for the Mode-3 upload-&-attest stamp
+ * (embedded via pdf-lib's `embedPng`).
  *
- * Generated from the brand `signature.jpg` by `packages/render/clean-signature.mjs`:
- * the white background is keyed to transparent, JPEG speckle/ringing is despeckled
- * (small isolated blobs dropped), the ink is recoloured to a uniform crisp blue,
- * and the mark is supersampled (436x376) for a sharp stamp. The same
- * asset backs the certificate/letter signature blocks via `@dmjone/render`'s
- * `getBrandImages()` (now `signature.png`).
- *
- * Vendored as base64 (decoded once at module load) so it ships through `tsc` into
- * `dist` with no asset-copy step. Pure data: no I/O, side-effect-free.
+ * Resolved at runtime from the `SIGNATURE_PNG_BASE64` env var — mounted from the
+ * Secret Manager secret `signature-png` in production. The REAL signature is never
+ * committed to this repo (the public GitHub mirror would leak it); when the env
+ * var is absent (local dev / tests) the render package's non-personal "Specimen"
+ * placeholder is used. Single source of truth with the certificate/letter
+ * signature block — both go through `@dmjone/render`.
  */
-const SIGNATURE_PNG_BASE64 = 'REDACTED-real-signature-now-in-Secret-Manager';
+import { getSignaturePngBytes } from '@dmjone/render';
 
 /**
- * The signature PNG bytes, decoded once at module load. A fresh `Uint8Array` the
- * caller (the attest pipeline) hands to `stampAttestation` as `signature.pngBytes`.
- * Never mutated.
+ * The signature PNG bytes the attest pipeline hands to `stampAttestation` as
+ * `signature.pngBytes`. Resolved once at module load (the env var is set before
+ * the Cloud Run process starts). Never mutated.
  */
-export const SIGNATURE_PNG_BYTES: Uint8Array = new Uint8Array(
-  Buffer.from(SIGNATURE_PNG_BASE64, 'base64'),
-);
+export const SIGNATURE_PNG_BYTES: Uint8Array = getSignaturePngBytes();

@@ -25,7 +25,7 @@ export type { CertificateTemplateInput } from './template.js';
 export { buildLetterHtml } from './letter-template.js';
 export type { LetterTemplateInput } from './letter-template.js';
 export { buildSection63Html } from './section63-template.js';
-export { getBrandImages, getFontFaceCss } from './assets.js';
+export { getBrandImages, getFontFaceCss, getSignaturePngBytes } from './assets.js';
 export type { BrandImages } from './assets.js';
 
 // Mode 3 — stamp an uploaded PDF (pure pdf-lib; no Chromium) + inspect it.

@@ -6,6 +6,27 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- 2026-06-08: **Letter/upload verify pages returned 500; their ML-DSA verdict read
+  "unknown."** The Firestore read path (`rowToCredential`) dropped the `kind`
+  discriminator, so every stored letter/upload read back as a certificate: the verify
+  page rendered certificate fields the content doesn't have (`escapeHtml(undefined)` →
+  500) and recomputed the canonical payload on the wrong branch (ML-DSA failed →
+  "unknown"). `kind` is now restored on read; since it was already written to Firestore,
+  existing letters/uploads heal with no re-issue. Added a serialization round-trip
+  regression test — the in-memory test fakes store the record as-is and never exercised
+  this seam.
+
+### Changed
+
+- 2026-06-08: **High-quality transparent signature.** The handwritten-signature asset is
+  now a clean transparent PNG — white background removed, JPEG speckle/ringing despeckled,
+  ink recoloured to a uniform crisp blue, supersampled — replacing the opaque JPEG. The
+  upload stamp no longer boxes a white rectangle over the document, and the
+  certificate/letter signature blocks render cleanly. Regenerable via
+  `packages/render/clean-signature.mjs`.
+
 ### Security
 
 - 2026-06-08: **Issuer CSP gains `frame-src 'self' blob:`** so the admin can frame the

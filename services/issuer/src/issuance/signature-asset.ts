@@ -1,35 +1,23 @@
 /**
- * The dmj.one handwritten-signature image, as PNG bytes, for the Mode-3
- * upload-&-attest stamp.
+ * The dmj.one handwritten-signature image, as a clean transparent PNG, for the
+ * Mode-3 upload-&-attest stamp (embedded via pdf-lib's `embedPng`).
  *
- * Why a vendored base64 PNG and not `@dmjone/render`'s `getBrandImages()`:
- * the render package's signature asset is a JPEG (`signature.jpg`), but the
- * frozen `stampAttestation(StampInput)` contract embeds the handwritten stamp
- * via pdf-lib's `embedPng` — feeding it JPEG bytes throws. The render/brand
- * streams own the signature asset and should publish a transparent signature
- * PNG; until then this stream vendors a one-time, lossless JPEG->PNG conversion
- * of that exact same brand signature (the near-white background keyed to
- * transparent), so the stamped mark is visually the certificate's signature.
+ * Generated from the brand `signature.jpg` by `packages/render/clean-signature.mjs`:
+ * the white background is keyed to transparent, JPEG speckle/ringing is despeckled
+ * (small isolated blobs dropped), the ink is recoloured to a uniform crisp blue,
+ * and the mark is supersampled (436x376) for a sharp stamp. The same
+ * asset backs the certificate/letter signature blocks via `@dmjone/render`'s
+ * `getBrandImages()` (now `signature.png`).
  *
- * It is embedded as a base64 string (decoded once at module load) rather than a
- * binary asset so it ships through `tsc` into `dist` with no asset-copy step
- * and no `import.meta.url` path resolution — the image is tiny (109x94).
- *
- * Pure data: no I/O, no allocation, side-effect-free.
- */
-
-/**
- * Transparent PNG (109x94) of the dmj.one signature — the same mark the
- * certificate signature block shows, converted from the brand `signature.jpg`
- * with the near-white background keyed out. PNG magic `89 50 4E 47`, so
- * `stampAttestation`'s `embedPng` accepts it.
+ * Vendored as base64 (decoded once at module load) so it ships through `tsc` into
+ * `dist` with no asset-copy step. Pure data: no I/O, side-effect-free.
  */
 const SIGNATURE_PNG_BASE64 = 'REDACTED-real-signature-now-in-Secret-Manager';
 
 /**
- * The signature PNG bytes, decoded once at module load. A fresh `Uint8Array`
- * the caller (the attest pipeline) hands to `stampAttestation` as
- * `signature.pngBytes`. Never mutated.
+ * The signature PNG bytes, decoded once at module load. A fresh `Uint8Array` the
+ * caller (the attest pipeline) hands to `stampAttestation` as `signature.pngBytes`.
+ * Never mutated.
  */
 export const SIGNATURE_PNG_BYTES: Uint8Array = new Uint8Array(
   Buffer.from(SIGNATURE_PNG_BASE64, 'base64'),

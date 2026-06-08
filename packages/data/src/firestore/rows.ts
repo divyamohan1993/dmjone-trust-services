@@ -49,6 +49,12 @@ export function rowToCredential(row: CredentialRow): CredentialRecord {
     passwordHash: row.passwordHash,
     section63: row.section63,
   };
+  // The `kind` discriminator MUST survive read-back: without it documentKind()
+  // defaults every letter/upload to 'certificate', which mis-renders the verify
+  // page (cert fields are absent → throws) and recomputes the canonical payload
+  // on the wrong branch (ML-DSA fails → "unknown"). Stored by the spread in
+  // credentialToRow; restored here. Absent ⇒ legacy certificate (correct default).
+  if (row.kind !== undefined) out.kind = row.kind;
   if (row.revokedAt !== undefined) out.revokedAt = row.revokedAt;
   return out;
 }

@@ -166,7 +166,7 @@ th{font-family:var(--label);letter-spacing:.06em;text-transform:uppercase;font-w
 .mark-toolbar .mark-btn .u{text-decoration:underline}
 .composer-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;align-items:center}
 /* embedded PDF preview viewer (blob: iframe — frame-src 'self' blob:). */
-.preview-frame{width:100%;height:min(78vh,1000px);border:1px solid var(--rule-outer);
+.preview-frame{width:100%;height:clamp(560px,82vh,1100px);border:1px solid var(--rule-outer);
   border-radius:12px;background:#d8d8d8;margin-top:12px;display:block}
 /* the four blessed paragraph-alignment classes (§2.4) — shared with template.ts
    so the editor preview matches the rendered certificate byte-for-byte. */

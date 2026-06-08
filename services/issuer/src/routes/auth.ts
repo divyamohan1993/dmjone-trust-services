@@ -43,6 +43,7 @@ import type { RegistrationGate } from '../auth/admin-store.js';
 import { evaluateLock, recordFailure, recordSuccess } from '../auth/lockout.js';
 import { consumeRecoveryCode, generateRecoveryCodes } from '../auth/recovery.js';
 import { enrollTotp, verifyTotp } from '../auth/totp.js';
+import { renderQrPng } from '@dmjone/render';
 import {
   finishAuthentication,
   finishRegistration,
@@ -258,9 +259,13 @@ export function registerAuthRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps): 
     await deps.adminRepo.save({ ...account, totpSecretEnc: enrollment.encryptedSecret, updatedAt: now });
     await audit(deps, c.get('requestId'), 'admin.totp.enroll.begin');
 
+    // Render the provisioning URI to a scannable QR PNG so the admin can scan it
+    // with any authenticator app, instead of being shown a raw otpauth:// string.
+    const qrPng = await renderQrPng(enrollment.otpauthUri);
     return c.json({
       otpauthUri: enrollment.otpauthUri,
       base32Secret: enrollment.base32Secret,
+      qrPngDataUri: `data:image/png;base64,${Buffer.from(qrPng).toString('base64')}`,
     });
   });
 

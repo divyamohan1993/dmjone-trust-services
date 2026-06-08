@@ -146,7 +146,57 @@ function recover(){
     .catch(function(e){ setStatus('Recovery failed: '+e.message, true); });
 }
 function out(obj){
-  var el = document.getElementById('security-out'); if(el) el.textContent = JSON.stringify(obj, null, 2);
+  var el = document.getElementById('security-out'); if(!el) return;
+  while(el.firstChild) el.removeChild(el.firstChild);
+  var pre = document.createElement('pre'); pre.textContent = JSON.stringify(obj, null, 2);
+  el.appendChild(pre);
+}
+// TOTP enrollment panel: a scannable QR (PNG data-URI from the server), the
+// manual base32 key, and a 6-digit confirm box -> /api/auth/totp/verify. Built
+// node-by-node (no innerHTML) so it stays CSP-clean.
+function renderTotpEnroll(data){
+  var host = document.getElementById('security-out'); if(!host) return;
+  while(host.firstChild) host.removeChild(host.firstChild);
+  var h = document.createElement('p');
+  h.textContent = 'Scan with Google Authenticator, Microsoft Authenticator, Authy, or any TOTP app:';
+  host.appendChild(h);
+  if(data && data.qrPngDataUri){
+    var img = document.createElement('img');
+    img.setAttribute('src', data.qrPngDataUri);
+    img.setAttribute('alt', 'TOTP enrollment QR code');
+    img.setAttribute('width', '200'); img.setAttribute('height', '200');
+    host.appendChild(img);
+  }
+  var man = document.createElement('p');
+  man.textContent = "Can't scan? Enter this key manually in your app:";
+  host.appendChild(man);
+  var code = document.createElement('code');
+  code.textContent = (data && data.base32Secret) || '';
+  host.appendChild(code);
+  var lbl = document.createElement('label');
+  lbl.setAttribute('for', 'totp-confirm');
+  lbl.textContent = 'Then enter the 6-digit code to confirm:';
+  host.appendChild(lbl);
+  var inp = document.createElement('input');
+  inp.setAttribute('id', 'totp-confirm');
+  inp.setAttribute('inputmode', 'numeric');
+  inp.setAttribute('autocomplete', 'one-time-code');
+  inp.setAttribute('maxlength', '6');
+  host.appendChild(inp);
+  var btn = document.createElement('button');
+  btn.setAttribute('type', 'button'); btn.className = 'secondary';
+  btn.textContent = 'Confirm enrollment';
+  btn.addEventListener('click', function(){
+    var token = (document.getElementById('totp-confirm') || {}).value || '';
+    api('/api/auth/totp/verify', { token: token }).then(function(){
+      while(host.firstChild) host.removeChild(host.firstChild);
+      var ok = document.createElement('p');
+      ok.textContent = 'Authenticator enrolled and confirmed.';
+      host.appendChild(ok);
+      setStatus('Authenticator (TOTP) confirmed.', false);
+    }).catch(function(e){ setStatus((e && e.message) || 'Invalid code, try again.', true); });
+  });
+  host.appendChild(btn);
 }
 // Build a <td> safely: text via textContent (never innerHTML), so attacker-
 // influenced fields (e.g. recipientName) can never inject markup. CSP would
@@ -587,7 +637,7 @@ document.addEventListener('click', function(ev){
   }
   else if(action==='upload-preview') previewUpload();
   else if(action==='logout') api('/api/auth/logout',{}).then(function(){location.reload();});
-  else if(action==='totp-enroll') api('/api/auth/totp/enroll',{}).then(out).catch(function(e){setStatus(e.message,true);});
+  else if(action==='totp-enroll') api('/api/auth/totp/enroll',{}).then(renderTotpEnroll).catch(function(e){setStatus(e.message,true);});
   else if(action==='recovery-gen') api('/api/auth/recovery/generate',{}).then(out).catch(function(e){setStatus(e.message,true);});
 });
 var issueForm = document.getElementById('issue-form');

@@ -306,7 +306,7 @@ function uploadPanel(): ReturnType<typeof html> {
   ${STUDS}
   <h2>Upload &amp; attest</h2>
   <p class="muted">Upload a finished PDF; dmj.one stamps a verifiable validation ID (QR) on every
-  page, optionally places its handwritten signature where you choose, then PAdES- and ML-DSA-signs it.
+  page, optionally places its handwritten signature where you choose, then seals it with a detached post-quantum signature (ML-DSA-87).
   The document's content stays yours; dmj.one attests only that it signed this exact file.</p>
   <form id="upload-form">
     <label for="upload-file">PDF to attest</label>
@@ -401,6 +401,6 @@ function dashboardBody(): ReturnType<typeof html> {
     <button type="button" class="secondary" data-action="totp-enroll">Set up authenticator (TOTP)</button>
     <button type="button" class="secondary" data-action="recovery-gen">Generate recovery codes</button>
   </div>
-  <pre id="security-out" class="muted" aria-live="polite"></pre>
+  <div id="security-out" class="muted" aria-live="polite"></div>
 </div>`;
 }

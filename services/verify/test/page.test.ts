@@ -209,3 +209,50 @@ describe('renderCredentialPage — PAdES indicator is never a red/negative row',
     expect(flat).not.toContain('signature missing');
   });
 });
+
+/**
+ * HARD REQUIREMENT (VERIFY's settled checkAnchor semantics): a `false` external
+ * anchor must render as a CALM "pending", NEVER a red "failed" check. VERIFY's
+ * stricter anchorProof (true only on a real GitHub publication that covers the
+ * record) makes `false` COMMON on genuinely VALID documents — every record issued
+ * before anchoring was configured, and every prior record after a single transient
+ * publish failure, reads false until the next successful publish. anchorProof is
+ * informational and NEVER gates the verdict, so a valid doc with anchorProof:false
+ * is still VALID. Rendering that false as red would turn a real, valid certificate
+ * alarmingly red — the exact recipient-scare the whole drop-PAdES effort removes.
+ */
+describe('renderCredentialPage — a false external anchor renders as PENDING, never red/failed', () => {
+  it('paints anchorProof:false as the soft "warn"/Pending state (not "fail"), verdict stays VALID', () => {
+    const html = pageWithChecks({ ...ALL_GOOD, anchorProof: false });
+    // The anchor row MUST be the soft amber 'warn' (Pending), never red 'fail'.
+    expect(html).toContain('data-check="anchorProof" class="warn"');
+    expect(html).not.toContain('data-check="anchorProof" class="fail"');
+    // Its assistive-tech status word is the calm "Pending", never "Failed".
+    const anchorLi = /<li data-check="anchorProof"[^>]*>.*?<\/li>/s.exec(html)?.[0] ?? '';
+    expect(anchorLi).toContain('Pending');
+    expect(anchorLi).not.toContain('Failed');
+    // anchorProof is NOT a gate: the SSR verdict is still VALID (gold), not downgraded.
+    expect(html).toMatch(/class="pill valid"/);
+    expect(html).toContain('data-ssr-outcome="valid"');
+  });
+
+  it('still renders the genuinely-gating checks as red when THEY fail (mldsaSignature false → fail)', () => {
+    // Contrast guard: the never-red rule is specific to anchorProof. A real
+    // authenticity failure (mldsaSignature) SHOULD render 'fail' — otherwise the
+    // page would hide a true problem. This pins that the warn-not-fail logic is
+    // scoped to the anchor, not blanket-applied.
+    const html = pageWithChecks({ ...ALL_GOOD, mldsaSignature: false });
+    expect(html).toContain('data-check="mldsaSignature" class="fail"');
+  });
+
+  it('the pending state promises NO scheduled/auto re-anchor job (none exists in the codebase)', () => {
+    const html = pageWithChecks({ ...ALL_GOOD, anchorProof: false });
+    const flat = html.replace(/\s+/g, ' ').toLowerCase();
+    // There is no cron/scheduler; "will be re-anchored by the scheduled job" is an
+    // aspirational issuer LOG string only. The public page must not imply one.
+    expect(flat).not.toMatch(/scheduled job/);
+    expect(flat).not.toMatch(/re-?anchored automatically/);
+    expect(flat).not.toMatch(/anchored shortly/);
+    expect(flat).not.toMatch(/background (job|process|task)/);
+  });
+});

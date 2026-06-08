@@ -18,7 +18,6 @@
  * the tests assert.
  */
 
-import { DEFAULT_SIGNATORY } from '@dmjone/shared';
 import type {
   CredentialContent,
   CredentialRecord,
@@ -26,6 +25,7 @@ import type {
 } from '@dmjone/shared';
 
 import type { IssuerDeps } from '../deps.js';
+import { assembleContent } from './assemble-content.js';
 import { allocateCredentialId } from './credential-id.js';
 import { appendToLog } from './log-append.js';
 
@@ -54,20 +54,11 @@ export async function issueCredential(
     input.issueDate,
   );
 
-  // Build the certificate content. `closingLine` is optional — omit the key
-  // entirely when absent (exactOptionalPropertyTypes).
-  const content: CredentialContent = {
-    credentialId,
-    type: input.type,
-    issueDate: input.issueDate,
-    kicker: input.kicker,
-    title: input.title,
-    intro: input.intro,
-    recipientName: input.recipientName,
-    bodyParagraphs: input.bodyParagraphs,
-    signatory: { ...DEFAULT_SIGNATORY },
-    ...(input.closingLine !== undefined && { closingLine: input.closingLine }),
-  };
+  // Build the certificate content. Factored into `assembleContent` so the
+  // preview route renders a byte-identical object (same field order/spread,
+  // same exactOptionalPropertyTypes handling of `closingLine`); the only
+  // difference is the real allocated id here vs the preview placeholder.
+  const content: CredentialContent = assembleContent(input, credentialId);
 
   const qrUrl = `${deps.env.VERIFY_PUBLIC_URL}/c/${credentialId}`;
 

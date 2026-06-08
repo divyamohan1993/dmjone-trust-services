@@ -25,4 +25,11 @@ export type { CertificateTemplateInput } from './template.js';
 export { buildSection63Html } from './section63-template.js';
 export { getBrandImages, getFontFaceCss } from './assets.js';
 export type { BrandImages } from './assets.js';
-export { escapeHtml, escapeHtmlWithEmphasis, formatIsoDate } from './html.js';
+export {
+  escapeHtml,
+  escapeHtmlWithEmphasis,
+  formatIsoDate,
+  compileParagraph,
+  compileInline,
+} from './html.js';
+export type { AlignClass } from './html.js';

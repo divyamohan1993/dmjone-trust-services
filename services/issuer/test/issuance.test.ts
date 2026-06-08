@@ -1,7 +1,10 @@
-import { CREDENTIAL_ID_REGEX, ERROR_CODE, AppError } from '@dmjone/shared';
+import { CREDENTIAL_ID_REGEX, DEFAULT_SIGNATORY, ERROR_CODE, AppError } from '@dmjone/shared';
+import type { CredentialContent } from '@dmjone/shared';
 import { describe, expect, it } from 'vitest';
 
 import { createIssuerApp } from '../src/app.js';
+import { assembleContent } from '../src/issuance/assemble-content.js';
+import type { AssembleContentInput } from '../src/issuance/assemble-content.js';
 import { buildDeps } from './fakes.js';
 import { mintSessionCookie } from './session-helper.js';
 
@@ -234,5 +237,93 @@ describe('POST /api/credentials/:id/revoke', () => {
     });
 
     expect(res.status).toBe(401);
+  });
+});
+
+describe('assembleContent — issue/preview parity (the shared content factor)', () => {
+  /** A full authoring input (all body fields), reused across the parity checks. */
+  function authoringInput(
+    overrides: Partial<AssembleContentInput> = {},
+  ): AssembleContentInput {
+    return {
+      type: 'internship',
+      issueDate: '2026-06-05',
+      kicker: 'Certificate of',
+      title: 'INTERNSHIP',
+      intro: 'This is to certify that',
+      recipientName: 'Asha Rao',
+      bodyParagraphs: [
+        '[[align:center]]completed a **software engineering** internship.',
+        '[[align:justify]]with __distinction__ in *every* milestone.',
+      ],
+      ...overrides,
+    };
+  }
+
+  it('builds identical CredentialContent for issue vs preview given the same input+id', () => {
+    const input = authoringInput({ closingLine: 'Congratulations on a job well done.' });
+    const id = 'DMJ-IC-20260605-01';
+
+    // The issuance path and the preview path both call assembleContent with the
+    // SAME input and SAME id — so the rendered content MUST be byte-identical.
+    const fromIssue = assembleContent(input, id);
+    const fromPreview = assembleContent(input, id);
+
+    expect(fromPreview).toEqual(fromIssue);
+    // And it is the exact expected shape (field order via canonical compare).
+    expect(fromIssue).toEqual({
+      credentialId: 'DMJ-IC-20260605-01',
+      type: 'internship',
+      issueDate: '2026-06-05',
+      kicker: 'Certificate of',
+      title: 'INTERNSHIP',
+      intro: 'This is to certify that',
+      recipientName: 'Asha Rao',
+      bodyParagraphs: [
+        '[[align:center]]completed a **software engineering** internship.',
+        '[[align:justify]]with __distinction__ in *every* milestone.',
+      ],
+      signatory: { ...DEFAULT_SIGNATORY },
+      closingLine: 'Congratulations on a job well done.',
+    });
+  });
+
+  it('only the credentialId differs when the placeholder id is used (everything else equal)', () => {
+    const input = authoringInput({ closingLine: 'Well done.' });
+
+    const real = assembleContent(input, 'DMJ-IC-20260605-01');
+    const preview = assembleContent(input, 'DMJ-PRV-00000000-00');
+
+    expect(preview.credentialId).toBe('DMJ-PRV-00000000-00');
+    expect(real.credentialId).toBe('DMJ-IC-20260605-01');
+    // Strip the only intended difference; the remainder must match exactly.
+    const { credentialId: _r, ...realRest } = real;
+    const { credentialId: _p, ...previewRest } = preview;
+    void _r;
+    void _p;
+    expect(previewRest).toEqual(realRest);
+  });
+
+  it('OMITS closingLine when absent (exactOptionalPropertyTypes), includes it when present', () => {
+    const withClosing = assembleContent(authoringInput({ closingLine: 'Bravo.' }), 'DMJ-IC-20260605-01');
+    expect(withClosing.closingLine).toBe('Bravo.');
+    expect('closingLine' in withClosing).toBe(true);
+
+    const withoutClosing = assembleContent(authoringInput(), 'DMJ-IC-20260605-01');
+    expect(withoutClosing.closingLine).toBeUndefined();
+    // The KEY is absent (not set to undefined) — mirrors the canonical signing shape.
+    expect('closingLine' in withoutClosing).toBe(false);
+  });
+
+  it('is a pure function of (input, id) — fresh signatory object, raw markup preserved', () => {
+    const input = authoringInput();
+    const a = assembleContent(input, 'DMJ-IC-20260605-01') as CredentialContent;
+    const b = assembleContent(input, 'DMJ-IC-20260605-01') as CredentialContent;
+
+    // bodyParagraphs are passed through verbatim (markup + directive are signed content).
+    expect(a.bodyParagraphs).toEqual(input.bodyParagraphs);
+    // Same signatory VALUE on each call, but a fresh copy (spread, not aliased).
+    expect(a.signatory).toEqual(DEFAULT_SIGNATORY);
+    expect(a.signatory).not.toBe(b.signatory);
   });
 });

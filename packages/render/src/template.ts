@@ -17,7 +17,7 @@
 
 import type { CredentialContent } from '@dmjone/shared';
 import { getBrandImages, getFontFaceCss } from './assets.js';
-import { escapeHtml, escapeHtmlWithEmphasis, formatIsoDate } from './html.js';
+import { compileParagraph, escapeHtml, formatIsoDate } from './html.js';
 
 /** What the builder needs beyond the content: the QR target, pre-rendered to a data-URI. */
 export interface CertificateTemplateInput {
@@ -106,6 +106,16 @@ const CERTIFICATE_CSS = `
   .body p{ font-family:var(--serif); font-size:11.5pt; line-height:1.62; color:var(--ink);
     margin-bottom:2.6mm; }
   .body strong{ font-weight:600; }
+  .body em{ font-style:italic; }
+  .body u{ text-decoration:underline; }
+  /* per-paragraph alignment (§2.4) — the four blessed classes; .body's justify
+     stays the inherited default so pa-justify and legacy pref-less paragraphs
+     render identically to today. Class is always one of these literals, never
+     user data, so no inline style attribute is ever needed (CSP-safe). */
+  .body p.pa-left{ text-align:left; }
+  .body p.pa-center{ text-align:center; }
+  .body p.pa-right{ text-align:right; }
+  .body p.pa-justify{ text-align:justify; text-justify:inter-word; }
   .wish{ text-align:center !important; font-style:italic; color:var(--ink-soft) !important;
     font-size:12pt !important; margin-top:1.5mm; }
 
@@ -161,12 +171,18 @@ export function buildCertificateHtml(input: CertificateTemplateInput): string {
   const sigRole = escapeHtml(content.signatory.role);
   const sigPhone = escapeHtml(content.signatory.phone);
 
-  // Body paragraphs: escaped text (one <p> each), with a bounded `**word**` →
-  // <strong> markup compiled for display (the reference cert bolds key terms).
-  // Everything outside the `**` markers stays HTML-escaped. The optional closing
-  // line reuses the template's .wish <p> (plain escape — bold not requested there).
+  // Body paragraphs: each stored string is compiled (§3) — strip its leading
+  // alignment directive into one of the four `pa-*` classes, escape the
+  // remainder FIRST, then compile the inline marks (**bold**/*italic*/__under__)
+  // to <strong>/<em>/<u>; unbalanced or crossing markers degrade to literal.
+  // The class is one of four fixed literals (never user data), so the `class`
+  // interpolation is safe. The optional closing line reuses the template's
+  // .wish <p> (plain escape — rich-text marks are out of scope there).
   const bodyParas = content.bodyParagraphs
-    .map((p) => `<p>${escapeHtmlWithEmphasis(p)}</p>`)
+    .map((p) => {
+      const { html, alignClass } = compileParagraph(p);
+      return `<p class="${alignClass}">${html}</p>`;
+    })
     .join('');
   const wish =
     content.closingLine !== undefined && content.closingLine.length > 0

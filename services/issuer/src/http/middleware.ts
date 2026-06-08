@@ -67,6 +67,13 @@ function applySecurityHeaders(c: Context<IssuerHonoEnv>, nonce: string | undefin
     "base-uri 'self'",
     "object-src 'none'",
     "frame-ancestors 'none'",
+    // Admin previews the exact signing render by framing a same-origin blob: PDF
+    // (URL.createObjectURL of the /api/credentials/preview response). frame-src
+    // governs that child context; without blob: it falls back to default-src
+    // 'self' and the viewer is blocked. blob: is same-origin and only
+    // script-creatable, and script is already nonce-gated — negligible widening.
+    // X-Frame-Options: DENY stays (it does not gate a client-created blob: frame).
+    "frame-src 'self' blob:",
     "form-action 'self'",
     `script-src 'self' 'nonce-${n}'`,
     `style-src 'self' 'nonce-${n}'`,

@@ -8,6 +8,10 @@ All notable changes to this project are documented here. Format follows
 
 ### Security
 
+- 2026-06-08: **Issuer CSP gains `frame-src 'self' blob:`** so the admin can frame the
+  same-origin `blob:` PDF of the exact pre-issue preview. Minimal widening — blob URLs
+  are same-origin and only script-creatable, and script is already nonce-gated;
+  `X-Frame-Options: DENY` is unchanged (it does not gate a client-created `blob:` frame).
 - 2026-06-07: **Crypto strength raised to NIST Level 5.** Credential + transparency-
   log signatures upgraded from ML-DSA-65 (L3) to **ML-DSA-87** (FIPS 204, Level 5,
   ~AES-256 quantum security). Argon2id download-password hashing raised to 32 MiB /
@@ -27,6 +31,19 @@ All notable changes to this project are documented here. Format follows
 
 ### Added
 
+- 2026-06-08: **Rich-text certificate body + exact pre-issue preview.** The issue form's
+  body is now a live "type-inside-the-render" editor: per-run **Bold** / *Italic* /
+  _Underline_ (in-band `**`/`*`/`__` markup compiled by a real tokenizer with a
+  CommonMark crossing rule, so malformed/interleaved input degrades to literal text and
+  never to broken or unsafe HTML) and per-line alignment (Left / Center / Right /
+  Justify via four `pa-*` classes; the default stays justify). A strict DOM serializer
+  is the trust boundary — only text + `<strong>/<em>/<u>` survive, so pasted markup or
+  scripts can never leave the browser. New `POST /api/credentials/preview` renders the
+  exact Chromium signing output — provably side-effect-free (no id allocation, signing,
+  log append, blob store, or audit) — into an embedded `blob:` PDF viewer, so issuance
+  is never blind. The certificate canonical signing payload, shared schemas, and types
+  are unchanged, so every already-issued certificate still verifies byte-identically.
+  Frozen contract: `docs/specs/2026-06-07-body-rich-text-contract.md`.
 - 2026-06-07: **Shared web design system + self-hosted brand fonts** ("The Sealed
   Instrument"). `@dmjone/brand` now exports `designSystemCss()` — one CSP-safe
   stylesheet (the gold double-frame, three-tier verdict, sober §63 register, and

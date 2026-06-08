@@ -134,5 +134,75 @@ describe('buildCertificateHtml', () => {
       expect(out).not.toContain('<script>alert(1)</script>');
       expect(out).toContain('&lt;script&gt;');
     });
+
+    it('compiles italic and underline marks in a body paragraph', () => {
+      const withMarks: typeof SAMPLE_CONTENT = {
+        ...SAMPLE_CONTENT,
+        bodyParagraphs: ['the *role* of __Lead__ engineer.'],
+      };
+      const out = buildCertificateHtml({ content: withMarks, qrDataUri: QR_DATA_URI });
+      expect(out).toContain('<em>role</em>');
+      expect(out).toContain('<u>Lead</u>');
+    });
+  });
+
+  describe('per-paragraph alignment (§2.4)', () => {
+    it('wraps every body paragraph in a <p> carrying exactly one pa-* class', () => {
+      // Default (pref-less) SAMPLE_CONTENT paragraphs render justified.
+      expect(html).toContain('<p class="pa-justify">');
+      // Every fixture body paragraph is pref-less ⇒ one pa-justify <p> each.
+      const justifyParas = html.split('<p class="pa-justify">').length - 1;
+      expect(justifyParas).toBe(SAMPLE_CONTENT.bodyParagraphs.length);
+    });
+
+    it('emits the directed class and strips the directive from the rendered text', () => {
+      const aligned: typeof SAMPLE_CONTENT = {
+        ...SAMPLE_CONTENT,
+        bodyParagraphs: [
+          '[[align:left]]Left text.',
+          '[[align:center]]Centred text.',
+          '[[align:right]]Right text.',
+        ],
+      };
+      const out = buildCertificateHtml({ content: aligned, qrDataUri: QR_DATA_URI });
+      expect(out).toContain('<p class="pa-left">Left text.</p>');
+      expect(out).toContain('<p class="pa-center">Centred text.</p>');
+      expect(out).toContain('<p class="pa-right">Right text.</p>');
+      // The directive tokens themselves never reach the output as literal text.
+      expect(out).not.toContain('[[align:left]]');
+      expect(out).not.toContain('[[align:center]]');
+      expect(out).not.toContain('[[align:right]]');
+    });
+
+    it('defines the four pa-* CSS rules and the em/u body rules', () => {
+      expect(html).toContain('.body p.pa-left{ text-align:left; }');
+      expect(html).toContain('.body p.pa-center{ text-align:center; }');
+      expect(html).toContain('.body p.pa-right{ text-align:right; }');
+      expect(html).toContain('.body p.pa-justify{ text-align:justify; text-justify:inter-word; }');
+      expect(html).toContain('.body em{ font-style:italic; }');
+      expect(html).toContain('.body u{ text-decoration:underline; }');
+      // .body container keeps justify as the inherited default.
+      expect(html).toContain('.body{ max-width:152mm; margin:7mm auto 0; text-align:justify;');
+    });
+
+    it('uses no inline style attribute for alignment (CSP-safe)', () => {
+      const aligned: typeof SAMPLE_CONTENT = {
+        ...SAMPLE_CONTENT,
+        bodyParagraphs: ['[[align:center]]Centred.'],
+      };
+      const out = buildCertificateHtml({ content: aligned, qrDataUri: QR_DATA_URI });
+      expect(out).not.toContain('style="text-align');
+      expect(out).not.toContain('style=');
+    });
+
+    it('a literally-typed [[align:…]] after the directive renders verbatim (§2.2 collision)', () => {
+      const collide: typeof SAMPLE_CONTENT = {
+        ...SAMPLE_CONTENT,
+        bodyParagraphs: ['[[align:center]][[align:left]]Hello'],
+      };
+      const out = buildCertificateHtml({ content: collide, qrDataUri: QR_DATA_URI });
+      // Outer directive wins the class; inner one renders as literal text.
+      expect(out).toContain('<p class="pa-center">[[align:left]]Hello</p>');
+    });
   });
 });

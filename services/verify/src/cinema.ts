@@ -6,12 +6,15 @@
  *
  * Everything interactive on the public verify surface lives here:
  *
- *   1. THE STAGE — a fixed, aria-hidden canvas behind the content, rendered by
- *      WebGPU (WGSL compute over ~24k particles) when available, by WebGL2
- *      (CPU-integrated ~5k point sprites) otherwise, and by NOTHING when even
- *      that is unavailable (the CSS aurora fallback takes over). One uniform
- *      "mode" contract (ambient/rite/triumph/aura/embers/fog) drives both
- *      backends, so choreography code never knows which GPU path is live.
+ *   1. THE STAGE — a fixed, aria-hidden canvas behind the content: a quantum
+ *      field of BINARY GLYPHS (a "0"/"1" atlas both backends sample) moved by
+ *      real force physics (drift field, vortex swirl, spring convergence,
+ *      drag, shock impulses), rendered by WebGPU (WGSL compute, ~5k glyphs)
+ *      when available, by WebGL2 (CPU-integrated ~3k sprites) otherwise, and
+ *      by NOTHING when even that is unavailable (the CSS aurora fallback
+ *      takes over). One uniform "mode" contract (ambient/rite/triumph/aura/
+ *      embers/fog) drives both backends; during the rite the document's
+ *      bytes visibly spiral INTO the verdict to be read.
  *   2. THE CHOREOGRAPHY — the live re-verification rite: the real fetch to
  *      /api/verify/:id (or /api/verify/file) paced with a minimum beat, the
  *      check-constellation ignition, and the verdict strike (seal + shockwave
@@ -71,30 +74,49 @@ export const CINEMA_JS: string = String.raw`/* dmj.one verify — cinema engine.
        stage.setPointer(x,y,active) live pointer (CSS px)
        stage.setChapter(f)          0..1 scroll-depth flavour blend
      Coordinates convert to a world where y∈[-1.1,1.1], x scaled by aspect.  */
-  /* hue channel: 0 gold (authentic archive) · 1 ember (alarm) · 2 fog
-     (cool unknown) · 3 scan (the impartial steel-blue examination light —
-     scrutiny runs cool, warmth is earned on confirmation). */
-  /* index 9 = TEXT SAFE-ZONE strength: how strongly particles dim around the
-     focus (the verdict text) so type stays effortlessly readable. The triumph
-     beat relaxes it — the gold is MEANT to flood the seal at the strike. */
+  /* hue channel: 0 byte-ink (the neutral quantum field) · 1 alarm-red ink ·
+     2 pale fog ink · 3 scan blue (the impartial examination — bytes being
+     READ) · 4 gold ink (earned, triumph only). On the light stage particles
+     are INK ON PAPER: higher k = denser, darker ink. */
+  /* index 9 = TEXT SAFE-ZONE strength: how strongly the field parts around
+     the focus (the verdict text) so type stays effortlessly readable. The
+     triumph beat relaxes it — the gold floods the seal at the strike. */
   var MODES = {
     /*            drift swirl conv  grav  flowX flowY speed fade  hue  safe */
     ambient:   [0.140, 0.10, 0.000, 0.00, 0.010, 0.014, 0.60, 1.00, 0.0, 0.78],
-    rite:      [0.080, 0.55, 0.140, 0.00, 0.000, 0.000, 1.05, 1.00, 3.0, 0.80],
-    triumph:   [0.050, 0.85, 0.900, 0.00, 0.000, 0.000, 1.35, 1.00, 0.0, 0.15],
-    aura:      [0.090, 0.40, 0.160, 0.00, 0.000, 0.008, 0.70, 1.00, 0.0, 0.40],
+    /* the rite is a VORTEX: the document's bytes visibly spiral in to be read */
+    rite:      [0.050, 0.70, 0.500, 0.00, 0.000, 0.000, 1.15, 1.00, 3.0, 0.80],
+    triumph:   [0.050, 0.85, 0.900, 0.00, 0.000, 0.000, 1.35, 1.00, 4.0, 0.15],
+    aura:      [0.090, 0.40, 0.160, 0.00, 0.000, 0.008, 0.70, 1.00, 4.0, 0.40],
     embers:    [0.060, 0.04, 0.000, 0.42, 0.000, 0.000, 0.55, 0.85, 1.0, 0.72],
     fog:       [0.060, 0.03, 0.000, 0.00, 0.012, 0.004, 0.35, 0.60, 2.0, 0.78]
   };
-  /* colour ramps lo/mi/hi per hue index (gold, ember, fog, scan). The LIVE ramp
-     crossfades between these in RGB on mode change — never through a scalar hue
-     (a 0→3 scalar lerp would flash alarm-red between gold and scan). */
+  /* ink ramps lo/mi/hi per hue index (far/faint → near/dense). The LIVE ramp
+     crossfades between these in RGB on mode change — never through a scalar
+     hue (a scalar lerp would sweep through unrelated hues mid-transition). */
   var RAMP_TABLE = [
-    [[0.42, 0.31, 0.06], [0.83, 0.69, 0.38], [0.99, 0.91, 0.72]],
-    [[0.29, 0.07, 0.05], [0.79, 0.33, 0.18], [0.96, 0.66, 0.40]],
-    [[0.10, 0.11, 0.15], [0.33, 0.37, 0.44], [0.55, 0.59, 0.66]],
-    [[0.09, 0.15, 0.25], [0.37, 0.52, 0.72], [0.75, 0.85, 0.96]]
+    [[0.55, 0.62, 0.72], [0.32, 0.43, 0.60], [0.13, 0.31, 0.55]],
+    [[0.78, 0.45, 0.45], [0.69, 0.23, 0.25], [0.55, 0.10, 0.13]],
+    [[0.68, 0.72, 0.78], [0.55, 0.60, 0.68], [0.45, 0.50, 0.60]],
+    [[0.45, 0.60, 0.78], [0.24, 0.43, 0.68], [0.11, 0.31, 0.55]],
+    [[0.80, 0.66, 0.36], [0.66, 0.50, 0.13], [0.48, 0.35, 0.07]]
   ];
+  /* the BYTES themselves: a tiny glyph atlas ("0" | "1") both GPU backends
+     sample, so the field literally is binary being examined. */
+  function makeGlyphAtlas() {
+    var c = doc.createElement("canvas");
+    c.width = 128; c.height = 64;
+    var g = c.getContext("2d");
+    if (!g) return null;
+    g.clearRect(0, 0, 128, 64);
+    g.fillStyle = "#fff";
+    g.font = "600 46px Georgia, 'Times New Roman', serif";
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    g.fillText("0", 32, 35);
+    g.fillText("1", 96, 35);
+    return c;
+  }
   function makeStage(canvas) {
     if (!canvas || still) return null;
     var aspect = 1, W = 0, H = 0, dpr = 1;
@@ -134,11 +156,13 @@ export const CINEMA_JS: string = String.raw`/* dmj.one verify — cinema engine.
       for (var r = 0; r < 3; r++) for (var c = 0; c < 3; c++) curRamp[r][c] = lerp(curRamp[r][c], tgtRamp[r][c], k);
     }
 
-    /* ---------- WebGPU backend (compute + instanced quads, WGSL) ---------- */
+    /* ---------- WebGPU backend (compute + instanced glyph quads, WGSL) ---- */
     function tryWebGPU() {
       if (!navigator.gpu) return Promise.resolve(null);
-      var N = 7000;
-      if ((navigator.deviceMemory || 8) < 4 || (navigator.hardwareConcurrency || 8) < 4) N = 3500;
+      var N = 5200;
+      if ((navigator.deviceMemory || 8) < 4 || (navigator.hardwareConcurrency || 8) < 4) N = 2600;
+      var atlas = makeGlyphAtlas();
+      if (!atlas) return Promise.resolve(null);
       return navigator.gpu.requestAdapter({ powerPreference: "low-power" }).then(function (ad) {
         if (!ad) return null;
         return ad.requestDevice().then(function (device) {
@@ -146,6 +170,10 @@ export const CINEMA_JS: string = String.raw`/* dmj.one verify — cinema engine.
           if (!ctx) return null;
           var format = navigator.gpu.getPreferredCanvasFormat();
           ctx.configure({ device: device, format: format, alphaMode: "premultiplied" });
+          var tex = device.createTexture({ size: [128, 64], format: "rgba8unorm",
+            usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT });
+          device.queue.copyExternalImageToTexture({ source: atlas }, { texture: tex }, [128, 64]);
+          var smp = device.createSampler({ magFilter: "linear", minFilter: "linear" });
           var pbuf = device.createBuffer({ size: N * 32, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
           var seed = new Float32Array(N * 8);
           for (var i = 0; i < N; i++) {
@@ -205,14 +233,16 @@ export const CINEMA_JS: string = String.raw`/* dmj.one verify — cinema engine.
             + "  p.b = vec4f(v, p.b.z, clamp(length(v) * 2.2, 0.0, 1.0));\n"
             + "  ps[i] = p;\n"
             + "}\n"
-            + "struct VOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, @location(1) col: vec4f };\n"
+            + "struct VOut { @builtin(position) pos: vec4f, @location(0) uv: vec2f, @location(1) col: vec4f, @location(2) gl: f32 };\n"
+            + "@group(0) @binding(3) var glyphTex: texture_2d<f32>;\n"
+            + "@group(0) @binding(4) var glyphSmp: sampler;\n"
             + "@vertex\n"
             + "fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> VOut {\n"
             + "  var corner = array<vec2f, 6>(vec2f(-1.0,-1.0), vec2f(1.0,-1.0), vec2f(-1.0,1.0), vec2f(-1.0,1.0), vec2f(1.0,-1.0), vec2f(1.0,1.0));\n"
             + "  let p = psr[ii];\n"
             + "  let aspect = u.ta.z;\n"
             + "  let z = p.a.z; let energy = p.b.w;\n"
-            + "  let sz = (0.0026 + z * 0.0088) * p.b.z;\n"
+            + "  let sz = (0.0034 + z * 0.0095) * p.b.z;\n"
             + "  let c = corner[vi];\n"
             + "  let world = p.a.xy + c * sz * vec2f(1.0, aspect);\n"
             + "  let fade = u.m2.w;\n"
@@ -221,17 +251,19 @@ export const CINEMA_JS: string = String.raw`/* dmj.one verify — cinema engine.
             + "  let k = clamp(z * 0.62 + energy * 0.55, 0.0, 1.0) * safe;\n"
             + "  var col = mix(u.lo.xyz, u.mi.xyz, smoothstep(0.0, 0.62, k));\n"
             + "  col = mix(col, u.hi.xyz, smoothstep(0.62, 1.0, k));\n"
-            + "  let alpha = (0.06 * safe + 0.55 * k * k) * fade;\n"
+            + "  let alpha = (0.09 + 0.6 * k * k) * fade;\n"
             + "  var o: VOut;\n"
             + "  o.pos = vec4f(world.x / aspect, world.y, 0.0, 1.0);\n"
             + "  o.uv = c;\n"
             + "  o.col = vec4f(col, alpha);\n"
+            + "  o.gl = select(0.0, 1.0, fract(p.a.w * 1.7) > 0.5);\n"
             + "  return o;\n"
             + "}\n"
             + "@fragment\n"
             + "fn fs(inp: VOut) -> @location(0) vec4f {\n"
-            + "  let d = length(inp.uv);\n"
-            + "  let a = smoothstep(1.0, 0.12, d) * inp.col.a;\n"
+            + "  let uvx = (inp.gl + (inp.uv.x * 0.5 + 0.5)) * 0.5;\n"
+            + "  let uvy = 0.5 - inp.uv.y * 0.5;\n"
+            + "  let a = textureSample(glyphTex, glyphSmp, vec2f(uvx, uvy)).a * inp.col.a;\n"
             + "  return vec4f(inp.col.rgb * a, a);\n"
             + "}\n";
           var mod = device.createShaderModule({ code: wgsl });
@@ -258,7 +290,8 @@ export const CINEMA_JS: string = String.raw`/* dmj.one verify — cinema engine.
           var cbind = device.createBindGroup({ layout: cpipe.getBindGroupLayout(0), entries: [
             { binding: 0, resource: { buffer: pbuf } }, { binding: 1, resource: { buffer: ubuf } }] });
           var rbind = device.createBindGroup({ layout: rpipe.getBindGroupLayout(0), entries: [
-            { binding: 2, resource: { buffer: pbuf } }, { binding: 1, resource: { buffer: ubuf } }] });
+            { binding: 2, resource: { buffer: pbuf } }, { binding: 1, resource: { buffer: ubuf } },
+            { binding: 3, resource: tex.createView() }, { binding: 4, resource: smp }] });
           var uarr = new Float32Array(32);
           device.lost.then(function () { api.dead = true; body.classList.remove("gpu-webgpu"); body.classList.add("gpu-none"); });
           // Any uncaptured validation error after init: kill the stage quietly
@@ -296,27 +329,32 @@ export const CINEMA_JS: string = String.raw`/* dmj.one verify — cinema engine.
       }).catch(function () { return null; });
     }
 
-    /* ---------- WebGL2 backend (CPU sim, point sprites) ---------- */
+    /* ---------- WebGL2 backend (CPU sim, glyph point sprites) ---------- */
     function tryWebGL2() {
       var gl = null;
       try { gl = canvas.getContext("webgl2", { alpha: true, antialias: false, depth: false, powerPreference: "low-power" }); } catch (e) {}
       if (!gl) return null;
+      var atlas = makeGlyphAtlas();
+      if (!atlas) return null;
       var coarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
-      var N = coarse ? 2200 : 3800;
+      var N = coarse ? 1700 : 3000;
       var px = new Float32Array(N), py = new Float32Array(N), pz = new Float32Array(N);
       var vx = new Float32Array(N), vy = new Float32Array(N), sd = new Float32Array(N), sz = new Float32Array(N);
+      var glyph = new Float32Array(N);
       for (var i = 0; i < N; i++) {
         px[i] = (Math.random() * 2 - 1) * 2.2; py[i] = (Math.random() * 2 - 1) * 1.25;
-        pz[i] = Math.random(); sd[i] = Math.random() * 6.283; sz[i] = 0.55 + Math.random() * 0.9;
+        pz[i] = Math.random(); sd[i] = Math.random() * 6.283; sz[i] = 0.6 + Math.random() * 0.95;
+        glyph[i] = Math.random() > 0.5 ? 1 : 0;
       }
-      var attr = new Float32Array(N * 4); // x,y,size,k
+      var attr = new Float32Array(N * 4); // x, y, size (sign carries the glyph), k
       var vsrc = "#version 300 es\nprecision highp float;\n"
-        + "layout(location=0) in vec4 a;\nuniform float uAspect;\nuniform float uDpr;\nuniform float uH;\nout float vK;\n"
+        + "layout(location=0) in vec4 a;\nuniform float uAspect;\nuniform float uDpr;\nuniform float uH;\nout float vK;\nout float vG;\n"
         + "void main(){ gl_Position = vec4(a.x/uAspect, a.y, 0.0, 1.0); vK = a.w;\n"
-        + "  gl_PointSize = clamp(a.z * 0.0036 * uH, 1.0, 10.0 * uDpr); }";
-      var fsrc = "#version 300 es\nprecision mediump float;\nin float vK;\nuniform vec3 uLo;\nuniform vec3 uMi;\nuniform vec3 uHi;\nuniform float uFade;\nout vec4 o;\n"
-        + "void main(){ vec2 c = gl_PointCoord*2.0-1.0; float d = length(c);\n"
-        + "  float a = smoothstep(1.0,0.12,d) * (0.06 + 0.55*vK*vK) * uFade;\n"
+        + "  vG = a.z < 0.0 ? 1.0 : 0.0;\n"
+        + "  gl_PointSize = clamp(abs(a.z) * 0.0045 * uH, 2.0, 13.0 * uDpr); }";
+      var fsrc = "#version 300 es\nprecision mediump float;\nin float vK;\nin float vG;\nuniform sampler2D uTex;\nuniform vec3 uLo;\nuniform vec3 uMi;\nuniform vec3 uHi;\nuniform float uFade;\nout vec4 o;\n"
+        + "void main(){ vec2 uv = vec2((vG + gl_PointCoord.x) * 0.5, gl_PointCoord.y);\n"
+        + "  float a = texture(uTex, uv).a * (0.09 + 0.6*vK*vK) * uFade;\n"
         + "  vec3 col = mix(uLo, uMi, smoothstep(0.0,0.62,vK)); col = mix(col, uHi, smoothstep(0.62,1.0,vK));\n"
         + "  o = vec4(col*a, a); }";
       function sh(type, src) { var s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
@@ -336,7 +374,18 @@ export const CINEMA_JS: string = String.raw`/* dmj.one verify — cinema engine.
       gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
       var uA = gl.getUniformLocation(prog, "uAspect"), uD = gl.getUniformLocation(prog, "uDpr"),
           uH = gl.getUniformLocation(prog, "uH"), uF = gl.getUniformLocation(prog, "uFade"),
-          uLo = gl.getUniformLocation(prog, "uLo"), uMi = gl.getUniformLocation(prog, "uMi"), uHi = gl.getUniformLocation(prog, "uHi");
+          uLo = gl.getUniformLocation(prog, "uLo"), uMi = gl.getUniformLocation(prog, "uMi"), uHi = gl.getUniformLocation(prog, "uHi"),
+          uT = gl.getUniformLocation(prog, "uTex");
+      var texObj = gl.createTexture();
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, texObj);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, atlas);
+      gl.generateMipmap(gl.TEXTURE_2D);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.uniform1i(uT, 0);
       var lost = false;
       canvas.addEventListener("webglcontextlost", function (e) { e.preventDefault(); lost = true; api.dead = true; }, false);
       var api = {
@@ -386,13 +435,16 @@ export const CINEMA_JS: string = String.raw`/* dmj.one verify — cinema engine.
             px[i] = x; py[i] = y; vx[i] = nvx; vy[i] = nvy;
             var k = pz[i] * 0.62 + Math.min(Math.sqrt(nvx * nvx + nvy * nvy) * 2.2, 1) * 0.55;
             if (k > 1) k = 1;
-            // text safe-zone: recede around the focus so type stays readable
+            // text safe-zone: the field parts around the focus so type reads
             var fdx2 = x - focus.x, fdy2 = y - focus.y;
             var fr = Math.sqrt(fdx2 * fdx2 + fdy2 * fdy2);
             var st = (fr - 0.12) / 0.83; st = st < 0 ? 0 : st > 1 ? 1 : st;
             k *= 1 - safeAmp * (1 - st * st * (3 - 2 * st));
             var o = i * 4;
-            attr[o] = x; attr[o + 1] = y; attr[o + 2] = (0.55 + pz[i] * 2.0) * sz[i]; attr[o + 3] = k;
+            var sizeAttr = (0.6 + pz[i] * 2.1) * sz[i];
+            attr[o] = x; attr[o + 1] = y;
+            attr[o + 2] = glyph[i] > 0.5 ? -sizeAttr : sizeAttr; // sign = which digit
+            attr[o + 3] = k;
           }
           gl.viewport(0, 0, canvas.width, canvas.height);
           gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
@@ -678,7 +730,11 @@ export const CINEMA_JS: string = String.raw`/* dmj.one verify — cinema engine.
       setTimeout(function () {
         var r = (sealEl || verdictEl).getBoundingClientRect();
         stage.pulse(r.left + r.width / 2, r.top + r.height / 2, 1);
-        if (navigator.vibrate) { try { navigator.vibrate(18); } catch (e) {} }
+        // haptic beat only when the user has actually interacted (Chrome
+        // rejects pre-gesture vibration with a console error otherwise)
+        if (navigator.vibrate && navigator.userActivation && navigator.userActivation.hasBeenActive) {
+          try { navigator.vibrate(18); } catch (e) {}
+        }
       }, still ? 0 : 430);
       setTimeout(function () { stage.setMode("aura"); }, 1900);
     } else if (c.cls === "unknown" || c.cls === "unconfirmed") {

@@ -8,6 +8,29 @@ All notable changes to this project are documented here. Format follows
 
 ### Changed
 
+- 2026-06-10: **"Daylight Examination": the verify portal moves to a light,
+  research-grounded trust palette, the field becomes living binary, and the whole
+  surface gains 3D morphic depth.** Credibility research (Stanford web-credibility,
+  cross-cultural colour-trust studies) finds blue the most-trusted hue and clean
+  light grounds the most credible surface, so the stage is now cool paper-white with
+  deep navy ink, institutional blue for live examination, green strictly for
+  confirmation, red strictly for alarm, and gold reserved for the earned seal (the
+  only gold object on the page). The GPU field now renders a quantum byte-field:
+  drifting "0"/"1" glyphs (a glyph atlas sampled by both WebGPU and WebGL2 backends,
+  ink-on-paper compositing) moved by real force physics; during the live rite the
+  document's bytes visibly spiral INTO the verdict to be read, then burst gold on a
+  confirmed strike or fall as red embers on revoked/tampered. 3D morphic system
+  everywhere: porcelain-glass slabs with specular rims, preserve-3d depth layers
+  that parallax under pointer tilt and scroll-driven perspective reveals, extruded
+  buttons with real press physics, 3D bead check-nodes, and a seal that floats in
+  slow 3D precession. Scroll integrity fixed: the inverted view-timeline insets
+  (94%+22% > 100% left an empty window that could strand bottom sections at
+  opacity 0 on some engines, reading as "cannot scroll to the bottom") are replaced
+  with valid animation-range entry bounds that always complete, reveals default to
+  fully visible, a visible blue scrollbar replaces the near-invisible dark one, and
+  pre-gesture haptics no longer error. Verified by real wheel + touch runs to
+  gap-0 bottom on desktop and mobile across all states.
+
 - 2026-06-10: **The verify portal is rebuilt as "The Examination Chamber," a fully
   cinematic, living verification theatre.** A midnight-navy + gold stage (the trust
   language of passports, banknotes and notarial seals) replaces the cream letterhead

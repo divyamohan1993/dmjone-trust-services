@@ -558,8 +558,8 @@ function head(nonce: string, title: string): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="color-scheme" content="dark">
-<meta name="theme-color" content="#090D17">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#F7F9FC">
 <title>${escapeHtml(title)}</title>
 <meta name="robots" content="noindex">
 <link rel="preload" as="font" type="font/woff2" href="/fonts/playfair-display-latin-700-normal.woff2" crossorigin>

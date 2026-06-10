@@ -96,6 +96,11 @@ function makeHarness(recordOverrides: Partial<CredentialRecord> = {}): Harness {
     // Matches makeRecord().padesCertFingerprint and the fake verifier's default
     // certFingerprint, so the happy path yields padesSignature=true.
     trustedPadesCertFingerprint: 'c'.repeat(64),
+    // Public verification keys (base64) the self-contained evidence bundle embeds.
+    evidenceKeys: {
+      mldsaPublicKeyBase64: 'TUxEU0EtUFVCTElDLUtFWQ==', // "MLDSA-PUBLIC-KEY"
+      logMldsaPublicKeyBase64: 'TE9HLVBVQkxJQy1LRVk=', // "LOG-PUBLIC-KEY"
+    },
   };
 
   return {
@@ -641,6 +646,185 @@ describe('GET /api/credentials/:id/section63', () => {
   });
 });
 
+describe('GET /api/credentials/:id/evidence (court-ready evidence bundle)', () => {
+  /** Permissive typed view over the bundle JSON for strict-TS field access. */
+  interface Bundle {
+    meta: { credentialId: string; kind: string; status: string; issuedDate: string; issuer: string; verifyUrl: string };
+    content: Record<string, unknown>;
+    document: { pdfSha256: string; hashAlgorithm: string };
+    canonical: { payload: string; sha256: string; note: string };
+    signature: { algorithm: string; valueBase64: string; publicKeyBase64: string; publicKeyId: string };
+    transparencyLog: {
+      seq: number;
+      leafHash: string;
+      head: { seq: number; headHash: string; signature: string } | null;
+      logPublicKeyBase64: string;
+      note: string;
+    };
+    externalAnchor: { headSeq: number; github?: { repo: string } } | null;
+    trustedTimestamp: {
+      rfc3161TokenBase64: string;
+      verified: { valid: boolean; genTime?: string; tsaSubject?: string };
+    } | null;
+    howToVerify: string[];
+    disclaimer: string;
+  }
+  const bundleOf = async (res: Response): Promise<Bundle> => (await res.json()) as Bundle;
+
+  it('serves a self-contained JSON bundle as a no-store download (200)', async () => {
+    const { app } = makeHarness();
+    const res = await app.request(`/api/credentials/${ID}/evidence`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('application/json');
+    expect(res.headers.get('content-disposition')).toContain('attachment');
+    expect(res.headers.get('content-disposition')).toContain(`${ID}-evidence.json`);
+    expect(res.headers.get('cache-control')).toBe('no-store');
+  });
+
+  it('embeds the signed content, both hashes, the ML-DSA signature + ISSUER public key', async () => {
+    const { app, record } = makeHarness();
+    const b = await bundleOf(await app.request(`/api/credentials/${ID}/evidence`));
+    // The exact signed content + the canonical bytes + the document hash.
+    expect(b.content).toBeTruthy();
+    expect(b.canonical.payload).toBe(record.canonicalPayload);
+    expect(b.canonical.sha256).toBe(record.canonicalSha256);
+    expect(b.document.pdfSha256).toBe(record.pdfSha256);
+    expect(b.document.hashAlgorithm).toBe('SHA-256');
+    // The detached signature + the PUBLIC key needed to verify it offline.
+    expect(b.signature.algorithm).toContain('ML-DSA-87');
+    expect(b.signature.valueBase64).toBe(record.mldsaSignature);
+    expect(b.signature.publicKeyBase64).toBe('TUxEU0EtUFVCTElDLUtFWQ==');
+    expect(b.signature.publicKeyId).toBe(record.mldsaPublicKeyId);
+  });
+
+  it('embeds the signed transparency-log head + the LOG public key', async () => {
+    const { app, record } = makeHarness();
+    const b = await bundleOf(await app.request(`/api/credentials/${ID}/evidence`));
+    expect(b.transparencyLog.seq).toBe(record.logSeq);
+    expect(b.transparencyLog.leafHash).toBe(record.logLeafHash);
+    // The actual signed head from logRepo.getHead() (seq + headHash + signature).
+    expect(b.transparencyLog.head).toBeTruthy();
+    expect(b.transparencyLog.head?.signature).toBe('HEADSIG');
+    expect(b.transparencyLog.logPublicKeyBase64).toBe('TE9HLVBVQkxJQy1LRVk=');
+  });
+
+  it('carries a tool-named offline how-to and the HONEST disclaimer', async () => {
+    const { app } = makeHarness();
+    const b = await bundleOf(await app.request(`/api/credentials/${ID}/evidence`));
+    expect(Array.isArray(b.howToVerify)).toBe(true);
+    expect(b.howToVerify.length).toBeGreaterThanOrEqual(5);
+    const how = b.howToVerify.join(' ');
+    // Names concrete tools/libraries an expert can actually run offline.
+    expect(how).toMatch(/ml_dsa87\.verify|FIPS-204/);
+    expect(how).toMatch(/openssl ts -verify|RFC-3161/);
+    expect(how).toMatch(/SHA-256/);
+    expect(b.disclaimer.length).toBeGreaterThan(0);
+  });
+
+  it('includes the VERIFIED trusted timestamp when the record carries a token', async () => {
+    // A record WITH a token + the fake verifier's default verified result.
+    const h = makeHarness({ tsaTimestampToken: 'fake-tsa-token' }); // pragma: allowlist secret
+    const b = await bundleOf(await h.app.request(`/api/credentials/${ID}/evidence`));
+    expect(b.trustedTimestamp).not.toBeNull();
+    expect(b.trustedTimestamp?.rfc3161TokenBase64).toBe('fake-tsa-token');
+    expect(b.trustedTimestamp?.verified.valid).toBe(true);
+    expect(b.trustedTimestamp?.verified.genTime).toBe('2026-06-04T10:00:05.000Z');
+    expect(b.trustedTimestamp?.verified.tsaSubject).toBe('CN=freeTSA, O=freeTSA.org');
+  });
+
+  it('verifies the RFC-3161 token over the RAW ML-DSA signature BYTES (not the base64)', async () => {
+    // The token covers base64ToBytes(record.mldsaSignature). Prove the service
+    // decoded the signature before calling verifyTimestamp, not passed the string.
+    const h = makeHarness({ tsaTimestampToken: 'fake-tsa-token', mldsaSignature: 'q83v' }); // pragma: allowlist secret
+    await h.app.request(`/api/credentials/${ID}/evidence`);
+    expect(h.verifier.lastTimestampCall).not.toBeNull();
+    expect(h.verifier.lastTimestampCall?.token).toBe('fake-tsa-token');
+    const expected = new Uint8Array(Buffer.from('q83v', 'base64'));
+    expect(Array.from(h.verifier.lastTimestampCall?.data ?? new Uint8Array())).toEqual(
+      Array.from(expected),
+    );
+  });
+
+  it('sets trustedTimestamp to null (honest) when the record has NO token', async () => {
+    // The default record (cryptoBlock / makeRecord) carries no tsaTimestampToken.
+    const { app } = makeHarness();
+    const b = await bundleOf(await app.request(`/api/credentials/${ID}/evidence`));
+    expect(b.trustedTimestamp).toBeNull();
+    // And the disclaimer says so plainly, rather than silently omitting it.
+    expect(b.disclaimer.toLowerCase()).toContain('no independent rfc-3161 timestamp');
+  });
+
+  it('mirrors checkAnchor: a GitHub-published proof appears, a bare proof is null', async () => {
+    // Published (covers the record) → the proof is embedded.
+    const published = makeHarness();
+    published.anchorRepo.add({
+      headSeq: published.record.logSeq,
+      headHash: 'h'.repeat(64),
+      anchoredAt: '2026-06-08T00:00:00.000Z',
+      github: { repo: 'divyamohan1993/dmjone-trust-anchor', commitSha: 'c'.repeat(40), url: 'https://github.com/x' },
+    });
+    const pubBundle = await bundleOf(await published.app.request(`/api/credentials/${ID}/evidence`));
+    expect(pubBundle.externalAnchor).not.toBeNull();
+    expect(pubBundle.externalAnchor?.github?.repo).toBe('divyamohan1993/dmjone-trust-anchor');
+
+    // Bare proof (no github) → null ("pending"), never a false anchored claim.
+    const bare = makeHarness();
+    bare.anchorRepo.add({ headSeq: bare.record.logSeq, headHash: 'h'.repeat(64), anchoredAt: '2026-06-08T00:00:00.000Z' });
+    const bareBundle = await bundleOf(await bare.app.request(`/api/credentials/${ID}/evidence`));
+    expect(bareBundle.externalAnchor).toBeNull();
+  });
+
+  it('carries the right meta (id, kind, status, issuer, verifyUrl)', async () => {
+    const { app } = makeHarness();
+    const b = await bundleOf(await app.request(`/api/credentials/${ID}/evidence`));
+    expect(b.meta.credentialId).toBe(ID);
+    expect(b.meta.kind).toBe('certificate'); // default kind
+    expect(b.meta.status).toBe('valid');
+    // The signed, human-facing issue date from `content` (not the §63 timestamp).
+    expect(b.meta.issuedDate).toBe('2026-06-04');
+    expect(b.meta.issuer).toBe('dmj.one Trust Services');
+    expect(b.meta.verifyUrl).toBe(`https://verify.dmj.one/c/${ID}`);
+  });
+
+  it('returns 404 for an unknown credential id', async () => {
+    const { app } = makeHarness();
+    const res = await app.request('/api/credentials/DMJ-IC-29990101-99/evidence');
+    expect(res.status).toBe(404);
+    const body = await asJson(res);
+    expect(body.requestId).toBeTruthy();
+  });
+
+  it('rejects a malformed credential id with a uniform 400 ApiError', async () => {
+    const { app } = makeHarness();
+    const res = await app.request('/api/credentials/not a valid id/evidence');
+    expect(res.status).toBe(400);
+    const body = await asJson(res);
+    expect(body.code).toBe('VALIDATION_FAILED');
+  });
+
+  // ── Honesty discipline (guarded; the user explicitly demanded it) ───────────
+  it('NEVER overclaims: no "court-proof"/"legally guaranteed"/"valid in court", and ML-DSA is flagged not-CCA', async () => {
+    const { app } = makeHarness();
+    const res = await app.request(`/api/credentials/${ID}/evidence`);
+    const raw = await res.text(); // assert over the WHOLE serialized bundle
+    expect(raw).not.toMatch(/court-proof/i);
+    expect(raw).not.toMatch(/legally guaranteed/i);
+    expect(raw).not.toMatch(/valid in court/i);
+    // "licensed" must appear ONLY inside the honest "not a licensed …" disclaimer,
+    // never as a positive claim — so the only matches are negated ones.
+    const licensedHits = raw.match(/licensed/gi) ?? [];
+    expect(licensedHits.length).toBeGreaterThan(0);
+    expect(raw).toMatch(/not a licensed certifying-authority Digital Signature Certificate/i);
+    // The honest framing the bundle MUST carry, verbatim-ish.
+    const b = await bundleOf(await app.request(`/api/credentials/${ID}/evidence`));
+    const d = b.disclaimer;
+    expect(d).toMatch(/self-signed cryptographic attestation/i);
+    expect(d).toMatch(/independently-verifiable forensic evidence/i);
+    expect(d).toMatch(/not a CCA-recognized algorithm/i);
+    expect(d).toMatch(/no statutory presumption/i);
+  });
+});
+
 describe('GET /c/:credentialId (public credential page)', () => {
   let html: string;
   let status: number;
@@ -733,6 +917,77 @@ describe('GET /c/:credentialId (public credential page)', () => {
     expect(body).toContain('>UNKNOWN<');
     // The signature row is rendered as failed, server-side.
     expect(body).toMatch(/data-check="mldsaSignature" class="fail"/);
+  });
+
+  it('a REVOKED credential LEADS WITH THE WARNING word + alarm glyph, never "Genuine"', async () => {
+    // Safety (Tier 1): the live page for a revoked record must read as a warning at
+    // a glance — the verdict word is the withdrawal, not "Genuine, but…".
+    const { app } = makeHarness({ status: 'revoked', revokedAt: '2026-06-05T00:00:00.000Z' });
+    const res = await app.request(`/c/${ID}`);
+    const body = await res.text();
+    expect(body).toContain('<span id="verdict-word">Revoked.</span>');
+    expect(body).not.toMatch(/Genuine, but/i);
+    expect(body).toContain('<div class="verdict revoked" id="verdict">');
+    // The colour-independent warning glyph fills the hero (no empty seal void).
+    expect(body).toContain('class="glyph" aria-hidden="true">⊘');
+    // No affirmative evidence line on a withdrawn credential.
+    expect(body).not.toContain('class="hardfact"');
+    expect(body).not.toContain('class="compare"');
+    expect(body).toMatch(/class="pill revoked"/);
+  });
+
+  it('the VALID page surfaces the affirmative hero EVIDENCE + compare + honesty lines', () => {
+    // The default beforeEach harness is a VALID certificate. A non-scroller must
+    // see evidence (hard-fact), a prompt to compare (the cert anti-spoof analogue),
+    // and the honesty disclaimer — not just the gold seal + "Genuine.".
+    const flat = html.replace(/\s+/g, ' ');
+    expect(html).toContain('class="hardfact"');
+    expect(flat).toMatch(/Post-quantum signature verified, recorded in the transparency log, not revoked/);
+    expect(html).toContain('class="compare"');
+    expect(flat).toMatch(/Confirm the name, date and details below match the document/);
+    expect(html).toContain('class="honesty"');
+    expect(flat).toMatch(/an independent educational initiative, not a government-licensed certifying authority/);
+    // Honesty lock: never "all N checks passed" (the anchor may legitimately pend).
+    expect(flat).not.toMatch(/all (4|four|the) (cryptographic )?checks passed/i);
+  });
+
+  it('offers the court-ready evidence-bundle download link on the live page', () => {
+    // Deliverable 2: the evidence action sits next to the §63 download.
+    expect(html).toContain('id="dl-evidence"');
+    expect(html).toContain(`/api/credentials/${ID}/evidence`);
+    expect(html.replace(/\s+/g, ' ')).toMatch(/court-ready evidence bundle/i);
+  });
+
+  it('SSRs the honest, conditional trusted-timestamp line WHEN the record carries a verified token', async () => {
+    // Closes the loop on the app.ts wiring: verifyRecordTimestamp (decode the raw
+    // signature bytes → verifyTimestamp) feeds the conditional page line. The fake
+    // verifier's verifyTimestamp defaults to {valid:true, genTime, tsaSubject}.
+    const h = makeHarness({ tsaTimestampToken: 'fake-tsa-token' }); // pragma: allowlist secret
+    const res = await h.app.request(`/c/${ID}`);
+    const body = (await res.text()).replace(/\s+/g, ' ');
+    expect(body).toContain('trust-ts');
+    expect(body).toMatch(/Independently timestamped by CN=freeTSA, O=freeTSA\.org/);
+    expect(body).toContain('2026-06-04T10:00:05.000Z');
+    expect(body).toMatch(/not a legal guarantee/i);
+    // The service decoded the RAW signature bytes (not the base64 string) for the token.
+    expect(h.verifier.lastTimestampCall?.token).toBe('fake-tsa-token');
+  });
+
+  it('does NOT render the timestamp line when the record carries NO token (default)', () => {
+    // The default harness record has no tsaTimestampToken → the line is absent and
+    // nothing is claimed about WHEN the signature existed.
+    expect(html).not.toContain('trust-ts');
+    expect(html).not.toMatch(/Independently timestamped/i);
+  });
+
+  it('does NOT render the timestamp line when a present token FAILS to verify', async () => {
+    // Honesty: a token that does not verify earns no line (never an unverified claim).
+    const h = makeHarness({ tsaTimestampToken: 'fake-tsa-token' }); // pragma: allowlist secret
+    h.verifier.timestampResult = { valid: false };
+    const res = await h.app.request(`/c/${ID}`);
+    const body = await res.text();
+    expect(body).not.toContain('trust-ts');
+    expect(body).not.toMatch(/Independently timestamped/i);
   });
 
   it('renders a branded HTML 404 (not JSON) for an unknown credential', async () => {

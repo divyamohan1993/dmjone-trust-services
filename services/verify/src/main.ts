@@ -10,7 +10,12 @@ import { serve } from '@hono/node-server';
 import { pino } from 'pino';
 import { loadEnv } from '@dmjone/shared';
 import { createFirestoreStores, createInMemoryStores } from '@dmjone/data';
-import { createLogVerifier, createPasswordHasher, createSignatureVerifier } from '@dmjone/crypto';
+import {
+  bytesToBase64,
+  createLogVerifier,
+  createPasswordHasher,
+  createSignatureVerifier,
+} from '@dmjone/crypto';
 import { createVerifyApp } from './app.js';
 import { loadVerifyingKeys, type VerifyKeyMaterial } from './runtime/keys.js';
 
@@ -68,6 +73,13 @@ async function main(): Promise<void> {
       parallelism: env.ARGON2_PARALLELISM,
     }),
     trustedPadesCertFingerprint: padesFingerprint,
+    // Public keys (base64) so the court-ready evidence bundle is self-contained —
+    // an opposing expert re-verifies the ML-DSA record signature + the signed log
+    // head offline. Public material only; verify never holds a private key.
+    evidenceKeys: {
+      mldsaPublicKeyBase64: bytesToBase64(verifyingKeys.mldsaPublicKey),
+      logMldsaPublicKeyBase64: bytesToBase64(verifyingKeys.logMldsaPublicKey),
+    },
   });
 
   serve({ fetch: app.fetch, port: env.PORT }, (info) => {

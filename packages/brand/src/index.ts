@@ -104,14 +104,22 @@ export function designSystemCss(): string {
 
 /* ---- Tokens (verbatim from brand.cssVariables() + web-only status set) ---- */
 :root{
+  /* Opt OUT of UA auto-dark: these are cream-paper surfaces. The color-scheme
+     meta tag alone proved insufficient (Chromium auto-dark still inverted the
+     cream to near-black); the CSS property on :root is the reliable opt-out and
+     applies to every consumer of this sheet (verify + issuer admin). */
+  color-scheme:light;
   --ink:#2B2A28; --ink-soft:#5C554D; --paper:#FFFDFB;
   --gold:#B0892F; --gold-deep:#876616; --gold-soft:#CBA85E;
   --serif:"EB Garamond",Georgia,serif;
   --display:"Playfair Display",Georgia,serif;
   --label:"Marcellus","EB Garamond",serif;
   --script:"Great Vibes",cursive;
-  /* status tokens — desaturated, ink-adjacent so a verdict belongs to the cream institution */
-  --ok:#1F7A4D; --ok-soft:#E5F2EA; --warn:#9A6B12; --warn-soft:#F6ECD6; --bad:#9A2B2B; --bad-soft:#F6E2E0;
+  /* status tokens — desaturated, ink-adjacent so a verdict belongs to the cream institution.
+     AA: --warn #8A5E0E hits 4.85:1 on --warn-soft (its darkest ground, the .pill.unconfirmed
+     chip) and 5.69:1 on white; --ok 5.32:1 / --bad 7.62:1 on white. All three verdict
+     colours clear 4.5:1 small-text on every background they render on. */
+  --ok:#1F7A4D; --ok-soft:#E5F2EA; --warn:#8A5E0E; --warn-soft:#F6ECD6; --bad:#9A2B2B; --bad-soft:#F6E2E0;
   /* shared frame/elevation constants */
   --rule-outer:rgba(176,137,47,.34); --rule-inner:rgba(203,168,94,.45);
   --lift:0 1px 0 rgba(176,137,47,.18), 0 18px 44px -28px rgba(43,42,40,.45);
@@ -142,7 +150,9 @@ a{color:var(--gold-deep)}
 .skip:focus{left:16px;top:12px;background:var(--ink);color:var(--paper);padding:8px 14px;border-radius:6px;z-index:10}
 /* visually-hidden: carries pass/fail words + table headers to assistive tech */
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;border:0}
-:focus-visible{outline:3px solid var(--gold-soft);outline-offset:2px}
+/* Focus ring uses gold-DEEP (5.25:1 on cream), not gold-soft (2.22:1, fails the
+   1.4.11 3:1 floor for focus indicators). gold-soft stays the decorative token. */
+:focus-visible{outline:3px solid var(--gold-deep);outline-offset:2px}
 
 /* ---- Type scale (1.25 major-third, fluid) -------------------------------- */
 .eyebrow{font-family:var(--label);font-size:11.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--gold-deep)}
@@ -150,7 +160,15 @@ a{color:var(--gold-deep)}
 .recipient{font-family:var(--label);font-size:clamp(17px,2.4vw,21px);letter-spacing:.06em;color:var(--ink);margin-top:14px}
 .recipient .lbl{display:block;font-family:var(--serif);font-style:italic;font-size:13px;letter-spacing:0;color:var(--ink-soft);margin-bottom:2px}
 code.mono,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Courier New",monospace;font-size:13px}
-code.mono{background:#F4EFE6;padding:2px 7px;border-radius:6px;color:var(--ink)}
+code.mono{background:#F4EFE6;padding:2px 7px;border-radius:6px;color:var(--ink);overflow-wrap:anywhere}
+/* upload hero: a user-supplied filename shown as a dignified document name —
+   NOT force-uppercased (a long filename in caps becomes an unreadable blob). */
+.type-title.doc-name{text-transform:none;letter-spacing:.004em;font-weight:700;font-size:clamp(20px,3.1vw,28px);line-height:1.22;overflow-wrap:break-word}
+/* the file-type chip + document number beneath an attested-document headline */
+.docmeta{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-top:13px;font-family:var(--label);font-size:13px;letter-spacing:.04em;color:var(--ink-soft)}
+.docmeta .filechip{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold-deep);border:1px solid var(--rule-inner);background:#FBF4E4;border-radius:6px;padding:3px 9px;line-height:1}
+.docmeta .docnum .k{font-family:var(--serif);font-style:italic;letter-spacing:0;color:var(--ink-soft)}
+.docmeta .docnum .mono{color:var(--ink)}
 
 /* ---- Masthead ------------------------------------------------------------ */
 header.brand{display:flex;align-items:baseline;gap:.7ch;flex-wrap:wrap;padding-bottom:18px;border-bottom:1px solid rgba(176,137,47,.28)}
@@ -216,11 +234,34 @@ header.brand{display:flex;align-items:baseline;gap:.7ch;flex-wrap:wrap;padding-b
 .facts h2{font-family:var(--label);font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--gold-deep);margin:18px 0 10px}
 dl.grid{display:grid;grid-template-columns:minmax(140px,32%) 1fr;gap:10px 18px;margin:0}
 dl.grid dt{font-family:var(--serif);font-style:italic;color:var(--ink-soft);font-size:14px}
-dl.grid dd{margin:0;font-family:var(--label);letter-spacing:.02em;color:var(--ink);font-size:14.5px}
+dl.grid dd{margin:0;font-family:var(--label);letter-spacing:.02em;color:var(--ink);font-size:14.5px;min-width:0;overflow-wrap:anywhere}
 .pill{display:inline-block;font-family:var(--label);font-size:12px;letter-spacing:.06em;text-transform:uppercase;padding:3px 10px;border-radius:999px}
 .pill.valid{background:var(--ok-soft);color:var(--ok)} .pill.revoked{background:var(--bad-soft);color:var(--bad)} .pill.unknown{background:#F1EEEA;color:var(--ink-soft)}
 .trust{margin-top:24px;padding:16px 18px;background:#FBF7EF;border:1px solid rgba(176,137,47,.30);border-radius:12px;font-size:13.5px;color:var(--ink-soft)}
 .trust strong{color:var(--ink);font-weight:600}
+
+/* ---- Upload FILE-GATE: a valid upload is NEVER shown as file-authentic from the
+   id/QR alone (a copied QR/number can sit on any file); the dropzone earns it --- */
+.verdict.unconfirmed .word{color:var(--gold-deep)}
+.verdict.unconfirmed .glyph{color:var(--gold-deep);border:1.5px solid var(--gold-soft);border-radius:50%;font-size:13px}
+.status.unconfirmed{background:#FBF6EA;border-color:var(--warn-soft)} .status.unconfirmed .dot{background:var(--gold)}
+.pill.unconfirmed{background:var(--warn-soft);color:var(--warn)}
+.filecheck{margin-top:22px;border:1px solid rgba(176,137,47,.32);border-radius:12px;background:#FBF7EF;padding:16px 18px}
+.filecheck .fc-lead{font-family:var(--label);font-size:15px;letter-spacing:.04em;color:var(--ink);margin:0}
+.filecheck .fc-why{font-size:13px;color:var(--ink-soft);margin:6px 0 13px}
+/* Dropzone border uses --gold (3.25:1 on white), not --gold-soft (2.26:1): the
+   dashed edge is a functional drop-target affordance, so it clears 1.4.11's 3:1
+   even though the gold-deep .fc-cta/.btn inside also identify it. Resting --gold
+   -> .over --gold-deep stays a natural darkening cue. */
+.fc-drop{border:1.5px dashed var(--gold);border-radius:10px;background:#fff;padding:14px 16px;display:flex;flex-wrap:wrap;align-items:center;gap:12px;transition:border-color 120ms ease,background 120ms ease}
+.fc-drop.over{border-color:var(--gold-deep);background:#FCF7EC}
+.fc-cta{font-family:var(--label);font-size:13.5px;letter-spacing:.02em;color:var(--gold-deep);cursor:pointer;flex:1 1 220px}
+.fc-input{flex:1 1 170px;font-size:13px;padding:7px 8px}
+.fc-drop .btn{flex:0 0 auto}
+.fc-note{font-size:12px;color:var(--ink-soft);margin:13px 0 0;overflow-wrap:anywhere}
+.fc-note .mono{font-size:11px}
+.fc-msg{font-size:13.5px;margin:10px 0 0;min-height:1.2em}
+.fc-msg.ok{color:var(--ok);font-family:var(--label)} .fc-msg.err{color:var(--bad);font-family:var(--label)}
 
 /* ---- Buttons / actions / panels (shared by verify + issuer) -------------- */
 .actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:26px}
@@ -240,9 +281,12 @@ details.panel[open]>summary::after{content:"\2212"}
 
 /* ---- Forms (verify download + issuer issuance + landing lookup) ---------- */
 label{display:block;font-size:13px;color:var(--ink-soft);margin:14px 0 6px}
-input,textarea,select{width:100%;padding:11px 12px;font-size:15px;border:1px solid #D8CFC0;border-radius:8px;font-family:var(--serif);background:#fff;color:var(--ink)}
+/* Resting field border: an empty input is white-on-white, so the border is the
+   field's SOLE boundary — it must hit 1.4.11's 3:1. #9F9276 = 3.07:1 on white
+   (was #D8CFC0, 1.54:1). Still a warm ink-adjacent grey, not gold. */
+input,textarea,select{width:100%;padding:11px 12px;font-size:15px;border:1px solid #9F9276;border-radius:8px;font-family:var(--serif);background:#fff;color:var(--ink)}
 textarea{min-height:6rem;resize:vertical}
-input:focus-visible,textarea:focus-visible,select:focus-visible{outline:3px solid var(--gold-soft);outline-offset:1px;border-color:var(--gold)}
+input:focus-visible,textarea:focus-visible,select:focus-visible{outline:3px solid var(--gold-deep);outline-offset:1px;border-color:var(--gold)}
 .field-row{display:flex;gap:16px;flex-wrap:wrap}
 /* the utility that replaces ALL four inline style="flex:1 1 12rem" divs */
 .field-half{flex:1 1 12rem}

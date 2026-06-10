@@ -230,6 +230,19 @@ export class FakeSignatureVerifier implements SignatureVerifier {
     certFingerprint: 'c'.repeat(64),
     signerSubject: 'CN=dmj.one Trust Services, OU=Document Signing, C=IN',
   };
+  /**
+   * RFC-3161 timestamp-verification result the double returns. Defaults to a
+   * VERIFIED token (so the evidence-bundle / page timestamp paths can assert the
+   * happy case); flip `valid` / clear the fields to exercise the unverified path.
+   * The real verifier is sync and never throws — this mirrors that.
+   */
+  timestampResult: { valid: boolean; genTime?: string; tsaSubject?: string } = {
+    valid: true,
+    genTime: '2026-06-04T10:00:05.000Z',
+    tsaSubject: 'CN=freeTSA, O=freeTSA.org',
+  };
+  /** The (token, data) of the most recent verifyTimestamp call (wiring assertions). */
+  lastTimestampCall: { token: string; data: Uint8Array } | null = null;
 
   verifyMldsa(_content: CredentialContent, _pdfSha256: string, _signatureB64: string): boolean {
     return this.mldsaValid;
@@ -241,6 +254,14 @@ export class FakeSignatureVerifier implements SignatureVerifier {
 
   verifyPdfPades(_signedPdf: Uint8Array): Promise<PadesVerifyResult> {
     return Promise.resolve(this.padesResult);
+  }
+
+  verifyTimestamp(
+    tokenB64: string,
+    data: Uint8Array,
+  ): { valid: boolean; genTime?: string; tsaSubject?: string } {
+    this.lastTimestampCall = { token: tokenB64, data };
+    return this.timestampResult;
   }
 }
 

@@ -39,6 +39,7 @@ import {
   AppError,
   ERROR_CODE,
   credentialIdParamSchema,
+  documentKind,
   downloadSchema,
 } from '@dmjone/shared';
 import { checkAnchor, checkLogInclusion, deriveOutcome, publicFieldsOf } from './verification.js';
@@ -89,6 +90,15 @@ export interface VerifyDeps {
    * make a trustworthy PAdES claim without it.
    */
   trustedPadesCertFingerprint: string;
+  /**
+   * The issuer's PUBLIC verification keys, base64-encoded, so the court-ready
+   * evidence bundle (GET /api/credentials/:id/evidence) is SELF-CONTAINED: an
+   * opposing expert can re-verify the ML-DSA-87 record signature and the signed
+   * transparency-log head with NO access to dmj.one. These are public keys only —
+   * the keyless verify service never holds a private key. Wired by the composition
+   * root from the already-loaded `verifyingKeys` (Uint8Array → base64).
+   */
+  evidenceKeys: { mldsaPublicKeyBase64: string; logMldsaPublicKeyBase64: string };
   /**
    * A real Argon2id PHC string used to timing-equalise "missing credential"
    * download attempts. The composition root computes it ONCE at startup via
@@ -145,6 +155,33 @@ function buildDummyPasswordHash(env: AppEnv): string {
 
 function sha256Hex(bytes: Uint8Array): string {
   return bytesToHex(sha256(bytes));
+}
+
+/**
+ * Decode standard base64 → bytes WITHOUT importing a concrete crypto sibling
+ * (the keyless DI layer must not). Same primitive `runtime/keys.ts` uses for the
+ * public key blob. Used to recover the RAW ML-DSA signature bytes that the
+ * RFC-3161 token was computed over (verifyTimestamp wants the bytes, not base64).
+ */
+function b64ToBytes(b64: string): Uint8Array {
+  return new Uint8Array(Buffer.from(b64, 'base64'));
+}
+
+/**
+ * Compute the record's RFC-3161 trusted-timestamp verification, server-side and
+ * never-throwing, so both the SSR page line and the evidence bundle agree. The
+ * token (when present) was minted over the RAW ML-DSA signature bytes, so we
+ * decode `record.mldsaSignature` before verifying. Returns `null` when the record
+ * carries no token (legacy / TSA was unreachable at issue-time) — an honest
+ * "no independent timestamp", never a half-claim.
+ */
+function verifyRecordTimestamp(
+  deps: VerifyDeps,
+  record: CredentialRecord,
+): { valid: boolean; genTime?: string; tsaSubject?: string } | null {
+  const token = record.tsaTimestampToken;
+  if (!token) return null;
+  return deps.verifier.verifyTimestamp(token, b64ToBytes(record.mldsaSignature));
 }
 
 /** Build the canonical ApiError body and throw it as an HTTP response. */
@@ -291,6 +328,10 @@ export function createVerifyApp(deps: VerifyDeps): Hono<{ Variables: RequestVars
     // genuine cryptographic verdict (court-presentable), not a status echo. The
     // client script later re-runs the same check live for the animated ledger.
     const checks = await buildChecks(deps, record);
+    // Verify any RFC-3161 trusted timestamp server-side so the honest, conditional
+    // "Independently timestamped …" line renders with JS off. Only a VERIFIED token
+    // earns the line; an absent or non-verifying token claims nothing.
+    const ts = verifyRecordTimestamp(deps, record);
     const html = renderCredentialPage({
       record,
       issuer: issuerName,
@@ -298,6 +339,16 @@ export function createVerifyApp(deps: VerifyDeps): Hono<{ Variables: RequestVars
       verifyBaseUrl: env.VERIFY_PUBLIC_URL,
       nonce,
       verification: { outcome: deriveOutcome(checks), checks },
+      // exactOptionalPropertyTypes: only include keys that are actually present,
+      // never set an optional field to `undefined`.
+      ...(ts && ts.valid
+        ? {
+            trustedTimestamp: {
+              ...(ts.genTime !== undefined ? { genTime: ts.genTime } : {}),
+              ...(ts.tsaSubject !== undefined ? { tsaSubject: ts.tsaSubject } : {}),
+            },
+          }
+        : {}),
     });
     return c.html(html);
   });
@@ -421,6 +472,32 @@ export function createVerifyApp(deps: VerifyDeps): Hono<{ Variables: RequestVars
       fail('CREDENTIAL_NOT_FOUND', 'No certificate of authenticity for that credential.', 404);
     }
     return pdfResponse(c, bytes, `${parsed.data.credentialId}-section63.pdf`, 'inline');
+  });
+
+  // ── Court-ready, OFFLINE-verifiable evidence bundle (public, JSON download) ──
+  // A self-contained "trust nobody" artifact: it carries the exact signed bytes,
+  // the detached ML-DSA-87 signature + the issuer's PUBLIC key, the signed
+  // transparency-log head + the log's PUBLIC key, the external anchor (or honest
+  // null), the RFC-3161 trusted timestamp (verified), and a tool-named, offline
+  // how-to so an opposing expert re-verifies EVERYTHING with no access to dmj.one.
+  // Honest framing only — independently-verifiable forensic evidence, NOT a
+  // licensed-CA Digital Signature Certificate and no statutory presumption.
+  app.get('/api/credentials/:credentialId/evidence', async (c) => {
+    const parsed = credentialIdParamSchema.safeParse({ credentialId: c.req.param('credentialId') });
+    if (!parsed.success) {
+      fail('VALIDATION_FAILED', 'Invalid credential id.', 400);
+    }
+    const record = await deps.credentialRepo.getById(parsed.data.credentialId);
+    if (!record) {
+      fail('CREDENTIAL_NOT_FOUND', 'No credential matches that id.', 404);
+    }
+    const bundle = await buildEvidenceBundle(deps, record, issuerName);
+    // Self-contained download; never cached (it embeds the live head + anchor state).
+    c.header('Content-Type', 'application/json; charset=utf-8');
+    c.header('Content-Disposition', `attachment; filename="${record.id}-evidence.json"`);
+    c.header('Cache-Control', 'no-store');
+    // Pretty-print: the bundle is meant to be opened and read by a human expert.
+    return c.body(JSON.stringify(bundle, null, 2));
   });
 
   // ── Uniform error + 404 handling ───────────────────────────────────────────
@@ -561,6 +638,103 @@ async function buildChecks(
     logInclusion,
     anchorProof,
     notRevoked: record.status === 'valid',
+  };
+}
+
+/**
+ * Assemble the SELF-CONTAINED, offline-verifiable evidence bundle for a record.
+ *
+ * "Trust nobody": every field an opposing expert needs to re-verify each check
+ * with NO access to dmj.one is embedded — the exact signed content + its hashes,
+ * the detached ML-DSA-87 signature + the issuer's PUBLIC key, the signed log head
+ * + the log's PUBLIC key, the external anchor (or honest null), the RFC-3161
+ * trusted timestamp (verified), and a tool-named offline how-to. The honest
+ * framing in `disclaimer` is load-bearing and guarded by tests: this maximises
+ * EVIDENTIARY WEIGHT; it is NOT a licensed-CA Digital Signature Certificate and
+ * asserts NO statutory presumption.
+ *
+ * `externalAnchor` uses the SAME predicate as {@link checkAnchor} (latest proof,
+ * `headSeq >= record.logSeq && github != null`) so the bundle and the page never
+ * disagree about whether the record is externally anchored.
+ */
+async function buildEvidenceBundle(
+  deps: VerifyDeps,
+  record: CredentialRecord,
+  issuer: string,
+): Promise<Record<string, unknown>> {
+  const [head, latestAnchor] = await Promise.all([
+    deps.logRepo.getHead(),
+    deps.anchorRepo.latest(),
+  ]);
+  // Honest external-anchor surface: the actual proof ONLY when it genuinely
+  // covers this record AND was published to the public GitHub store; else null
+  // ("pending"). Identical condition to checkAnchor → page and bundle agree.
+  const externalAnchor =
+    latestAnchor && latestAnchor.headSeq >= record.logSeq && latestAnchor.github != null
+      ? latestAnchor
+      : null;
+
+  // RFC-3161 trusted timestamp, verified server-side over the RAW signature bytes.
+  const ts = verifyRecordTimestamp(deps, record);
+  const trustedTimestamp =
+    record.tsaTimestampToken && ts
+      ? {
+          rfc3161TokenBase64: record.tsaTimestampToken,
+          messageImprintNote:
+            'the token was computed over the RAW ML-DSA signature bytes (base64-decode signature.valueBase64 before checking its messageImprint)',
+          verified: ts,
+        }
+      : null;
+
+  return {
+    meta: {
+      credentialId: record.id,
+      kind: documentKind(record),
+      status: record.status,
+      // The human-facing issue date as authored and SIGNED into `content`
+      // (every kind carries `issueDate`), not the §63 production timestamp.
+      issuedDate: record.content.issueDate,
+      generatedAt: new Date().toISOString(),
+      issuer,
+      verifyUrl: `${deps.env.VERIFY_PUBLIC_URL}/c/${record.id}`,
+    },
+    // The exact data that was signed (the canonical payload is derived from this).
+    content: record.content,
+    document: { pdfSha256: record.pdfSha256, hashAlgorithm: 'SHA-256' },
+    canonical: {
+      payload: record.canonicalPayload,
+      sha256: record.canonicalSha256,
+      note: 'the exact UTF-8 bytes the signature covers',
+    },
+    signature: {
+      algorithm: 'ML-DSA-87 (NIST FIPS 204)',
+      valueBase64: record.mldsaSignature,
+      publicKeyBase64: deps.evidenceKeys.mldsaPublicKeyBase64,
+      publicKeyId: record.mldsaPublicKeyId,
+    },
+    transparencyLog: {
+      seq: record.logSeq,
+      leafHash: record.logLeafHash,
+      head,
+      logPublicKeyBase64: deps.evidenceKeys.logMldsaPublicKeyBase64,
+      note: 'leaf = SHA-256(canonicalSha256); head is ML-DSA-signed',
+    },
+    externalAnchor,
+    trustedTimestamp,
+    howToVerify: [
+      'Confirm the canonical bytes: take canonical.payload (the exact UTF-8 string the signature covers) and check SHA-256(canonical.payload) equals canonical.sha256. The payload is deterministic JSON (recursively sorted keys, no insignificant whitespace) over the fields in `content` plus document.pdfSha256, so independently re-serialising `content` + document.pdfSha256 the same way reproduces canonical.payload byte-for-byte.',
+      'Verify the ML-DSA-87 signature over those canonical bytes (the UTF-8 of canonical.payload) using signature.publicKeyBase64 — e.g. @noble/post-quantum ml_dsa87.verify(publicKey, utf8Bytes(canonical.payload), base64Decode(signature.valueBase64)), or any NIST FIPS 204 verifier.',
+      trustedTimestamp
+        ? 'Verify the RFC-3161 token (trustedTimestamp.rfc3161TokenBase64, base64 DER) with `openssl ts -verify` or an equivalent RFC-3161 library; confirm its messageImprint equals SHA-256 of the RAW signature bytes (base64-decode signature.valueBase64 first — the token covers the signature bytes, NOT the canonical payload), and read its genTime. Chain-validating the TSA certificate to a public root is the relying party’s own step.'
+        : 'No independent RFC-3161 timestamp was obtained for this record (trustedTimestamp is null), so there is no timestamp step.',
+      'Confirm the transparency-log leaf: leafHash equals SHA-256(canonical.sha256), then verify the head signature — ML-DSA-87 over transparencyLog.head.headHash, in transparencyLog.head.signature — using transparencyLog.logPublicKeyBase64. (Full Merkle audit-path proof is a relying-party step; this bundle pins leaf consistency under one signed head.)',
+      'Confirm document.pdfSha256 equals the SHA-256 of the certificate file you are holding, so the bytes attested here are the bytes in your hand.',
+    ],
+    disclaimer:
+      'This bundle is independently-verifiable forensic evidence: a self-signed cryptographic attestation by dmj.one, an independent educational initiative. It maximises evidentiary weight; it is NOT a licensed certifying-authority Digital Signature Certificate. ML-DSA-87 is a NIST FIPS 204 post-quantum algorithm but is NOT a CCA-recognized algorithm under Indian law, and no statutory presumption is asserted.' +
+      (trustedTimestamp
+        ? ''
+        : ' No independent RFC-3161 timestamp was obtained for this record, so the time the signature existed is not independently corroborated here.'),
   };
 }
 

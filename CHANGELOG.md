@@ -6,6 +6,26 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+
+- 2026-06-09: **Legal-grade forensic verification (Phase 1): RFC-3161 trusted
+  timestamps + a court-ready evidence bundle.** Each issued credential is now
+  best-effort timestamped by an independent RFC-3161 Time-Stamping Authority over
+  its detached ML-DSA-87 signature (independent proof of *when* the signature
+  existed; a TSA outage never blocks issuance), and the token is persisted. The
+  verify service exposes `GET /api/credentials/:id/evidence` — a self-contained,
+  fully offline-verifiable JSON bundle (canonical bytes, the ML-DSA-87 signature +
+  public key, the transparency-log head + log key, the external anchor, the
+  RFC-3161 token + its verified genTime/TSA subject, and step-by-step instructions
+  an opposing expert can re-run with no access to dmj.one). A new token verifier
+  (`verifyTimestampToken`) hand-walks the RFC-3161 ASN.1 with trial-verification
+  signer-cert selection and digest-agility, proven against live DigiCert (RSA/
+  SHA-256) and Sectigo (RSA/SHA-384) tokens. Honesty held throughout: every string
+  is "independently-verifiable forensic evidence," never a licensed-CA Digital
+  Signature Certificate or a statutory presumption (ML-DSA-87 is not CCA-recognized
+  under Indian law). Requires `TSA_URL` on an RSA-SHA-2 TSA (DigiCert/Sectigo);
+  FreeTSA (ECDSA) tokens store but verify invalid.
+
 ### Fixed
 
 - 2026-06-08: **Letter/upload verify pages returned 500; their ML-DSA verdict read
@@ -19,6 +39,36 @@ All notable changes to this project are documented here. Format follows
   this seam.
 
 ### Changed
+
+- 2026-06-10: **Verify page: cinematic "Engraved Instrument" redesign + a
+  brutal-critique hardening pass + WCAG 2.2 AA.** The public page is now a minimal
+  ~100svh hero (verdict + gold seal) with the cryptographic proof progressively
+  disclosed below the fold. A self-critique then closed the failure modes of a
+  beautiful-but-misleading page: **bad-state gravity** — revoked/tampered now LEAD
+  with the warning ("Revoked." / "Altered." with colour-independent ⊘/✕ glyphs, a
+  struck-through + dimmed credential identity, no empty seal void), so a withdrawn
+  or forged document can't be mis-read as genuine; a **certificate-comparison
+  prompt** ("confirm the name, date and details match the document you're holding")
+  since a copied QR can still display a true record; an **honesty line by the
+  verdict** (independent initiative, not a government-licensed certifying
+  authority); a **hero hard-fact line** so the first screen shows evidence, not
+  just a seal; plainer jargon; and **WCAG-AA contrast** across the shared design
+  system (small-text gold→gold-deep, `--warn` darkened to 4.85:1, form/dropzone
+  borders to ≥3:1, focus rings). The hero is rem-sized + svh-compacted to fit one
+  fold (no cut-off scroll cue) on phones, laptops, desktops and landscape; the
+  title auto-fits any length with no vw feedback loop.
+
+- 2026-06-09: **Verify page hardened against QR/ID spoofing, plus a dignified
+  redesign.** For uploaded ("attested") documents, a scanned QR or typed document
+  number no longer earns a green verdict on its own — a copied QR/number can sit on
+  any file. The page leads with a cautious "Confirm your copy" file-gate whose
+  decisive integrity check stays neutral until the holder provides the file, then
+  re-runs the full cryptographic chain (hash + ML-DSA-87 signature + transparency
+  log + revocation) and earns green only on a byte-for-byte match; a forged file is
+  shown, honestly, as "does not match." Certificates and letters (which display
+  authoritative content the verifier can compare) keep their id/QR verdict. The
+  upload hero no longer force-uppercases the raw filename into an unreadable blob,
+  and the on-screen fingerprint is masked.
 
 - 2026-06-08: **High-quality transparent signature.** The handwritten-signature asset is
   now a clean transparent PNG — white background removed, JPEG speckle/ringing despeckled,

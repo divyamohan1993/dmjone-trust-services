@@ -12,8 +12,8 @@
 
 import { describe, expect, it } from 'vitest';
 import { renderCredentialPage, type CredentialPageInput } from '../src/page.js';
-import { makeLetterRecord, makeUploadRecord } from './fakes.js';
-import type { CredentialRecord, VerificationChecks } from '@dmjone/shared';
+import { makeLetterRecord, makeRecord, makeUploadRecord } from './fakes.js';
+import type { CredentialRecord, VerificationChecks, VerificationOutcome } from '@dmjone/shared';
 
 const ALL_GOOD: VerificationChecks = {
   mldsaSignature: true,
@@ -76,6 +76,18 @@ function assertSharedInvariants(html: string): void {
   expect(flat).toMatch(/published or still pending/i);
   expect(flat).not.toMatch(/independent (public |external )?(repository|system)/i);
   expect(flat).not.toMatch(/OpenTimestamps|Bitcoin/i);
+
+  // Court-ready evidence bundle: a download action is ALWAYS offered, pointing at
+  // the new /evidence endpoint. The label is the sanctioned "court-ready"
+  // (forensic-evidence) framing, never an overclaim.
+  expect(html).toContain('id="dl-evidence"');
+  expect(html).toMatch(/href="\/api\/credentials\/[^"]*\/evidence"/);
+  expect(flat).toMatch(/court-ready evidence bundle/i);
+  // Honesty guard EXTENDED to all the new copy: no forbidden phrases anywhere on
+  // the page (the page surfaces the timestamp + the bundle link).
+  expect(flat).not.toMatch(/court-proof/i);
+  expect(flat).not.toMatch(/legally guaranteed/i);
+  expect(flat).not.toMatch(/valid in court/i);
 }
 
 describe('renderCredentialPage — letter (Mode 2)', () => {
@@ -113,6 +125,13 @@ describe('renderCredentialPage — letter (Mode 2)', () => {
     expect(out).toContain('&lt;script&gt;');
     expect(out).toContain('&amp;');
   });
+
+  it('does NOT show the upload file-gate (certificates/letters keep their id/QR verdict)', () => {
+    // The anti-spoof file gate is upload-only: certs/letters display authoritative
+    // content the verifier can compare, so the id/QR verdict stays meaningful.
+    expect(html).not.toContain('id="fc-form"');
+    expect(html).toContain('data-filegate="0"');
+  });
 });
 
 describe('renderCredentialPage — upload (Mode 3)', () => {
@@ -122,8 +141,15 @@ describe('renderCredentialPage — upload (Mode 3)', () => {
     assertSharedInvariants(html);
   });
 
-  it('renders an "Attested document · <filename>" hero', () => {
-    expect(html).toContain('Attested document · offer-letter.pdf');
+  it('renders an "Attested Document" hero: category eyebrow, humanised doc name, type chip + number', () => {
+    // The category is the eyebrow ONCE — no longer doubled into a force-uppercased
+    // headline that turned a long filename into an unreadable all-caps blob.
+    expect(html).toContain('<p class="eyebrow">Attested Document</p>');
+    // The headline is the filename as a dignified document name: extension dropped,
+    // separators collapsed to spaces, original case preserved, NOT force-uppercased.
+    expect(html).toContain('<h1 class="type-title doc-name" id="cred-title">offer letter</h1>');
+    // The extension is a small chip; the document number sits in the calm meta line.
+    expect(html).toContain('<span class="filechip">PDF</span>');
     expect(html).toContain('DMJ-DOC-20260604-01'); // document number in the hero
   });
 
@@ -156,6 +182,33 @@ describe('renderCredentialPage — upload (Mode 3)', () => {
     expect(out).toContain('&lt;img');
     expect(out).toContain('&amp;');
     expect(out).toContain('&quot;');
+  });
+
+  it('does NOT assert the FILE is authentic from the id/QR alone (anti-spoof file gate)', () => {
+    // An upload shows no human-comparable content, so a scanned QR/number must not
+    // inherit a green "valid" verdict — a copied QR on a forged file would too.
+    expect(html).toContain('data-filegate="1"');
+    expect(html).toContain('<div class="verdict unconfirmed" id="verdict">');
+    expect(html).not.toContain('<div class="verdict valid" id="verdict">');
+    expect(html).toContain('Confirm your copy.');
+    // The decisive check: drop the actual bytes → POST /api/verify/file.
+    expect(html).toContain('id="fc-form"');
+    expect(html).toContain('action="/api/verify/file"');
+    expect(html).toContain('type="file"');
+    // The spoof is named in plain words, and the attested fingerprint is shown as
+    // exactly what the held file must match, byte-for-byte.
+    const flat = html.replace(/\s+/g, ' ');
+    expect(flat).toMatch(/copied onto any file/i);
+    expect(flat).toMatch(/byte-for-byte/i);
+    // The dropzone fingerprint is shown MASKED (head + tail), never the full hash —
+    // the server compares the full hash against its record, so the display is only
+    // reassurance. (The full record fingerprint lives in the details grid.)
+    expect(html).not.toContain('a'.repeat(64));
+    expect(html).toContain('aaaaaaaaaa…aaaaaa');
+    // The DECISIVE file-integrity check is an explicit row, NEUTRAL until the
+    // verifier provides the file — never rendered as already passed from id/QR.
+    expect(html).toContain('data-check="hashMatch" data-filecheck="1"');
+    expect(flat).toMatch(/Awaiting your file/i);
   });
 });
 
@@ -254,5 +307,262 @@ describe('renderCredentialPage — a false external anchor renders as PENDING, n
     expect(flat).not.toMatch(/re-?anchored automatically/);
     expect(flat).not.toMatch(/anchored shortly/);
     expect(flat).not.toMatch(/background (job|process|task)/);
+  });
+});
+
+/**
+ * The trusted-timestamp line is CONDITIONAL and HONEST: it appears ONLY when the
+ * route handler verified an RFC-3161 token for the record, names WHEN the
+ * signature existed, and explicitly disclaims being a legal guarantee. Absent
+ * input ⇒ nothing is rendered (no token, or one that failed to verify). The
+ * subject comes from a TSA cert, so it must be HTML-escaped on this surface.
+ */
+function pageWithTimestamp(ts?: { genTime?: string; tsaSubject?: string }): string {
+  const input: CredentialPageInput = {
+    record: makeLetterRecord(),
+    issuer: 'dmj.one Trust Services',
+    issuerLegalName: 'dmj.one (independent educational initiative)',
+    verifyBaseUrl: 'https://verify.dmj.one',
+    nonce: 'test-nonce',
+    verification: { outcome: 'valid', checks: { ...ALL_GOOD } },
+    ...(ts ? { trustedTimestamp: ts } : {}),
+  };
+  return renderCredentialPage(input);
+}
+
+describe('renderCredentialPage — trusted-timestamp line (conditional + honest)', () => {
+  it('renders ONE honest, conditional line when a verified timestamp is present', () => {
+    const html = pageWithTimestamp({
+      genTime: '2026-06-04T10:00:05.000Z',
+      tsaSubject: 'CN=freeTSA, O=freeTSA.org',
+    });
+    const flat = html.replace(/\s+/g, ' ');
+    expect(html).toContain('trust-ts');
+    expect(flat).toMatch(/Independently timestamped by CN=freeTSA, O=freeTSA\.org/);
+    expect(flat).toContain('2026-06-04T10:00:05.000Z');
+    // RFC-3161, rendered with a non-breaking hyphen entity (&#8209;) for typography.
+    expect(flat).toMatch(/RFC(&#8209;|.{0,2})3161/);
+    // Honest scope: it is forensic evidence of WHEN, explicitly NOT a legal guarantee.
+    expect(flat).toMatch(/independently-verifiable forensic evidence/i);
+    expect(flat).toMatch(/not a legal guarantee/i);
+    // Never an overclaim.
+    expect(flat).not.toMatch(/court-proof/i);
+    expect(flat).not.toMatch(/legally guaranteed/i);
+    expect(flat).not.toMatch(/valid in court/i);
+  });
+
+  it('renders NOTHING when no verified timestamp is provided (legacy / TSA outage)', () => {
+    const html = pageWithTimestamp(); // no trustedTimestamp at all
+    expect(html).not.toContain('trust-ts');
+    expect(html).not.toMatch(/Independently timestamped/i);
+  });
+
+  it('HTML-escapes a hostile TSA subject (it comes from a certificate)', () => {
+    const html = pageWithTimestamp({
+      genTime: '2026-06-04T10:00:05.000Z',
+      tsaSubject: 'CN=<script>alert(1)</script> & "x"',
+    });
+    expect(html).not.toContain('<script>alert(1)</script>');
+    expect(html).toContain('&lt;script&gt;');
+    expect(html).toContain('&amp;');
+    // Still survives its own CSP (no inline style/handlers introduced by the line).
+    expect(html).not.toMatch(/\sstyle=/i);
+    expect(html).not.toMatch(/\son\w+=/i);
+  });
+});
+
+describe('renderCredentialPage — court-ready evidence bundle download link', () => {
+  it('offers the evidence download next to the §63 download, for every kind', () => {
+    for (const html of [pageOf(makeLetterRecord()), pageOf(makeUploadRecord())]) {
+      // Both actions present; the evidence link points at the /evidence endpoint.
+      expect(html).toContain('id="dl-63"');
+      expect(html).toContain('id="dl-evidence"');
+      expect(html).toMatch(/href="\/api\/credentials\/[^"]*\/evidence"/);
+      expect(html.replace(/\s+/g, ' ')).toMatch(/court-ready evidence bundle/i);
+    }
+  });
+});
+
+/**
+ * Render a certificate page at an arbitrary outcome (the default fakes are all
+ * 'valid'). The checks are made internally consistent with the outcome so the
+ * SSR ledger and verdict agree, the same way the route handler would feed them.
+ */
+function certPageWithOutcome(
+  outcome: VerificationOutcome,
+  overrides: { trustedTimestamp?: { genTime?: string; tsaSubject?: string } } = {},
+): string {
+  const checks: VerificationChecks = {
+    ...ALL_GOOD,
+    notRevoked: outcome !== 'revoked',
+    hashMatch: outcome !== 'tampered',
+    mldsaSignature: outcome !== 'unknown',
+  };
+  const input: CredentialPageInput = {
+    record: makeRecord(),
+    issuer: 'dmj.one Trust Services',
+    issuerLegalName: 'dmj.one (independent educational initiative)',
+    verifyBaseUrl: 'https://verify.dmj.one',
+    nonce: 'test-nonce',
+    verification: { outcome, checks },
+    ...(overrides.trustedTimestamp ? { trustedTimestamp: overrides.trustedTimestamp } : {}),
+  };
+  return renderCredentialPage(input);
+}
+
+/**
+ * TIER 1 — bad states must read as a WARNING at a glance. The verdict word LEADS
+ * with the warning (never "Genuine, but…"), the hero carries a colour-independent
+ * warning GLYPH that fills the seal's slot (so a bad verdict is never a few red
+ * words floating in a void), and the credential identity is DEMOTED (struck /
+ * dimmed) so a forgery is not dressed up in full prestige.
+ */
+describe('renderCredentialPage — bad-state gravity (Tier 1 safety)', () => {
+  it('REVOKED leads with the warning word + an alarm glyph, never "Genuine, but…"', () => {
+    const html = certPageWithOutcome('revoked');
+    // The leading word is the warning itself — the eye must NOT land on "Genuine".
+    expect(html).toContain('<span id="verdict-word">Revoked.</span>');
+    expect(html).not.toMatch(/Genuine, but/i);
+    // The exact (no em-dash, house-style) sub, leading with the withdrawal.
+    expect(html).toContain('Issued by dmj.one, then withdrawn. Do not rely on it.');
+    // The revoked SUB itself uses a period, not the spec's em dash (house style).
+    const revokedSub = /<p class="sub" id="verdict-sub">([^<]*)<\/p>/.exec(html)?.[1] ?? '';
+    expect(revokedSub).not.toContain('—');
+    expect(revokedSub).toContain('withdrawn. Do not rely');
+    // The colour-independent warning glyph (circled slash) is present in the hero.
+    expect(html).toContain('<div class="verdict revoked" id="verdict">');
+    expect(html).toContain('class="glyph" aria-hidden="true">⊘');
+    // No gold: the seal class is present but CSS-gated off for non-valid (verified
+    // via the verdict NOT carrying the .valid class the seal reveal needs).
+    expect(html).not.toContain('class="verdict valid');
+  });
+
+  it('TAMPERED leads with "Altered." + a cross glyph and a do-not-rely sub', () => {
+    const html = certPageWithOutcome('tampered');
+    expect(html).toContain('<span id="verdict-word">Altered.</span>');
+    expect(html).toContain('This does not match what was signed. Do not rely on it.');
+    expect(html).toContain('<div class="verdict bad" id="verdict">');
+    expect(html).toContain('class="glyph" aria-hidden="true">✕'); // ✕
+  });
+
+  it('UNKNOWN is neutral ("Not confirmed.") with a non-alarm glyph', () => {
+    const html = certPageWithOutcome('unknown');
+    expect(html).toContain('<span id="verdict-word">Not confirmed.</span>');
+    expect(html).toContain("We couldn't confirm this. Check the ID or contact the issuer.");
+    expect(html).toContain('<div class="verdict unknown" id="verdict">');
+  });
+
+  it('CSS fills the medallion slot on bad states + demotes the identity (no void, not dressed up)', () => {
+    const html = certPageWithOutcome('revoked');
+    // The glyph is un-hidden + enlarged ONLY on revoked/bad/unknown (NOT :not(.valid),
+    // which would wrongly light up the upload .unconfirmed file-gate).
+    expect(html).toMatch(/\.hero \.verdict\.revoked \.glyph[\s\S]*?\.hero \.verdict\.unknown \.glyph\{order:-1;display:grid/);
+    expect(html).not.toMatch(/\.hero \.verdict:not\(\.valid\) \.glyph\{display:grid/);
+    // The identity is demoted on a bad state via :has() on the live verdict class.
+    expect(html).toMatch(/\.hero__core:has\(\.verdict\.revoked\) \.identity/);
+    expect(html).toMatch(/\.hero__core:has\(\.verdict\.bad\) \.type-title[\s\S]*?line-through/);
+    // The seal reveal stays gated to .valid only (no gold on bad states).
+    expect(html).toContain('.hero .verdict:not(.valid) .seal{display:none}');
+  });
+});
+
+/**
+ * TIER 1/2 — the affirmative hero must show EVIDENCE + prompt scrutiny + carry the
+ * honesty disclaimer, so a copied-QR forgery showing the TRUE record is not simply
+ * crowned "Genuine." with nothing more.
+ */
+describe('renderCredentialPage — affirmative hero lines (Tier 1+2)', () => {
+  it('VALID certificate shows the hard-fact (#5), the compare prompt (#2), and the honesty line (#3)', () => {
+    const html = certPageWithOutcome('valid');
+    const flat = html.replace(/\s+/g, ' ');
+    // (#5) hard-fact — names EXACTLY what a valid outcome proves; never "all N checks
+    // passed" (the anchor may be pending — that honesty is locked in the next test).
+    expect(html).toContain('class="hardfact"');
+    expect(flat).toMatch(/Post-quantum signature verified, recorded in the transparency log, not revoked\./);
+    // (#2) certificate comparison — the cert analogue of the upload file-gate.
+    expect(html).toContain('class="compare"');
+    expect(flat).toMatch(/Confirm the name, date and details below match the document you/);
+    // (#3) honesty line, surfaced BY the verdict (compact, no em dash).
+    expect(html).toContain('class="honesty"');
+    expect(flat).toMatch(/an independent educational initiative, not a government-licensed certifying authority/);
+  });
+
+  it('the hard-fact NEVER claims "all 4/N checks passed" (anchor may be pending — honesty lock)', () => {
+    // A valid doc routinely has anchorProof:false (pending); a hardcoded "all 4
+    // passed" would be FALSE and contradict the ledger. Pin that we do not say it.
+    const html = certPageWithOutcome('valid');
+    const flat = html.replace(/\s+/g, ' ');
+    expect(flat).not.toMatch(/all (4|four|the) (cryptographic )?checks passed/i);
+  });
+
+  it('appends the independent timestamp to the hard-fact ONLY when a verified token is present', () => {
+    const withTs = certPageWithOutcome('valid', {
+      trustedTimestamp: { genTime: '2026-06-04T10:00:05.000Z', tsaSubject: 'CN=freeTSA' },
+    }).replace(/\s+/g, ' ');
+    // Dated to the day (compact); the full token detail stays in the trust line below.
+    expect(withTs).toMatch(/independently timestamped 04 June 2026/);
+    // Absent token ⇒ the hard-fact carries no timestamp clause.
+    const noTs = certPageWithOutcome('valid').replace(/\s+/g, ' ');
+    expect(noTs).not.toMatch(/independently timestamped/i);
+  });
+
+  it('does NOT show the affirmative hard-fact / compare lines on a bad state', () => {
+    for (const outcome of ['revoked', 'tampered', 'unknown'] as const) {
+      const html = certPageWithOutcome(outcome);
+      expect(html).not.toContain('class="hardfact"');
+      expect(html).not.toContain('class="compare"');
+      // The honesty line, however, shows in EVERY state.
+      expect(html).toContain('class="honesty"');
+    }
+  });
+
+  it('does NOT add the cert-compare line to UPLOADS (they have the byte-level file-gate)', () => {
+    // A valid upload is file-gated (verdict "unconfirmed"); neither the affirmative
+    // hard-fact nor the cert-compare line belongs there.
+    const html = pageOf(makeUploadRecord());
+    expect(html).toContain('data-filegate="1"');
+    expect(html).not.toContain('class="compare"');
+    expect(html).not.toContain('class="hardfact"');
+    // But the honesty line is still surfaced.
+    expect(html).toContain('class="honesty"');
+  });
+
+  it('NEVER defaces the attested doc-name on a file MISMATCH (record is genuine; the FILE is wrong)', () => {
+    // A file mismatch repaints the verdict to .bad, which would otherwise strike /
+    // dim the hero title via the bad-state demotion. On a file-gate page the title
+    // is the ATTESTED document's name (genuine), so a file-gate-scoped override (at
+    // higher specificity) resets the demotion — the ✕ glyph + word carry the alarm.
+    const html = pageOf(makeUploadRecord());
+    expect(html).toContain('body[data-filegate="1"] .hero__core:has(.verdict.bad) .identity{opacity:1;filter:none}');
+    expect(html).toContain('body[data-filegate="1"] .hero__core:has(.verdict.bad) .type-title{text-decoration:none}');
+  });
+
+  it('the honesty line carries no forbidden overclaim and survives CSP', () => {
+    const flat = certPageWithOutcome('valid').replace(/\s+/g, ' ');
+    expect(flat).not.toMatch(/court-proof/i);
+    expect(flat).not.toMatch(/legally guaranteed/i);
+    expect(flat).not.toMatch(/valid in court/i);
+    // No inline style/handlers introduced by the new lines.
+    const html = certPageWithOutcome('valid');
+    expect(html).not.toMatch(/\sstyle=/i);
+    expect(html).not.toMatch(/\son\w+=/i);
+  });
+});
+
+/**
+ * TIER 2 — the badge must INFORM, not echo the human verdict word, and the hero
+ * jargon gets plain glosses. The lifecycle pill keeps its term (lifecycle, not a
+ * restatement) — app.test.ts pins >VALID</>UNKNOWN< + class="pill valid".
+ */
+describe('renderCredentialPage — vocabulary (Tier 2)', () => {
+  it('the VALID badge note states the technical fact without restating "Genuine"', () => {
+    const html = certPageWithOutcome('valid');
+    const noteEl = /<span id="status-note">([^<]*)<\/span>/.exec(html)?.[1] ?? '';
+    expect(noteEl).not.toMatch(/genuine/i);
+    expect(noteEl).toMatch(/post-quantum signature .*verifies against this record/i);
+    // It must NOT claim every row passes (the anchor row may be Pending — honesty).
+    expect(noteEl).not.toMatch(/every check|all (4|four|the) checks/i);
+    // The label is still the shared lifecycle term (pill + checks share it).
+    expect(html).toContain('<b id="status-label">VALID</b>');
   });
 });

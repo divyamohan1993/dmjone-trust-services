@@ -1,8 +1,8 @@
-The most cinematic page I have ever shipped still works perfectly with JavaScript turned off.
+You can now watch a document's bytes get examined, live, and the page still works perfectly with JavaScript turned off.
 
-verify.dmj.one is now a verification theatre: when a recruiter checks a credential, they watch the actual cryptography happen. A cool examination light scans while the server re-verifies the post-quantum signature live, each check ignites in a constellation, and only a record that truly passes earns the gold seal strike. Revoked or altered documents collapse into red embers; the verdict is server-rendered first, so the truth never waits for the show.
+verify.dmj.one turns credential verification into a visible process: a field of binary 0s and 1s drifts under real force physics, spirals into the verdict while the server re-verifies the post-quantum signature, and only a record that truly passes earns the gold seal strike. Revoked or altered documents fall into red embers; the verdict is server-rendered first, so the truth never waits for the show. Every colour is research-grounded trust psychology: paper-white transparency, institutional blue scrutiny, green confirmation, gold only when it is earned.
 
-The engine is three rendering tiers deep with zero dependencies: WebGPU compute shaders, WebGL2 point sprites, then pure CSS, all in one 10KB gzipped file, WCAG 2.2 AAA throughout.
+The engine is three rendering tiers deep with zero dependencies: WebGPU compute shaders, WebGL2 sprites, then pure CSS, in one ~10KB gzipped file, WCAG 2.2 AAA throughout.
 
 https://verify.dmj.one
 

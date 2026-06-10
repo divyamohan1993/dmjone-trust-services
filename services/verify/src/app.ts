@@ -47,6 +47,7 @@ import { RateLimiter } from './rate-limit.js';
 import { renderCredentialPage, renderErrorPage, renderLandingPage } from './page.js';
 import { FONT_BYTES, isFontFile } from './fonts/font-bytes.js';
 import { CINEMA_JS, CINEMA_JS_HASH } from './cinema.js';
+import { FAVICON_PNG_32, FAVICON_PNG_180 } from './favicon.js';
 
 /**
  * A single structured-log method. Two overloads matching how the service calls
@@ -244,7 +245,9 @@ export function createVerifyApp(deps: VerifyDeps): Hono<{ Variables: RequestVars
         "base-uri 'none'",
         "object-src 'none'",
         "frame-ancestors 'none'",
-        "img-src 'none'",
+        // 'self' (was 'none') solely so the same-origin favicon/touch icons
+        // render in every engine; the pages themselves still embed no <img>.
+        "img-src 'self'",
         // Brand woff2 served same-origin from GET /fonts/:file; no CDN, offline-safe.
         "font-src 'self'",
         `style-src 'self' 'nonce-${nonce}'`,
@@ -305,6 +308,22 @@ export function createVerifyApp(deps: VerifyDeps): Hono<{ Variables: RequestVars
     return c.body(buf);
   });
 
+  // ── Favicons: the real dmj.one logo, embedded + served same-origin ─────────
+  // Browsers probe /favicon.ico automatically; the pages also link the PNGs
+  // explicitly (32px tabs, 180px apple-touch). All answer with image/png —
+  // universally accepted — under a long but non-immutable cache (the filenames
+  // are stable, so a future logo change must be able to propagate).
+  const serveIcon = (c: Context, bytes: Buffer): Response => {
+    const buf = bytes.slice().buffer;
+    c.header('Content-Type', 'image/png');
+    c.header('Cache-Control', 'public, max-age=604800');
+    c.header('Content-Length', String(bytes.byteLength));
+    return c.body(buf);
+  };
+  app.get('/favicon.ico', (c) => serveIcon(c, FAVICON_PNG_32));
+  app.get('/favicon-32.png', (c) => serveIcon(c, FAVICON_PNG_32));
+  app.get('/apple-touch-icon.png', (c) => serveIcon(c, FAVICON_PNG_180));
+
   // ── The cinema engine (same-origin, hashed, immutable) ─────────────────────
   // One cacheable classic script drives every page's stage + choreography. The
   // content hash in the filename IS the cache-busting token: clients cache it
@@ -334,6 +353,9 @@ export function createVerifyApp(deps: VerifyDeps): Hono<{ Variables: RequestVars
       if (parsed.success) {
         return c.redirect(`/c/${encodeURIComponent(parsed.data.credentialId)}`, 302);
       }
+      // An id that doesn't fit the format must NEVER bounce silently — echo it
+      // back (escaped by the renderer) with an inline explanation of the format.
+      return c.html(renderLandingPage({ nonce: c.get('nonce'), issuer: issuerName, queriedId: id }));
     }
     return c.html(renderLandingPage({ nonce: c.get('nonce'), issuer: issuerName }));
   });

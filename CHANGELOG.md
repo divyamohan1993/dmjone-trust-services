@@ -6,6 +6,34 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Added
+
+- 2026-06-10: **The real dmj.one logo as the verify portal's favicon.** The
+  circular watercolor badge (assets/logo round.png) is resized offline (1500 →
+  512 → 32/180 px, high-quality bicubic) and embedded as bytes, served
+  same-origin at `/favicon.ico`, `/favicon-32.png` and `/apple-touch-icon.png`
+  with `<link>` tags on every page; CSP `img-src` moves from `'none'` to
+  `'self'` solely for this (the pages still embed no `<img>`).
+
+### Fixed
+
+- 2026-06-10: **The lookup never bounces silently again, and the upload gate
+  lives in the first view.** Typing an id that does not match the
+  DMJ-XX-YYYYMMDD-NN format used to reload the landing page with `?id=…` stuck
+  in the URL and zero feedback (reported as "the system is not working"); the
+  landing now echoes the typed value back (HTML-escaped; reflected-XSS test
+  added) with an inline plain-language explanation of the format, and the input
+  carries a native `pattern` hint. Browser-verified end-to-end: lowercase/padded
+  valid ids normalise → 302 → `/c/:id` → live rite → verdict (preview and
+  production); invalid ids now explain themselves. On upload (file-gate) pages
+  the dropzone moves from below the fold INTO the hero — visitors were not
+  discovering that they needed to upload the file — compact white-glass
+  instrument under the verdict, in-view on desktop and 390px mobile, with the
+  full ceremony verified by real file drops (byte-match → gold "Authentic.",
+  altered bytes → red "This file does not match." with the attested document's
+  identity correctly left intact). Skipped view-transitions no longer log
+  console errors.
+
 ### Changed
 
 - 2026-06-10: **"Daylight Examination": the verify portal moves to a light,

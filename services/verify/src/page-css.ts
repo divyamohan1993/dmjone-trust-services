@@ -448,6 +448,26 @@ body.js:not(.still) .checks li.lit .ic{animation:node-ignite .55s ease-out both}
   background:linear-gradient(180deg,rgba(255,255,255,.8),rgba(244,247,251,.85));
   backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.95),0 20px 44px -30px rgba(31,51,86,.35)}
+/* IN THE HERO (upload pages): the gate is the one action and lives in the
+   first view — compact white-glass instrument under the verdict, the same
+   prominence the landing gives its lookup plate */
+.hero__core .filecheck{width:min(100%,640px);margin-top:clamp(2px,.8svh,10px);text-align:left;
+  padding:clamp(12px,1.8svh,18px) clamp(14px,2.2vw,20px);
+  animation:v-fade-up .56s .4s both ease-out}
+.hero__core .filecheck .fc-lead{font-size:clamp(14.5px,1.04rem,17px);margin-bottom:4px}
+.hero__core .filecheck .fc-why{font-size:clamp(12.5px,.88rem,14px);margin-bottom:10px;max-width:none}
+.hero__core .fc-drop{padding:clamp(12px,2svh,20px) 14px;gap:9px}
+.hero__core .filecheck .fc-note{font-size:12.5px;margin-top:9px;line-height:1.45}
+.hero__core .filecheck .fc-msg{margin-top:7px}
+@media (max-height:880px){
+  .hero__core .filecheck{padding:10px 14px}
+  .hero__core .filecheck .fc-why{font-size:12.5px;margin-bottom:8px}
+  .hero__core .fc-drop{padding:10px 12px;gap:7px}
+  .hero__core .filecheck .fc-note{font-size:12px;margin-top:7px}
+}
+@media (max-height:620px){
+  .hero__core .filecheck .fc-why,.hero__core .filecheck .fc-note{display:none}
+}
 .filecheck .fc-lead{font-family:var(--display);font-weight:600;font-size:clamp(17px,1.2rem,20px);
   color:var(--ink);margin:0 0 6px}
 .filecheck .fc-why{font-size:14.5px;line-height:1.55;color:var(--ink-soft);margin:0 0 14px}
@@ -717,6 +737,12 @@ body.js:not(.still) .flip .bit.changed{animation:bit-blink 2.6s ease-in-out infi
 .lookup-plate .lp-go{min-height:46px;font-size:15.5px;letter-spacing:.08em;padding:12px 28px;border-radius:10px}
 .lookup-plate .lp-hint{font-family:var(--serif);font-size:clamp(13px,.92rem,14.5px);line-height:1.55;
   color:var(--ink-soft);margin:11px 0 0}
+/* the rejected-lookup explanation: visible, honest, never a silent bounce */
+.lookup-plate .lp-error{font-family:var(--serif);font-size:clamp(13px,.94rem,14.5px);line-height:1.5;
+  color:var(--bad);margin:10px 0 0;padding:10px 13px;border-radius:9px;
+  border:1px solid rgba(201,48,59,.55);border-left:3px solid var(--bad-core);
+  background:rgba(201,48,59,.07)}
+.lookup-plate .lp-error strong{font-weight:600}
 
 /* landing method blocks ride the same .worlds chapter styling */
 .ways{margin-top:clamp(32px,5vh,48px)}

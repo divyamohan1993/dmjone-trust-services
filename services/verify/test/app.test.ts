@@ -150,6 +150,20 @@ describe('landing (bare domain)', () => {
     const res = await app.request('/?id=' + encodeURIComponent('bad id /../'));
     expect(res.status).toBe(200);
   });
+
+  it('GET /?id=<invalid> explains the rejection inline and echoes the id SAFELY', async () => {
+    const { app } = makeHarness();
+    const res = await app.request('/?id=' + encodeURIComponent('DMJ/2026/<script>alert(1)</script>'));
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    // Never a silent bounce: the visitor is told what a credential ID looks like.
+    expect(html).toContain('lp-error');
+    expect(html).toMatch(/That doesn&rsquo;t look like a credential ID/);
+    expect(html).toContain('DMJ-XX-YYYYMMDD-NN');
+    // The echoed value is escaped — no reflected XSS surface.
+    expect(html).not.toContain('<script>alert(1)</script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
 });
 
 describe('health', () => {
@@ -165,6 +179,30 @@ describe('health', () => {
     const { app } = makeHarness();
     const res = await app.request('/health/ready');
     expect(res.status).toBe(200);
+  });
+});
+
+describe('favicons (the real dmj.one logo, served same-origin)', () => {
+  it('answers the automatic /favicon.ico probe and the linked PNGs', async () => {
+    const { app } = makeHarness();
+    for (const path of ['/favicon.ico', '/favicon-32.png', '/apple-touch-icon.png']) {
+      const res = await app.request(path);
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toBe('image/png');
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      // PNG magic — these are real image bytes, not an HTML error page.
+      expect(Array.from(bytes.slice(0, 4))).toEqual([0x89, 0x50, 0x4e, 0x47]);
+    }
+  });
+
+  it('is linked from the page head and allowed by CSP (img-src self)', async () => {
+    const { app } = makeHarness();
+    const res = await app.request(`/c/${ID}`);
+    const html = await res.text();
+    expect(html).toContain('<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">');
+    expect(html).toContain('<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">');
+    const csp = res.headers.get('content-security-policy') ?? '';
+    expect(csp).toContain("img-src 'self'");
   });
 });
 

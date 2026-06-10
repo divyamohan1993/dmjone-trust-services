@@ -309,7 +309,7 @@ function heroHonestyLine(): string {
 const UPLOAD_FILEGATE_VERDICT = {
   cls: 'unconfirmed',
   word: 'Confirm your copy.',
-  sub: 'This document number carries a genuine dmj.one attestation. Scanning a code only proves the record exists, not which file you are holding. Check your file below; only a byte-for-byte match proves it is the document we attested.',
+  sub: 'This document number carries a genuine dmj.one attestation. Scanning a code only proves the record exists, not which file you are holding. Drop your file here; only a byte-for-byte match proves it is the document we attested.',
   glyph: '?',
 };
 
@@ -562,6 +562,8 @@ function head(nonce: string, title: string): string {
 <meta name="theme-color" content="#F7F9FC">
 <title>${escapeHtml(title)}</title>
 <meta name="robots" content="noindex">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
 <link rel="preload" as="font" type="font/woff2" href="/fonts/playfair-display-latin-700-normal.woff2" crossorigin>
 <link rel="preload" as="font" type="font/woff2" href="/fonts/marcellus-latin-400-normal.woff2" crossorigin>
 <style nonce="${nonce}">
@@ -640,9 +642,17 @@ ${heroHonestyLine()}
  * lookup instrument. No seal here; gold "Verified" iconography is never shown
  * before anything is verified. The form GETs `/?id=…` (works with JS off).
  */
-export function renderLandingPage(input: { nonce: string; issuer: string }): string {
+export function renderLandingPage(input: { nonce: string; issuer: string; queriedId?: string }): string {
   const { nonce, issuer } = input;
   const issuerTagline = issuer.replace(/^dmj\.one\s+/i, '').trim() || issuer;
+  // A rejected lookup must never bounce silently: echo the typed id back into
+  // the field (escaped) with an inline, plain-language explanation.
+  const queried = (input.queriedId ?? '').trim().slice(0, 80);
+  const lookupErrorHtml = queried
+    ? `
+          <p class="lp-error" id="lp-error" role="alert"><strong>That doesn&rsquo;t look like a credential ID.</strong>
+          The format is DMJ-XX-YYYYMMDD-NN, for example DMJ-IC-20260606-01, printed beside the QR code on the document.</p>`
+    : '';
   return `${head(nonce, `Verify a credential · ${IDENTITY.trustService}`)}
 <body data-page="landing">
   <a class="skip" href="#main">Skip to content</a>
@@ -667,9 +677,12 @@ ${stageLayers()}
           <div class="lp-row">
             <input id="cred-id" name="id" type="text" inputmode="text" autocomplete="off"
                    autocapitalize="characters" spellcheck="false" enterkeyhint="go"
-                   placeholder="DMJ-IC-20260606-01" aria-describedby="lp-hint" maxlength="64" required>
+                   placeholder="DMJ-IC-20260606-01" aria-describedby="lp-hint${queried ? ' lp-error' : ''}" maxlength="64" required
+                   pattern="\\s*[Dd][Mm][Jj]-[A-Za-z]{2,4}-[0-9]{8}-[0-9]{2}\\s*"
+                   title="Credential IDs look like DMJ-IC-20260606-01"${queried ? `
+                   value="${escapeHtml(queried)}"` : ''}>
             <button class="btn primary lp-go" type="submit">Verify</button>
-          </div>
+          </div>${lookupErrorHtml}
           <p class="lp-hint" id="lp-hint">Printed beside the QR code on the document. Scanning the QR brings you here automatically.</p>
         </form>
 
@@ -758,8 +771,10 @@ export function renderCredentialPage(input: CredentialPageInput): string {
   const heroCompareHtml = heroCompareLine(heroAffirmative, kind);
   const heroHonestyHtml = heroHonestyLine();
 
-  // The upload file-gate dropzone (progressive enhancement; the form also posts
-  // to /api/verify/file without JS). Only a byte-for-byte match earns green.
+  // The upload file-gate dropzone, IN THE HERO: the one action the visitor
+  // must take lives in the first view, not below the fold (the form also
+  // posts to /api/verify/file without JS). Only a byte-for-byte match earns
+  // green, and the verdict above it flips exactly as the live check answers.
   const fileGateHtml = fileGate
     ? `
         <!-- Anti-spoof FILE gate (uploads only): a scanned QR/number proves the
@@ -776,7 +791,7 @@ export function renderCredentialPage(input: CredentialPageInput): string {
               <button class="btn primary" type="submit" id="fc-submit">Check this file</button>
             </div>
           </form>
-          <p class="fc-note">Your file is checked against the ML&#8209;DSA&#8209;87 signature and tamper&#8209;evident log we issued for this document, not a simple checksum. Fingerprint <code class="mono">${escapeHtml(maskHash(record.pdfSha256))}</code>.</p>
+          <p class="fc-note">Checked against the ML&#8209;DSA&#8209;87 signature and tamper&#8209;evident log we issued, not a simple checksum. Fingerprint <code class="mono">${escapeHtml(maskHash(record.pdfSha256))}</code>.</p>
           <p class="fc-msg" id="fc-msg" role="status" aria-live="polite"></p>
         </div>`
     : '';
@@ -852,6 +867,7 @@ ${heroHardFactHtml ? '' : `          <p class="sub" id="verdict-sub">${escapeHtm
 ${heroHardFactHtml}${heroCompareHtml}
 ${heroHonestyHtml}
         </div>
+${fileGateHtml}
       </div>
 
       <a class="scrollcue" href="#proof">
@@ -879,7 +895,6 @@ ${heroHonestyHtml}
           <span id="status-note">${escapeHtml(badge.note)}</span>
         </span>
       </div>
-${fileGateHtml}
       <ul class="checks" id="checks" aria-labelledby="checks-h">
 ${checksHtml}
       </ul>

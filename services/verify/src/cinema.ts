@@ -643,9 +643,14 @@ export const CINEMA_JS: string = String.raw`/* dmj.one verify — cinema engine.
     target.scrollIntoView(still ? { behavior: "auto" } : { behavior: "smooth" });
   });
 
-  /* View-transition helper: wrap a DOM state flip when supported. */
+  /* View-transition helper: wrap a DOM state flip when supported. A skipped
+     transition rejects its finished promise — swallow it (it is not an error,
+     and the rejection would spam the console as one). */
   function withTransition(fn) {
-    if (!still && doc.startViewTransition) { doc.startViewTransition(fn); } else { fn(); }
+    if (!still && doc.startViewTransition) {
+      var t = doc.startViewTransition(fn);
+      if (t && t.finished && t.finished.catch) t.finished.catch(function () {});
+    } else { fn(); }
   }
 
   /* ═══════════════════════════ THE CHOREOGRAPHY ══════════════════════════ */

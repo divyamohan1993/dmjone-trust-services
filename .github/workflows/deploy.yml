@@ -50,7 +50,7 @@ jobs:
             --service-account="issuer-sa@$PROJECT.iam.gserviceaccount.com" \
             --min-instances=0 --max-instances=2 --cpu=1 --memory=1Gi \
             --concurrency=4 --timeout=120 --allow-unauthenticated \
-            --set-env-vars="SERVICE_ROLE=issuer,DATA_BACKEND=firestore,GCP_PROJECT_ID=$PROJECT,GCP_REGION=$REGION,FIRESTORE_DATABASE_ID=trust,ISSUER_PUBLIC_URL=https://issue.dmj.one,VERIFY_PUBLIC_URL=https://verify.dmj.one,WEBAUTHN_RP_ID=issue.dmj.one,WEBAUTHN_RP_NAME=dmj.one Trust Services,WEBAUTHN_ORIGIN=https://issue.dmj.one,ANCHOR_GITHUB_REPO=divyamohan1993/dmjone-trust-anchor,SESSION_SECRET=${{ secrets.TRUST_SESSION_SECRET }},ADMIN_SETUP_TOKEN=${{ secrets.TRUST_ADMIN_SETUP_TOKEN }},ANCHOR_GITHUB_TOKEN=${{ secrets.TRUST_ANCHOR_GITHUB_TOKEN }}" \
+            --set-env-vars="SERVICE_ROLE=issuer,DATA_BACKEND=firestore,GCP_PROJECT_ID=$PROJECT,GCP_REGION=$REGION,FIRESTORE_DATABASE_ID=trust,ISSUER_PUBLIC_URL=https://issue.dmj.one,VERIFY_PUBLIC_URL=https://verify.dmj.one,WEBAUTHN_RP_ID=issue.dmj.one,WEBAUTHN_RP_NAME=dmj.one Trust Services,WEBAUTHN_ORIGIN=https://issue.dmj.one,ANCHOR_GITHUB_REPO=divyamohan1993/dmjone-trust-anchor,TSA_URL=http://timestamp.digicert.com,SESSION_SECRET=${{ secrets.TRUST_SESSION_SECRET }},ADMIN_SETUP_TOKEN=${{ secrets.TRUST_ADMIN_SETUP_TOKEN }},ANCHOR_GITHUB_TOKEN=${{ secrets.TRUST_ANCHOR_GITHUB_TOKEN }}" \
             --set-secrets="MASTER_ENCRYPTION_KEY=master-encryption-key:latest,SIGNATURE_PNG_BASE64=signature-png:latest" # pragma: allowlist secret
             # session-secret/admin-setup-token/anchor-github-token were one-time migrated from SM
             # mounts to the literal env vars above (Cloud Run cannot switch an env var's type in a

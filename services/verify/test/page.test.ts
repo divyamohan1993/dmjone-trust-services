@@ -448,7 +448,7 @@ describe('renderCredentialPage — bad-state gravity (Tier 1 safety)', () => {
   it('UNKNOWN is neutral ("Not confirmed.") with a non-alarm glyph', () => {
     const html = certPageWithOutcome('unknown');
     expect(html).toContain('<span id="verdict-word">Not confirmed.</span>');
-    expect(html).toContain("We couldn't confirm this. Check the ID or contact the issuer.");
+    expect(html).toContain('We could not confirm this. Check the ID or contact the issuer.');
     expect(html).toContain('<div class="verdict unknown" id="verdict">');
   });
 

@@ -6,6 +6,36 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Changed
+
+- 2026-06-10: **The verify portal is rebuilt as "The Examination Chamber," a fully
+  cinematic, living verification theatre.** A midnight-navy + gold stage (the trust
+  language of passports, banknotes and notarial seals) replaces the cream letterhead
+  skin on the public verify surface only; the issuer admin keeps the shared design
+  system. A new dependency-free client engine (`/assets/cinema-<hash>.js`, immutable,
+  same-origin, ~10 KB gzip) renders a GPU particle field with a three-tier ladder:
+  WebGPU compute (WGSL, ~7k particles) → WebGL2 point sprites → CSS aurora. The live
+  re-verification plays as a ceremony: a cool steel-blue examination rite paced to the
+  real `/api/verify/:id` fetch, check-constellation ignition, then the verdict strike
+  (gold seal + particle convergence + shockwave on VALID; ember collapse on
+  REVOKED/TAMPERED; cool fog on UNKNOWN). Scrutiny runs cool, warmth is earned:
+  colour psychology is the interface. Below the fold the proof descends through the
+  Three Worlds a verification crosses (the Signature lattice, the Ledger chain with
+  the record's live anchor state, the Clock dial engraved with the verified RFC-3161
+  genTime), each stating only what the server actually verified. Scroll-driven
+  animations (`animation-timeline: view()/scroll()` with IntersectionObserver
+  fallback), cross-document view transitions, a guilloche security-print rosette,
+  pointer spotlight + magnetic buttons + 3D identity tilt, and a shader-level "text
+  safe zone" that parts the particles behind type. Every trust invariant is preserved
+  verbatim: SSR-correct verdicts with JS off, the earned-seal scarcity gate
+  (`.verdict.valid.sealed`), the upload anti-spoof file gate, locked honesty wording
+  (conditional anchor sentence, no "all N checks passed", never a licensed-CA claim),
+  nonce-CSP with zero inline scripts and `img-src 'none'`, WCAG 2.2 AAA contrast on
+  the dark stage, 44 px targets, and a fully still, final-state page under
+  prefers-reduced-motion or Save-Data. Print gets a paper stylesheet. A seeded
+  preview server (`pnpm --filter @dmjone/verify preview`) tours every state with
+  zero infra.
+
 ### Added
 
 - 2026-06-09: **Legal-grade forensic verification (Phase 1): RFC-3161 trusted

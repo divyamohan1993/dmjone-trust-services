@@ -6,6 +6,7 @@
 
 import { describe, expect, it, beforeEach } from 'vitest';
 import { createVerifyApp, type VerifyDeps } from '../src/app.js';
+import { CINEMA_JS_HASH } from '../src/cinema.js';
 import {
   asJson,
   FakeAnchorRepository,
@@ -164,6 +165,32 @@ describe('health', () => {
     const { app } = makeHarness();
     const res = await app.request('/health/ready');
     expect(res.status).toBe(200);
+  });
+});
+
+describe('the cinema engine asset (GET /assets/cinema-<hash>.js)', () => {
+  it('serves the hashed engine immutably with a JS content type', async () => {
+    const { app } = makeHarness();
+    const res = await app.request(`/assets/cinema-${CINEMA_JS_HASH}.js`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type') ?? '').toContain('text/javascript');
+    expect(res.headers.get('cache-control') ?? '').toContain('immutable');
+    const body = await res.text();
+    expect(body).toContain('use strict');
+  });
+
+  it('rejects any other asset name (the hash IS the allow-list)', async () => {
+    const { app } = makeHarness();
+    const res = await app.request('/assets/cinema-ffffffffffff.js');
+    expect(res.status).toBe(404);
+    const res2 = await app.request('/assets/..%2F..%2Fetc%2Fpasswd');
+    expect(res2.status).toBe(404);
+  });
+
+  it('is exactly the script the credential page references', async () => {
+    const { app } = makeHarness();
+    const page = await (await app.request(`/c/${ID}`)).text();
+    expect(page).toContain(`<script src="/assets/cinema-${CINEMA_JS_HASH}.js" defer></script>`);
   });
 });
 

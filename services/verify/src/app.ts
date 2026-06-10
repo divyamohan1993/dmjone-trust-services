@@ -46,6 +46,7 @@ import { checkAnchor, checkLogInclusion, deriveOutcome, publicFieldsOf } from '.
 import { RateLimiter } from './rate-limit.js';
 import { renderCredentialPage, renderErrorPage, renderLandingPage } from './page.js';
 import { FONT_BYTES, isFontFile } from './fonts/font-bytes.js';
+import { CINEMA_JS, CINEMA_JS_HASH } from './cinema.js';
 
 /**
  * A single structured-log method. Two overloads matching how the service calls
@@ -126,6 +127,9 @@ type AppContext = Context<{ Variables: RequestVars }>;
 
 /** Largest upload accepted by /api/verify/file. Generous for a PDF, cheap to reject above. */
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024; // 8 MiB
+
+/** The cinema engine bytes, encoded once at module load (served immutable). */
+const CINEMA_JS_BYTES: Buffer = Buffer.from(CINEMA_JS, 'utf8');
 
 /**
  * Build the dummy Argon2id PHC string used to timing-equalise "missing id"
@@ -299,6 +303,24 @@ export function createVerifyApp(deps: VerifyDeps): Hono<{ Variables: RequestVars
     c.header('Cache-Control', 'public, max-age=31536000, immutable');
     c.header('Content-Length', String(bytes.byteLength));
     return c.body(buf);
+  });
+
+  // ── The cinema engine (same-origin, hashed, immutable) ─────────────────────
+  // One cacheable classic script drives every page's stage + choreography. The
+  // content hash in the filename IS the cache-busting token: clients cache it
+  // forever, a deploy changes the hash, the pages reference the new URL. The
+  // exact-match filename check is the allow-list (no traversal surface), and
+  // `script-src 'self'` already authorises it under the strict nonce CSP.
+  app.get('/assets/:file', (c) => {
+    const file = c.req.param('file');
+    if (file !== `cinema-${CINEMA_JS_HASH}.js`) {
+      fail('NOT_FOUND', 'Unknown asset.', 404);
+    }
+    const bytes = CINEMA_JS_BYTES.slice().buffer;
+    c.header('Content-Type', 'text/javascript; charset=utf-8');
+    c.header('Cache-Control', 'public, max-age=31536000, immutable');
+    c.header('Content-Length', String(CINEMA_JS_BYTES.byteLength));
+    return c.body(bytes);
   });
 
   // ── Landing (bare domain): branded entry; `?id=…` redirects to /c/:id ──────

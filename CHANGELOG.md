@@ -40,6 +40,21 @@ All notable changes to this project are documented here. Format follows
 
 ### Changed
 
+- 2026-06-10: **Verify landing page: the cinematic front door.** The bare
+  domain now speaks the credential pages' "Engraved Instrument" language: a
+  one-fold hero that asks the visitor's literal question ("Is it genuine?",
+  answered by the credential page's "Genuine."), with exactly one action, an
+  engraved lookup plate (debossed entry groove, struck-gold Verify). No seal or
+  "Verified" iconography appears before anything is verified (test-locked);
+  the honesty line sits in the hero. Below the fold: the method in plain
+  language (post-quantum signature, exact-bytes SHA-256, transparency log,
+  live revocation), three ways to verify, and the locked technical paragraph
+  verbatim. Typed IDs are now normalised (trim + uppercase) before validation,
+  so a phone-typed lowercase ID redirects instead of silently bouncing back to
+  the landing. Fits one fold with the scroll cue visible at every measured
+  size (320px phones through 1920px desktops, landscape included), entrance
+  fully present in under a second, reduced-motion safe, AA contrast.
+
 - 2026-06-10: **Verify page: cinematic "Engraved Instrument" redesign + a
   brutal-critique hardening pass + WCAG 2.2 AA.** The public page is now a minimal
   ~100svh hero (verdict + gold seal) with the cryptographic proof progressively

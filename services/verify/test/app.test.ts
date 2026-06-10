@@ -137,6 +137,13 @@ describe('landing (bare domain)', () => {
     expect(res.headers.get('location')).toBe(`/c/${ID}`);
   });
 
+  it('GET /?id=<lowercase/padded> normalises and still redirects (no silent bounce)', async () => {
+    const { app } = makeHarness();
+    const res = await app.request(`/?id=${encodeURIComponent(`  ${ID.toLowerCase()} `)}`);
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe(`/c/${ID}`);
+  });
+
   it('GET /?id=<invalid> falls back to the landing (no open redirect)', async () => {
     const { app } = makeHarness();
     const res = await app.request('/?id=' + encodeURIComponent('bad id /../'));

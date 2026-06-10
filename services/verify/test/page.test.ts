@@ -11,7 +11,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { renderCredentialPage, type CredentialPageInput } from '../src/page.js';
+import { renderCredentialPage, renderLandingPage, type CredentialPageInput } from '../src/page.js';
 import { makeLetterRecord, makeRecord, makeUploadRecord } from './fakes.js';
 import type { CredentialRecord, VerificationChecks, VerificationOutcome } from '@dmjone/shared';
 
@@ -564,5 +564,67 @@ describe('renderCredentialPage — vocabulary (Tier 2)', () => {
     expect(noteEl).not.toMatch(/every check|all (4|four|the) checks/i);
     // The label is still the shared lifecycle term (pill + checks share it).
     expect(html).toContain('<b id="status-label">VALID</b>');
+  });
+});
+
+describe('renderLandingPage — the cinematic front door', () => {
+  const html = renderLandingPage({ nonce: 'test-nonce', issuer: 'dmj.one Trust Services' });
+
+  it('is a well-formed, CSP-safe page (no inline style/handlers)', () => {
+    expect(html.startsWith('<!DOCTYPE html>')).toBe(true);
+    expect(html.trimEnd().endsWith('</html>')).toBe(true);
+    expect(html).not.toMatch(/\sstyle=/i);
+    expect(html).not.toMatch(/\son\w+=/i);
+    expect(html).toContain('<title>Verify a credential · dmj.one Trust Services</title>');
+  });
+
+  it('leads with the question hero and the ONE action (the lookup form)', () => {
+    expect(html).toContain('Is it genuine?');
+    expect(html).toContain('class="hero hero--landing"');
+    // The no-JS form: GET / with the id param, normalised server-side.
+    expect(html).toMatch(/<form[^>]*method="GET"[^>]*action="\/"/);
+    expect(html).toMatch(/<input[^>]*name="id"/);
+    expect(html).toMatch(/<input[^>]*autocapitalize="characters"/);
+    expect(html).toMatch(/<input[^>]*maxlength="64"[^>]*required/);
+    // Scroll cue invites to the method section.
+    expect(html).toContain('href="#how"');
+  });
+
+  it('never shows verified iconography before anything is verified', () => {
+    // The shared stylesheet in <head> legitimately carries .seal rules; the
+    // honesty bar is the MARKUP — no seal element and no struck "Verified"
+    // legend may exist before a verification has actually happened.
+    const body = html.slice(html.indexOf('<body'));
+    expect(body).not.toContain('seal__');
+    expect(body).not.toMatch(/class="[^"]*\bseal\b/);
+    expect(body).not.toMatch(/>\s*Verified\s*</);
+  });
+
+  it('surfaces the honesty line in the hero and keeps every lock below', () => {
+    const flat = html.replace(/\s+/g, ' ');
+    expect(flat).toContain(
+      'A cryptographic attestation by dmj.one, an independent educational initiative, not a government-licensed certifying authority.',
+    );
+    // The locked technical paragraph, verbatim anchors.
+    expect(flat).toContain('detached post-quantum');
+    expect(flat).toMatch(/where external anchoring is enabled/i);
+    expect(flat).toContain('github.com/divyamohan1993/dmjone-trust-anchor');
+    expect(flat).toMatch(/best-effort/i);
+    expect(flat).toMatch(/published or still pending/i);
+    expect(flat).toMatch(/self-signed cryptographic attestation/i);
+    expect(flat).toContain('carries no embedded signature');
+    // Forbidden overclaims, never.
+    expect(flat).not.toMatch(/court-proof|legally guaranteed|valid in court/i);
+    expect(flat).not.toMatch(/PAdES|PKCS#?7/i);
+  });
+
+  it('explains the method in plain language (the four checks)', () => {
+    expect(html).toContain('What verification checks');
+    expect(html).toContain('A post-quantum signature');
+    expect(html).toContain('ML-DSA-87');
+    expect(html).toMatch(/SHA-256 fingerprint/);
+    expect(html).toContain('A public transparency log');
+    expect(html).toContain('Revocation, checked live');
+    expect(html).toContain('Three ways to verify');
   });
 });

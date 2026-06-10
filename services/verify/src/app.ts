@@ -305,7 +305,10 @@ export function createVerifyApp(deps: VerifyDeps): Hono<{ Variables: RequestVars
   app.get('/', (c) => {
     const id = c.req.query('id');
     if (id) {
-      const parsed = credentialIdParamSchema.safeParse({ credentialId: id.trim() });
+      // Meet the typist halfway: IDs are canonically uppercase, but phones and
+      // humans type lowercase. Uppercasing before validation cannot widen the
+      // gate (the regex still decides) — it only stops a silent bounce-back.
+      const parsed = credentialIdParamSchema.safeParse({ credentialId: id.trim().toUpperCase() });
       if (parsed.success) {
         return c.redirect(`/c/${encodeURIComponent(parsed.data.credentialId)}`, 302);
       }

@@ -465,44 +465,113 @@ ${studs()}
 }
 
 /**
- * The public landing page at `/` — a branded entry point so the bare domain is
- * never a raw 404. The form GETs `/?id=…`, which the route redirects to
- * `/c/<id>` (works with JavaScript off; no path-building needed client-side).
+ * The public landing page at `/` — the portal's front door, in the same
+ * cinematic "Engraved Instrument" language as the credential pages. The hero
+ * asks the visitor's literal question ("Is it genuine?"); the credential page
+ * answers it ("Genuine."). ONE action above the fold: the engraved lookup
+ * plate. No seal here — gold "Verified" iconography is never shown before
+ * anything is verified. The form GETs `/?id=…`, which the route normalises
+ * (trim + uppercase) and redirects to `/c/<id>` — works with JavaScript off.
+ * The method + the locked technical paragraph disclose below the fold.
  */
 export function renderLandingPage(input: { nonce: string; issuer: string }): string {
   const { nonce, issuer } = input;
+  // Same masthead derivation as the credential hero: the wordmark already says
+  // dmj.one, so the service line drops the duplicated prefix ("Trust Services").
+  const issuerTagline = issuer.replace(/^dmj\.one\s+/i, '').trim() || issuer;
   return `${head(nonce, `Verify a credential · ${IDENTITY.trustService}`)}
 <body>
   <a class="skip" href="#main">Skip to content</a>
-  <div class="wrap">
-    <header class="brand">
-      <span class="mark"><b>dmj</b>.one</span>
-      <span class="svc">${escapeHtml(issuer)}</span>
-      <span class="descriptor">${escapeHtml(IDENTITY.descriptor)}</span>
-    </header>
-    <main id="main">
-      <section class="card" aria-labelledby="lh">
-${studs()}
-        <p class="eyebrow">Verification</p>
-        <h1 class="type-title" id="lh">Verify a credential</h1>
-        <p class="recipient"><span class="lbl">${escapeHtml(IDENTITY.trustService)}</span>Confirm a certificate is authentic, untampered, and recorded in the transparency log.</p>
-${flourish()}
-        <form class="lookup" method="GET" action="/" role="search" aria-label="Verify by credential ID">
-          <input name="id" type="text" inputmode="text" autocomplete="off" spellcheck="false"
-                 placeholder="Credential ID, e.g. DMJ-IC-20260606-01" aria-label="Credential ID" maxlength="64" required>
-          <button class="btn primary" type="submit">Verify</button>
+  <main id="main" class="wrap verify">
+    <section class="hero hero--landing" aria-labelledby="lh">
+      <span class="hero__frame" aria-hidden="true"></span>
+
+      <header class="brand trustmark">
+        <span class="mark"><b>dmj</b>.one</span>
+        <span class="svc">${escapeHtml(issuerTagline)}</span>
+      </header>
+
+      <div class="hero__core">
+        <p class="eyebrow">Public verification</p>
+        <h1 class="type-title" id="lh">Is it genuine?</h1>
+        <p class="lead">Every credential ${escapeHtml(IDENTITY.name)} issues answers that question here, cryptographically, in seconds.</p>
+
+        <form class="lookup-plate" method="GET" action="/" role="search" aria-label="Verify by credential ID">
+          <label class="lp-label" for="cred-id">Credential ID</label>
+          <div class="lp-row">
+            <input id="cred-id" name="id" type="text" inputmode="text" autocomplete="off"
+                   autocapitalize="characters" spellcheck="false" enterkeyhint="go"
+                   placeholder="DMJ-IC-20260606-01" aria-describedby="lp-hint" maxlength="64" required>
+            <button class="btn primary lp-go" type="submit">Verify</button>
+          </div>
+          <p class="lp-hint" id="lp-hint">Printed beside the QR code on the document. Scanning the QR brings you here automatically.</p>
         </form>
-        <p class="trust">Scan the QR code on a certificate, follow its verification link, or paste the credential ID above. ${escapeHtml(issuer)} only attests to credentials it has issued; the handwritten signature lives only inside the password-protected PDF, never on this page.</p>
-      </section>
+
+        <p class="honesty">A cryptographic attestation by ${escapeHtml(IDENTITY.name)}, an independent educational initiative, not a government-licensed certifying authority.</p>
+      </div>
+
+      <a class="scrollcue" href="#how">
+        <span>How it works</span>
+        <span class="chev" aria-hidden="true"></span>
+      </a>
+    </section>
+
+    <section class="proof how" id="how" aria-labelledby="how-h">
+      <div class="proof__intro">
+        <p class="ek">The method</p>
+        <h2 id="how-h">What verification checks</h2>
+      </div>
+
+      <ol class="method">
+        <li>
+          <span class="num" aria-hidden="true">01</span>
+          <div>
+            <h3>A post-quantum signature</h3>
+            <p>Every credential is signed with ML-DSA-87 (FIPS&nbsp;204), a detached post-quantum signature over a canonical record of the credential&rsquo;s contents.</p>
+          </div>
+        </li>
+        <li>
+          <span class="num" aria-hidden="true">02</span>
+          <div>
+            <h3>The document&rsquo;s exact bytes</h3>
+            <p>The record binds the document&rsquo;s SHA-256 fingerprint. Change a single bit of the file and verification reports <strong>TAMPERED</strong>.</p>
+          </div>
+        </li>
+        <li>
+          <span class="num" aria-hidden="true">03</span>
+          <div>
+            <h3>A public transparency log</h3>
+            <p>Issuance is entered in an append-only, tamper-evident log whose successive signed heads form a hash chain, so silently rewriting history is detectable.</p>
+          </div>
+        </li>
+        <li>
+          <span class="num" aria-hidden="true">04</span>
+          <div>
+            <h3>Revocation, checked live</h3>
+            <p>A credential the issuer has withdrawn answers <strong>Revoked</strong>, plainly, at the top.</p>
+          </div>
+        </li>
+      </ol>
+
+      <div class="ways">
+        <h3 class="block-h">Three ways to verify</h3>
+        <ul>
+          <li><b>Scan</b> the QR code printed on the document.</li>
+          <li><b>Follow</b> the verification link beside it.</li>
+          <li><b>Paste</b> the credential ID into the field above.</li>
+        </ul>
+      </div>
+
       <section class="explainer" aria-labelledby="he">
-        <h2 id="he">How verification works</h2>
+        <h2 id="he">In technical terms</h2>
         <p>Each credential is bound by a detached post-quantum signature (ML-DSA-87) over a canonical record that includes the document&rsquo;s exact-bytes hash (SHA-256), and is entered in a public, append-only, tamper-evident transparency log whose successive signed heads form a hash chain. Where external anchoring is enabled, each new head may additionally be published to a public GitHub repository (github.com/divyamohan1993/dmjone-trust-anchor), giving a publicly-timestamped, externally-hosted commit record; because the log is an append-only chain of signed heads, any silent rewrite or back-dating is then detectable by anyone who has recorded an earlier head. (Publication is best-effort; this page shows whether the credential&rsquo;s head is published or still pending.) Change a single bit and verification reports <strong>TAMPERED</strong>. This is a self-signed cryptographic attestation by an independent educational initiative, not a licensed certifying-authority signature; the document itself carries no embedded signature.</p>
       </section>
-    </main>
+    </section>
+
     <footer class="foot">
       ${escapeHtml(IDENTITY.trustService)} · ${escapeHtml(IDENTITY.email)} · <span class="motto">${escapeHtml(IDENTITY.motto)}</span>
     </footer>
-  </div>
+  </main>
 </body>
 </html>`;
 }
@@ -754,6 +823,66 @@ body[data-filegate="1"] .hero__core:has(.verdict.bad) .type-title{text-decoratio
    self-compacts CONTINUOUSLY by the smaller of width-fit and height-fit — fitting
    tall phones, short laptops, and landscape alike with the scroll cue always shown. */
 
+/* ---- LANDING hero: the question, then the ONE action ----------------------
+   The landing speaks the visitor's literal question ("Is it genuine?"); the
+   credential page answers it ("Genuine."). No seal here — gold "Verified"
+   iconography is never shown before anything is verified; the engraved lookup
+   plate IS the centerpiece. Entrance mirrors the credential hero: staggered,
+   snappy, fully present in under a second. */
+.hero--landing .hero__core{max-width:640px;margin-inline:auto;gap:clamp(10px,1.9svh,22px)}
+.hero--landing .eyebrow{animation:v-fade-in 480ms 60ms both ease-out}
+/* the question reads as a QUESTION — sentence case (the shared .type-title
+   uppercases for document titles; a shouted "IS IT GENUINE?" loses the voice). */
+.hero--landing .type-title{font-size:clamp(28px,2.9rem,54px);letter-spacing:.015em;
+  text-transform:none;animation:v-fade-up 560ms 120ms both ease-out}
+.hero--landing .lead{font-family:var(--serif);font-style:italic;font-size:clamp(14px,1.1rem,18px);
+  line-height:1.5;color:var(--ink-soft);max-width:44ch;margin:0;
+  animation:v-fade-up 520ms 220ms both ease-out}
+
+/* the engraved lookup plate — a tactile instrument, not a web form: raised
+   cream plate, recessed (debossed) entry groove, one struck-gold action. */
+.lookup-plate{width:min(100%,560px);margin-top:clamp(4px,1.2svh,14px);text-align:left;
+  background:linear-gradient(180deg,#FFFEFB,#FBF6EC);
+  border:1px solid rgba(176,137,47,.36);border-radius:14px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.9),
+    0 24px 48px -28px rgba(43,42,40,.42),
+    0 6px 18px -10px rgba(135,102,22,.30);
+  padding:clamp(14px,2.2svh,22px) clamp(14px,2.5vw,22px);
+  animation:v-fade-up 560ms 300ms both ease-out}
+.lookup-plate .lp-label{display:block;font-family:var(--label);font-size:10.5px;
+  letter-spacing:.24em;text-transform:uppercase;color:var(--gold-deep);margin:0 0 8px}
+.lookup-plate .lp-row{display:flex;gap:10px;flex-wrap:wrap}
+/* the groove: inset shadows read as engraving; the ID renders in inscriptional
+   caps exactly as printed on the document (uppercase is also submitted — the
+   route normalises server-side, so what you see is what verifies). */
+.lookup-plate input{flex:1 1 200px;min-width:0;font-family:var(--label);letter-spacing:.07em;
+  text-transform:uppercase;font-size:clamp(15px,1.02rem,17px);padding:13px 14px;border-radius:10px;
+  box-shadow:inset 0 2px 4px rgba(60,50,30,.12),inset 0 -1px 0 rgba(255,255,255,.85)}
+.lookup-plate input::placeholder{color:var(--ink-soft);opacity:.62;letter-spacing:.07em}
+.lookup-plate .lp-go{font-size:15px;letter-spacing:.08em;padding:13px 26px;border-radius:10px}
+.lookup-plate .lp-hint{font-family:var(--serif);font-size:12.5px;line-height:1.5;
+  color:var(--ink-soft);margin:10px 0 0}
+.hero--landing .honesty{max-width:46ch;font-family:var(--serif);font-size:clamp(10.5px,.78rem,12.5px);
+  line-height:1.4;color:var(--ink-soft);margin:0;animation:v-fade-in 520ms 480ms both ease-out}
+
+/* ---- LANDING below the fold: the method ledger + the ways ----------------- */
+.how .method{list-style:none;margin:0;padding:0;display:grid;gap:clamp(14px,2.6vh,22px);counter-reset:m}
+.how .method li{display:grid;grid-template-columns:auto 1fr;gap:14px 16px;align-items:start;
+  background:#FFFEFB;border:1px solid rgba(176,137,47,.24);border-radius:12px;
+  padding:16px 18px;box-shadow:inset 0 1px 0 rgba(255,255,255,.85),0 10px 24px -18px rgba(43,42,40,.35)}
+.how .method .num{font-family:var(--label);font-size:12.5px;letter-spacing:.1em;color:var(--gold-deep);
+  width:38px;height:38px;display:grid;place-items:center;border:1px solid rgba(176,137,47,.42);
+  border-radius:50%;background:#FBF4E4;box-shadow:inset 0 1px 0 rgba(255,255,255,.8)}
+.how .method h3{font-family:var(--display);font-weight:600;font-size:clamp(15px,1.08rem,18px);
+  letter-spacing:.02em;color:var(--ink);margin:0 0 4px}
+.how .method p{font-family:var(--serif);font-size:14.5px;line-height:1.55;color:var(--ink-soft);margin:0}
+.how .ways{margin-top:clamp(30px,5vh,44px)}
+.how .ways ul{list-style:none;margin:0;padding:0;display:grid;gap:9px}
+.how .ways li{font-family:var(--serif);font-size:14.5px;line-height:1.5;color:var(--ink-soft)}
+.how .ways li b{font-family:var(--label);font-weight:400;font-size:12px;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--gold-deep);margin-right:.2ch}
+.how .explainer{margin-top:clamp(34px,6vh,52px)}
+
 /* ---- BELOW THE FOLD: progressive disclosure — the descent into full proof -- */
 .proof{max-width:760px;margin:0 auto;padding:clamp(40px,8vh,96px) clamp(20px,5vw,32px) 24px}
 .proof__intro{text-align:center;margin-bottom:clamp(32px,6vh,60px)}
@@ -807,7 +936,8 @@ body[data-filegate="1"] .hero__core:has(.verdict.bad) .type-title{text-decoratio
   .hero .trustmark,.hero .verdict .word,.hero .verdict .sub,.hero .eyebrow,
   .hero .type-title,.hero .recipient,.scrollcue,
   .hero .verdict .glyph,.hero .verdict .hardfact,.hero .verdict .compare,
-  .hero .verdict .honesty{opacity:1!important;transform:none!important}
+  .hero .verdict .honesty,
+  .hero--landing .lead,.lookup-plate,.hero--landing .honesty{opacity:1!important;transform:none!important}
   .verdict.valid .seal{opacity:0;transform:none}
   .verdict.valid.sealed .seal{opacity:1!important;transform:none!important}
   .seal__flash{display:none}
@@ -840,6 +970,14 @@ body[data-filegate="1"] .hero__core:has(.verdict.bad) .type-title{text-decoratio
   .hero .trustmark .svc{font-size:clamp(9px,2svh,11px)}
   .scrollcue{font-size:10px;gap:3px}
   .scrollcue .chev{width:11px;height:11px}
+  /* landing pieces ride the same band */
+  .hero--landing .type-title{font-size:clamp(24px,5.4svh,44px)}
+  .hero--landing .lead{font-size:clamp(12.5px,.95rem,15px)}
+  .lookup-plate{padding:clamp(10px,1.8svh,18px) clamp(12px,2.2vw,20px);margin-top:clamp(2px,.8svh,10px)}
+  .lookup-plate input{padding:11px 12px}
+  .lookup-plate .lp-go{padding:11px 20px}
+  .lookup-plate .lp-hint{margin-top:8px;font-size:11.5px}
+  .hero--landing .honesty{font-size:clamp(10px,.74rem,11.5px)}
 }
 /* Landscape phones / ultra-short (<=520px tall): the VALID hero carries the most
    content (seal + 3 supporting lines), so shrink the seal to a token and tighten
@@ -865,6 +1003,16 @@ body[data-filegate="1"] .hero__core:has(.verdict.bad) .type-title{text-decoratio
     width:clamp(30px,6svh,46px);height:clamp(30px,6svh,46px);font-size:clamp(16px,4svh,28px)}
   .scrollcue{font-size:9px;gap:2px}
   .scrollcue .chev{width:9px;height:9px}
+  /* landing on landscape phones: keep every element, shrink to the bone */
+  .hero--landing .hero__core{gap:clamp(3px,1svh,8px)}
+  .hero--landing .type-title{font-size:clamp(19px,4.4svh,26px)}
+  .hero--landing .lead{font-size:clamp(11px,.8rem,12.5px);max-width:54ch}
+  .lookup-plate{padding:8px 12px;margin-top:2px}
+  .lookup-plate .lp-label{margin-bottom:5px;font-size:9.5px}
+  .lookup-plate input{padding:8px 10px;font-size:clamp(13px,.9rem,15px)}
+  .lookup-plate .lp-go{padding:8px 16px;font-size:13px}
+  .lookup-plate .lp-hint{margin-top:6px;font-size:10.5px}
+  .hero--landing .honesty{font-size:clamp(9px,.68rem,10px);line-height:1.3}
 }`;
 }
 

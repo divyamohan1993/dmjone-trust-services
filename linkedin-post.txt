@@ -1,0 +1,11 @@
+The most cinematic page I have ever shipped still works perfectly with JavaScript turned off.
+
+verify.dmj.one is now a verification theatre: when a recruiter checks a credential, they watch the actual cryptography happen. A cool examination light scans while the server re-verifies the post-quantum signature live, each check ignites in a constellation, and only a record that truly passes earns the gold seal strike. Revoked or altered documents collapse into red embers; the verdict is server-rendered first, so the truth never waits for the show.
+
+The engine is three rendering tiers deep with zero dependencies: WebGPU compute shaders, WebGL2 point sprites, then pure CSS, all in one 10KB gzipped file, WCAG 2.2 AAA throughout.
+
+https://verify.dmj.one
+
+hono · typescript · wgsl/webgpu · webgl2 · ml-dsa-87 · rfc-3161 · cloud run
+
+#webgpu #postquantum #webdev #uxdesign

@@ -121,34 +121,38 @@ function grainSvg(): string {
   return `  <svg class="grain" aria-hidden="true" focusable="false"><filter id="gn"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter><rect width="100%" height="100%" filter="url(#gn)"/></svg>`;
 }
 
-/** One hypotrochoid ring of the guilloche rosette (security-print engraving). */
-function spiroPath(R: number, r: number, d: number, turns: number, cx: number, cy: number): string {
-  const steps = turns * 120;
-  const k = (R - r) / r;
+/** One many-petalled rose ring of the guilloche lace (r = base + amp·cos kθ). */
+function rosePath(base: number, amp: number, k: number, cx: number, cy: number): string {
+  const steps = 360;
   const pts: string[] = [];
   for (let i = 0; i <= steps; i++) {
-    const t = (i / steps) * turns * 2 * Math.PI;
-    const x = cx + (R - r) * Math.cos(t) + d * Math.cos(k * t);
-    const y = cy + (R - r) * Math.sin(t) - d * Math.sin(k * t);
+    const t = (i / steps) * 2 * Math.PI;
+    const r = base + amp * Math.cos(k * t);
+    const x = cx + r * Math.cos(t);
+    const y = cy + r * Math.sin(t);
     pts.push(`${x.toFixed(1)},${y.toFixed(1)}`);
   }
   return `M${pts.join('L')}Z`;
 }
 
 /**
- * The guilloche rosette behind the verdict slot: the engraved-lathe pattern of
- * banknotes and notarial seals, the visual language humans already trust.
- * Generated once at module load (deterministic), drawn in currentColor so the
- * stylesheet can cool it on non-valid states. Purely decorative.
+ * The guilloche lace behind the verdict slot: dense, MANY-petalled wave rings
+ * (14- and 22-petal rose curves), the engraved-lathe ornament of banknotes and
+ * certificate borders. Deliberately high petal counts and static: lace reads
+ * as security printing; low-point geometry or rotation could be misread as
+ * star-sign iconography, which has no place on a trust surface. Drawn in
+ * currentColor so the stylesheet recolours it per state. Purely decorative.
  */
 const ROSETTE_SVG: string = (() => {
-  const ring1 = spiroPath(90, 54, 50, 3, 100, 100);
-  const ring2 = spiroPath(90, 36, 40, 2, 100, 100);
+  const lace1 = rosePath(86, 7, 22, 100, 100);
+  const lace2 = rosePath(70, 9, 14, 100, 100);
+  const lace3 = rosePath(54, 5, 22, 100, 100);
   return `<svg class="rosette" viewBox="0 0 200 200" aria-hidden="true" focusable="false">`
     + `<circle cx="100" cy="100" r="97" fill="none" stroke="currentColor" stroke-width=".5" opacity=".55"/>`
-    + `<circle cx="100" cy="100" r="91" fill="none" stroke="currentColor" stroke-width=".4" stroke-dasharray="1.5 2.5" opacity=".5"/>`
-    + `<path d="${ring1}" fill="none" stroke="currentColor" stroke-width=".55" opacity=".8"/>`
-    + `<path d="${ring2}" fill="none" stroke="currentColor" stroke-width=".45" opacity=".55"/>`
+    + `<circle cx="100" cy="100" r="92" fill="none" stroke="currentColor" stroke-width=".4" stroke-dasharray="1.5 2.5" opacity=".5"/>`
+    + `<path d="${lace1}" fill="none" stroke="currentColor" stroke-width=".5" opacity=".75"/>`
+    + `<path d="${lace2}" fill="none" stroke="currentColor" stroke-width=".45" opacity=".6"/>`
+    + `<path d="${lace3}" fill="none" stroke="currentColor" stroke-width=".4" opacity=".5"/>`
     + `</svg>`;
 })();
 

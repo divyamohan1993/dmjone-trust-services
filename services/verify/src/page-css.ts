@@ -233,13 +233,12 @@ body.js:not(.still) .hero__beams::after{animation:beam-drift 23s ease-in-out inf
   mask-composite:exclude;padding:1.5px;transition:opacity .45s ease}
 body.is-checking:not(.still) .hero .verdict::before{opacity:1;animation:rite-spin 1.6s linear infinite}
 @keyframes rite-spin{to{transform:rotate(1turn)}}
-/* the guilloche rosette — security-print engraving (banknote language),
-   faint blue ink behind the verdict slot; pure ornament */
+/* the guilloche lace — security-print engraving (banknote language), faint
+   blue ink behind the verdict slot; STATIC on purpose (an ornament, never a
+   spinning symbol) */
 .rosette{position:absolute;left:50%;top:0;transform:translate(-50%,-32%);z-index:-1;
   width:clamp(150px,min(52vw,38svh),360px);height:auto;opacity:.16;pointer-events:none;color:var(--blue)}
 .verdict.valid .rosette{color:var(--gold)}
-body.js:not(.still) .rosette{animation:rosette-turn 240s linear infinite}
-@keyframes rosette-turn{to{transform:translate(-50%,-32%) rotate(1turn)}}
 .hero .verdict .word{display:flex;flex-direction:column;align-items:center;gap:clamp(10px,1.8svh,20px);
   margin:0;font-family:var(--display);font-weight:700;font-size:clamp(24px,2.3rem,46px);
   letter-spacing:.02em;line-height:1.06;color:var(--ink)}

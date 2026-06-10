@@ -40,6 +40,20 @@ All notable changes to this project are documented here. Format follows
 
 ### Changed
 
+- 2026-06-10: **Verify surface raised to WCAG 2.2 AAA text standards.** The
+  public pages (landing + credential) now read at 1.4.6 Contrast Enhanced:
+  verify-scoped token overrides darken every small-text colour to >=7:1 on its
+  actual ground (ink-soft 8.1:1, gold-deep 7.4:1, ok 7.7:1 on its soft chip,
+  bad 8.0:1, warn 7.6:1 — computed, not eyeballed; the issuer admin keeps the
+  shared AA palette; decorative gold stays non-text 3:1). Every small-print
+  floor raised to legible sizes (hints/honesty/labels ~10.5-12.5px → 12.5-14.5px
+  with 1.5 line-height; nothing user-facing below ~11.5px even on landscape
+  compaction). The ID input now floors at 16px (kills iOS focus auto-zoom) and
+  input/button/scroll-cue meet the 44px AAA target size. The placeholder is
+  full-contrast italic serif instead of an opacity fade. On sub-380px-tall
+  screens the decorative seal yields its space to the evidence lines. All
+  states still fit one fold with the cue visible at every measured size.
+
 - 2026-06-10: **Verify landing page: the cinematic front door.** The bare
   domain now speaks the credential pages' "Engraved Instrument" language: a
   one-fold hero that asks the visitor's literal question ("Is it genuine?",

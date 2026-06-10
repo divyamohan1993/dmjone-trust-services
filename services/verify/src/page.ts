@@ -616,6 +616,28 @@ function verifyCss(): string {
    adds the minimal cinematic hero + the progressive-disclosure proof below.
    ======================================================================== */
 
+/* ---- WCAG 2.2 AAA (1.4.6 Contrast Enhanced): the PUBLIC verify surface reads
+   at 7:1 for normal text (4.5:1 large). This sheet ships ONLY on verify pages,
+   so re-pointing the shared tokens here darkens every small-text use at once
+   while the issuer admin keeps the shared AA palette. Computed on cream
+   #FFFDFB and each token's darkest in-use ground:
+     --ink-soft  #554E47  8.1:1 cream, 7.6:1 plate-bottom (was #5C554D, 6.8 worst)
+     --gold-deep #6B500F  7.4:1 cream                     (was #876616, 5.3)
+     --ok        #135534  8.8:1 white, 7.7:1 ok-soft      (was #1F7A4D, 4.6 soft)
+     --bad       #7E2020  9.9:1 white, 8.0:1 bad-soft     (was #9A2B2B, 6.1 soft)
+     --warn      #654306  8.9:1 white, 7.6:1 warn-soft    (was #8A5E0E, 4.9 soft)
+   Decorative gold (seal, frames, hairlines) is non-text (1.4.11, 3:1 — met). */
+:root{
+  --ink-soft:#554E47;
+  --gold-deep:#6B500F;
+  --ok:#135534;
+  --bad:#7E2020;
+  --warn:#654306;
+}
+/* the shared primary-button HOVER hardcodes #6E520F (white text 5.3:1) — keep
+   the hover state AAA too. */
+.btn.primary:hover{background:#57400B}
+
 /* ---- ONE gold accent: replace the shared multicolour watercolour wash with a
    single whisper-faint warm bloom (verify only; the issuer keeps the wash). --- */
 body{
@@ -651,7 +673,7 @@ html{scroll-behavior:smooth;background:var(--paper);
   border:0;padding:0;animation:v-fade-down 700ms 120ms both ease-out}
 .hero .trustmark .mark{font-family:var(--display);font-size:clamp(18px,2.4vw,22px);letter-spacing:.01em;color:var(--ink)}
 .hero .trustmark .mark b{color:var(--gold-deep);font-weight:700}
-.hero .trustmark .svc{font-family:var(--label);font-size:clamp(10px,1.4vw,12px);letter-spacing:.22em;
+.hero .trustmark .svc{font-family:var(--label);font-size:clamp(11px,1.5vw,12.5px);letter-spacing:.22em;
   text-transform:uppercase;color:var(--gold-deep)}
 
 /* the centre stack: identity → verdict + seal, balanced in the open middle row. */
@@ -660,7 +682,7 @@ html{scroll-behavior:smooth;background:var(--paper);
 
 /* (2) document identity — reskin the EXISTING .eyebrow/.type-title/.recipient so
    they read as the calm credential line (the JS/tests keep those class names). */
-.hero .eyebrow{font-size:clamp(10px,.74rem,13.5px);letter-spacing:.34em}
+.hero .eyebrow{font-size:clamp(11.5px,.82rem,14px);letter-spacing:.34em}
 /* AUTO-FIT title: rem scales with the fluid root; the 9.2vw cap guarantees even the
    longest single-word title (PARTICIPATION) fits the WIDTH on any phone; the svh cap
    bounds its HEIGHT; overflow-wrap + a 2-line clamp catch an overly long custom title. */
@@ -693,8 +715,8 @@ html{scroll-behavior:smooth;background:var(--paper);
    reader is not left waiting ~1s. The seal still stamps on its own beat (valid). */
 .hero .verdict .word{justify-content:center;font-size:clamp(21px,1.95rem,38px);
   letter-spacing:.02em;gap:.42ch;animation:v-fade-up 520ms 120ms both ease-out}
-.hero .verdict .sub{max-width:38ch;margin-top:.5em;font-size:clamp(13px,1rem,16px);
-  animation:v-fade-up 520ms 240ms both ease-out}
+.hero .verdict .sub{max-width:38ch;margin-top:.5em;font-size:clamp(14px,1.02rem,16.5px);
+  line-height:1.5;animation:v-fade-up 520ms 240ms both ease-out}
 
 /* (1+6+7) THE HERO GLYPH fills the medallion slot on BAD states — so a "do not
    rely" verdict is never a few red words floating in a void, and is legible
@@ -753,14 +775,14 @@ body[data-filegate="1"] .hero__core:has(.verdict.bad) .type-title{text-decoratio
 /* (#5/#2/#3) the verdict-supporting hero lines — compact single lines that ADD
    evidence (hardfact), prompt comparison (compare) and surface the honesty
    disclaimer, without pushing the hero past ~100svh. */
-.hero .verdict .hardfact{margin-top:.45em;max-width:42ch;font-family:var(--label);
-  font-size:clamp(11px,.8rem,13px);letter-spacing:.04em;color:var(--gold-deep);
-  animation:v-fade-up 520ms 320ms both ease-out}
-.hero .verdict .compare{margin-top:.5em;max-width:40ch;font-family:var(--serif);
-  font-style:italic;font-size:clamp(12px,.92rem,15px);color:var(--ink);
-  animation:v-fade-up 520ms 380ms both ease-out}
-.hero .verdict .honesty{margin-top:.55em;max-width:46ch;font-family:var(--serif);
-  font-size:clamp(10.5px,.78rem,12.5px);line-height:1.4;color:var(--ink-soft);
+.hero .verdict .hardfact{margin-top:.45em;max-width:44ch;font-family:var(--label);
+  font-size:clamp(12.5px,.88rem,14px);letter-spacing:.04em;color:var(--gold-deep);
+  line-height:1.5;animation:v-fade-up 520ms 320ms both ease-out}
+.hero .verdict .compare{margin-top:.5em;max-width:42ch;font-family:var(--serif);
+  font-style:italic;font-size:clamp(13px,.95rem,15px);color:var(--ink);
+  line-height:1.5;animation:v-fade-up 520ms 380ms both ease-out}
+.hero .verdict .honesty{margin-top:.55em;max-width:48ch;font-family:var(--serif);
+  font-size:clamp(13px,.9rem,14.5px);line-height:1.5;color:var(--ink-soft);
   animation:v-fade-in 520ms 460ms both ease-out}
 
 /* ---- The embossed gold seal: a struck medallion, not a sticker -----------
@@ -810,7 +832,9 @@ body[data-filegate="1"] .hero__core:has(.verdict.bad) .type-title{text-decoratio
 
 /* (4) scroll cue — quiet invitation downward. */
 .scrollcue{display:inline-flex;flex-direction:column;align-items:center;gap:6px;justify-self:center;
-  font-family:var(--label);font-size:11px;letter-spacing:.26em;text-transform:uppercase;
+  font-family:var(--label);font-size:12.5px;letter-spacing:.26em;text-transform:uppercase;
+  /* padded to a >=44px target (2.5.5 AAA); negative margin keeps the fold cost ~0 */
+  padding:10px 16px;margin:-8px 0;
   color:var(--gold-deep);text-decoration:none;animation:v-fade-in 700ms 700ms both ease-out}
 /* The chevron is the GRAPHICAL affordance of a functional scroll link, so it must
    clear the WCAG 1.4.11 (non-text contrast) 3:1 floor — gold-soft (#CBA85E) was
@@ -835,7 +859,7 @@ body[data-filegate="1"] .hero__core:has(.verdict.bad) .type-title{text-decoratio
    uppercases for document titles; a shouted "IS IT GENUINE?" loses the voice). */
 .hero--landing .type-title{font-size:clamp(28px,2.9rem,54px);letter-spacing:.015em;
   text-transform:none;animation:v-fade-up 560ms 120ms both ease-out}
-.hero--landing .lead{font-family:var(--serif);font-style:italic;font-size:clamp(14px,1.1rem,18px);
+.hero--landing .lead{font-family:var(--serif);font-style:italic;font-size:clamp(15px,1.12rem,18px);
   line-height:1.5;color:var(--ink-soft);max-width:44ch;margin:0;
   animation:v-fade-up 520ms 220ms both ease-out}
 
@@ -849,47 +873,68 @@ body[data-filegate="1"] .hero__core:has(.verdict.bad) .type-title{text-decoratio
     0 6px 18px -10px rgba(135,102,22,.30);
   padding:clamp(14px,2.2svh,22px) clamp(14px,2.5vw,22px);
   animation:v-fade-up 560ms 300ms both ease-out}
-.lookup-plate .lp-label{display:block;font-family:var(--label);font-size:10.5px;
-  letter-spacing:.24em;text-transform:uppercase;color:var(--gold-deep);margin:0 0 8px}
+.lookup-plate .lp-label{display:block;font-family:var(--label);font-size:12px;
+  letter-spacing:.22em;text-transform:uppercase;color:var(--gold-deep);margin:0 0 8px}
 .lookup-plate .lp-row{display:flex;gap:10px;flex-wrap:wrap}
 /* the groove: inset shadows read as engraving; the ID renders in inscriptional
    caps exactly as printed on the document (uppercase is also submitted — the
-   route normalises server-side, so what you see is what verifies). */
-.lookup-plate input{flex:1 1 200px;min-width:0;font-family:var(--label);letter-spacing:.07em;
-  text-transform:uppercase;font-size:clamp(15px,1.02rem,17px);padding:13px 14px;border-radius:10px;
+   route normalises server-side, so what you see is what verifies). 16px floor:
+   below 16px iOS auto-zooms focused inputs; 44px min height (2.5.5 AAA target). */
+.lookup-plate input{flex:1 1 200px;min-width:0;min-height:44px;font-family:var(--label);letter-spacing:.07em;
+  text-transform:uppercase;font-size:clamp(16px,1.05rem,17.5px);padding:12px 14px;border-radius:10px;
   box-shadow:inset 0 2px 4px rgba(60,50,30,.12),inset 0 -1px 0 rgba(255,255,255,.85)}
-.lookup-plate input::placeholder{color:var(--ink-soft);opacity:.62;letter-spacing:.07em}
-.lookup-plate .lp-go{font-size:15px;letter-spacing:.08em;padding:13px 26px;border-radius:10px}
-.lookup-plate .lp-hint{font-family:var(--serif);font-size:12.5px;line-height:1.5;
+/* placeholder at FULL ink-soft (7.6:1+) — italic serif differentiates it from
+   entered text instead of a contrast-killing opacity fade. */
+.lookup-plate input::placeholder{color:var(--ink-soft);opacity:1;font-family:var(--serif);
+  font-style:italic;letter-spacing:.04em}
+.lookup-plate .lp-go{min-height:44px;font-size:15.5px;letter-spacing:.08em;padding:12px 26px;border-radius:10px}
+.lookup-plate .lp-hint{font-family:var(--serif);font-size:clamp(13.5px,.92rem,14.5px);line-height:1.5;
   color:var(--ink-soft);margin:10px 0 0}
-.hero--landing .honesty{max-width:46ch;font-family:var(--serif);font-size:clamp(10.5px,.78rem,12.5px);
-  line-height:1.4;color:var(--ink-soft);margin:0;animation:v-fade-in 520ms 480ms both ease-out}
+.hero--landing .honesty{max-width:48ch;font-family:var(--serif);font-size:clamp(13px,.9rem,14.5px);
+  line-height:1.5;color:var(--ink-soft);margin:0;animation:v-fade-in 520ms 480ms both ease-out}
 
 /* ---- LANDING below the fold: the method ledger + the ways ----------------- */
 .how .method{list-style:none;margin:0;padding:0;display:grid;gap:clamp(14px,2.6vh,22px);counter-reset:m}
 .how .method li{display:grid;grid-template-columns:auto 1fr;gap:14px 16px;align-items:start;
   background:#FFFEFB;border:1px solid rgba(176,137,47,.24);border-radius:12px;
   padding:16px 18px;box-shadow:inset 0 1px 0 rgba(255,255,255,.85),0 10px 24px -18px rgba(43,42,40,.35)}
-.how .method .num{font-family:var(--label);font-size:12.5px;letter-spacing:.1em;color:var(--gold-deep);
-  width:38px;height:38px;display:grid;place-items:center;border:1px solid rgba(176,137,47,.42);
+.how .method .num{font-family:var(--label);font-size:13px;letter-spacing:.1em;color:var(--gold-deep);
+  width:40px;height:40px;display:grid;place-items:center;border:1px solid rgba(176,137,47,.42);
   border-radius:50%;background:#FBF4E4;box-shadow:inset 0 1px 0 rgba(255,255,255,.8)}
-.how .method h3{font-family:var(--display);font-weight:600;font-size:clamp(15px,1.08rem,18px);
+.how .method h3{font-family:var(--display);font-weight:600;font-size:clamp(16px,1.12rem,19px);
   letter-spacing:.02em;color:var(--ink);margin:0 0 4px}
-.how .method p{font-family:var(--serif);font-size:14.5px;line-height:1.55;color:var(--ink-soft);margin:0}
+.how .method p{font-family:var(--serif);font-size:clamp(15px,1.02rem,16.5px);line-height:1.55;color:var(--ink-soft);margin:0}
 .how .ways{margin-top:clamp(30px,5vh,44px)}
-.how .ways ul{list-style:none;margin:0;padding:0;display:grid;gap:9px}
-.how .ways li{font-family:var(--serif);font-size:14.5px;line-height:1.5;color:var(--ink-soft)}
-.how .ways li b{font-family:var(--label);font-weight:400;font-size:12px;letter-spacing:.1em;
+.how .ways ul{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.how .ways li{font-family:var(--serif);font-size:clamp(15px,1.02rem,16.5px);line-height:1.5;color:var(--ink-soft)}
+.how .ways li b{font-family:var(--label);font-weight:400;font-size:13px;letter-spacing:.1em;
   text-transform:uppercase;color:var(--gold-deep);margin-right:.2ch}
 .how .explainer{margin-top:clamp(34px,6vh,52px)}
+
+/* ---- AAA size floors for the SHARED components rendered on this surface ----
+   (1.4.6-adjacent readability: nothing user-facing under ~12.5px; supporting
+   prose >=13.5px with 1.5 line-height. Scoped here so the admin keeps the
+   shared sheet's denser sizing.) */
+.status .txt span{font-size:14px;line-height:1.5}
+.checks li{font-size:15px}
+.pill{font-size:12.5px}
+dl.grid dt{font-size:14.5px}
+dl.grid dd{font-size:15px}
+.trust{font-size:14.5px;line-height:1.55}
+.foot{font-size:13.5px;line-height:1.5}
+.filecheck .fc-why{font-size:14px;line-height:1.5}
+.filecheck .fc-note{font-size:13px;line-height:1.5}
+.filecheck .fc-cta{font-size:14.5px}
+.docmeta{font-size:13.5px}
+.docmeta .filechip{font-size:11.5px}
 
 /* ---- BELOW THE FOLD: progressive disclosure — the descent into full proof -- */
 .proof{max-width:760px;margin:0 auto;padding:clamp(40px,8vh,96px) clamp(20px,5vw,32px) 24px}
 .proof__intro{text-align:center;margin-bottom:clamp(32px,6vh,60px)}
-.proof__intro .ek{font-family:var(--label);font-size:11.5px;letter-spacing:.26em;text-transform:uppercase;color:var(--gold-deep)}
+.proof__intro .ek{font-family:var(--label);font-size:12.5px;letter-spacing:.26em;text-transform:uppercase;color:var(--gold-deep)}
 .proof__intro h2{font-family:var(--display);font-weight:600;font-size:clamp(22px,3.4vw,30px);
   letter-spacing:.02em;color:var(--ink);margin:8px 0 0}
-.proof .block-h{font-family:var(--label);font-size:12px;letter-spacing:.18em;text-transform:uppercase;
+.proof .block-h{font-family:var(--label);font-size:13px;letter-spacing:.18em;text-transform:uppercase;
   color:var(--gold-deep);margin:0 0 14px}
 
 /* the status badge + checks ledger keep their shared look; just give them air. */
@@ -904,8 +949,8 @@ body[data-filegate="1"] .hero__core:has(.verdict.bad) .type-title{text-decoratio
 .proof .explainer{margin-top:clamp(34px,6vh,52px)}
 .proof .panel{margin-top:18px}
 /* plain-language glosses under the two technical downloads (#4). */
-.proof .action-glosses{margin:12px 0 0;display:grid;grid-template-columns:auto 1fr;gap:3px 10px;
-  font-size:12.5px;color:var(--ink-soft)}
+.proof .action-glosses{margin:12px 0 0;display:grid;grid-template-columns:auto 1fr;gap:4px 10px;
+  font-size:13.5px;line-height:1.5;color:var(--ink-soft)}
 .proof .action-glosses dt{font-family:var(--label);letter-spacing:.04em;color:var(--gold-deep)}
 .proof .action-glosses dd{margin:0;font-family:var(--serif)}
 
@@ -957,62 +1002,70 @@ body[data-filegate="1"] .hero__core:has(.verdict.bad) .type-title{text-decoratio
   .hero .recipient .lbl{margin-bottom:2px;font-size:clamp(12px,.9rem,14px)}
   .hero .verdict{gap:clamp(3px,1svh,10px)}
   .hero .verdict .word{font-size:clamp(18px,3.6svh,28px)}
-  .hero .verdict .sub{font-size:clamp(12px,.9rem,14px);margin-top:clamp(2px,.8svh,6px);max-width:32ch}
+  .hero .verdict .sub{font-size:clamp(13px,.95rem,14.5px);margin-top:clamp(2px,.8svh,6px);max-width:34ch}
   .hero .verdict .seal{--d:clamp(48px,10svh,96px)}
-  /* compact the bad-state glyph + the supporting lines on short viewports too, so
-     they ride within the fold; the lines stay single + small. */
+  /* compact the bad-state glyph + the supporting lines on short viewports too —
+     space comes from gaps and the seal, never from sub-legible text (AAA). */
   .hero .verdict.revoked .glyph,.hero .verdict.bad .glyph,.hero .verdict.unknown .glyph{
     width:clamp(44px,9svh,86px);height:clamp(44px,9svh,86px);font-size:clamp(24px,6.5svh,56px)}
-  .hero .verdict .hardfact{margin-top:clamp(2px,.7svh,5px);font-size:clamp(10px,.78rem,12px)}
-  .hero .verdict .compare{margin-top:clamp(2px,.7svh,5px);font-size:clamp(11px,.85rem,13px)}
-  .hero .verdict .honesty{margin-top:clamp(2px,.7svh,5px);font-size:clamp(10px,.74rem,11.5px);line-height:1.35}
+  .hero .verdict .hardfact{margin-top:clamp(2px,.7svh,5px);font-size:clamp(12px,.84rem,13.5px)}
+  .hero .verdict .compare{margin-top:clamp(2px,.7svh,5px);font-size:clamp(12.5px,.9rem,14px)}
+  .hero .verdict .honesty{margin-top:clamp(2px,.7svh,5px);font-size:clamp(12px,.84rem,13.5px);line-height:1.4}
   .hero .trustmark .mark{font-size:clamp(15px,3.4svh,18px)}
-  .hero .trustmark .svc{font-size:clamp(9px,2svh,11px)}
-  .scrollcue{font-size:10px;gap:3px}
+  .hero .trustmark .svc{font-size:clamp(10.5px,2.2svh,11.5px)}
+  .scrollcue{font-size:11.5px;gap:3px;padding:8px 14px;margin:-6px 0}
   .scrollcue .chev{width:11px;height:11px}
-  /* landing pieces ride the same band */
+  /* landing pieces ride the same band (text floors stay AAA-legible) */
   .hero--landing .type-title{font-size:clamp(24px,5.4svh,44px)}
-  .hero--landing .lead{font-size:clamp(12.5px,.95rem,15px)}
+  .hero--landing .lead{font-size:clamp(13.5px,.98rem,15.5px)}
   .lookup-plate{padding:clamp(10px,1.8svh,18px) clamp(12px,2.2vw,20px);margin-top:clamp(2px,.8svh,10px)}
-  .lookup-plate input{padding:11px 12px}
-  .lookup-plate .lp-go{padding:11px 20px}
-  .lookup-plate .lp-hint{margin-top:8px;font-size:11.5px}
-  .hero--landing .honesty{font-size:clamp(10px,.74rem,11.5px)}
+  .lookup-plate input{padding:10px 12px}
+  .lookup-plate .lp-go{padding:10px 20px}
+  .lookup-plate .lp-hint{margin-top:8px;font-size:12.5px}
+  .hero--landing .honesty{font-size:clamp(12px,.84rem,13.5px)}
 }
 /* Landscape phones / ultra-short (<=520px tall): the VALID hero carries the most
    content (seal + 3 supporting lines), so shrink the seal to a token and tighten
    to the bone — every state still fits one fold with the scroll cue shown. */
 @media (max-height:520px){
-  .hero{padding:clamp(4px,1svh,12px) clamp(16px,5vw,40px) clamp(4px,1svh,10px)}
-  .hero__core{gap:clamp(2px,.6svh,6px)}
+  .hero{padding:clamp(3px,.9svh,12px) clamp(16px,5vw,40px) clamp(3px,.9svh,10px)}
+  .hero__core{gap:clamp(2px,.6svh,6px);padding:clamp(1px,.4svh,6px) 0}
   .hero .trustmark .mark{font-size:clamp(13px,3svh,16px)}
-  .hero .trustmark .svc{font-size:clamp(8px,1.8svh,10px)}
-  .hero .eyebrow{font-size:clamp(9px,.62rem,11px);letter-spacing:.26em}
+  .hero .trustmark .svc{font-size:clamp(10px,2.2svh,11px)}
+  .hero .eyebrow{font-size:clamp(10.5px,.74rem,11.5px);letter-spacing:.22em}
   .hero .type-title{font-size:clamp(16px,3.3svh,23px)}
   .hero .recipient{margin-top:clamp(1px,.4svh,3px);font-size:clamp(12px,.95rem,15px)}
-  .hero .recipient .lbl{font-size:clamp(10px,.78rem,12px);margin-bottom:0}
+  .hero .recipient .lbl{font-size:clamp(10.5px,.8rem,12px);margin-bottom:0}
   .hero .verdict{gap:clamp(1px,.4svh,4px)}
-  .hero .verdict .sub{font-size:clamp(9.5px,.72rem,11.5px);margin-top:clamp(1px,.35svh,3px);max-width:38ch}
+  .hero .verdict .sub{font-size:clamp(11.5px,.82rem,12.5px);margin-top:clamp(1px,.35svh,3px);max-width:42ch;line-height:1.35}
   .hero .docmeta{margin-top:clamp(2px,.5svh,5px)}
-  .hero .verdict .seal{--d:clamp(26px,5.6svh,44px)}
+  .hero .verdict .seal{--d:clamp(18px,5svh,44px)}
   .hero .verdict .word{font-size:clamp(15px,2.7svh,20px)}
-  .hero .verdict .hardfact{font-size:clamp(8.5px,.68rem,10.5px);margin-top:clamp(1px,.35svh,3px)}
-  .hero .verdict .compare{font-size:clamp(9px,.72rem,11px);margin-top:clamp(1px,.35svh,3px)}
-  .hero .verdict .honesty{font-size:clamp(8.5px,.66rem,10px);margin-top:clamp(1px,.35svh,3px);line-height:1.25}
+  .hero .verdict .hardfact{font-size:clamp(11px,.78rem,12px);margin-top:clamp(1px,.35svh,3px);line-height:1.35;max-width:52ch}
+  .hero .verdict .compare{font-size:clamp(11.5px,.8rem,12.5px);margin-top:clamp(1px,.35svh,3px);line-height:1.35;max-width:52ch}
+  .hero .verdict .honesty{font-size:clamp(11px,.78rem,12px);margin-top:clamp(1px,.35svh,3px);line-height:1.3;max-width:56ch}
   .hero .verdict.revoked .glyph,.hero .verdict.bad .glyph,.hero .verdict.unknown .glyph{
     width:clamp(30px,6svh,46px);height:clamp(30px,6svh,46px);font-size:clamp(16px,4svh,28px)}
-  .scrollcue{font-size:9px;gap:2px}
+  .scrollcue{font-size:10.5px;gap:2px;padding:6px 12px;margin:-5px 0}
   .scrollcue .chev{width:9px;height:9px}
-  /* landing on landscape phones: keep every element, shrink to the bone */
+  /* ultra-short valid hero: the struck medallion is pure decoration (the word +
+     hard-fact carry the verdict) — below ~380px of height its floor-size budget
+     buys a whole supporting line instead. Bad-state glyphs stay (they ARE the
+     colour-independent warning). */
+  @media (max-height:380px){
+    .verdict .seal,.verdict.valid.sealed .seal{display:none}
+  }
+  /* landing on landscape phones: keep every element; space comes from gaps and
+     chrome, never from sub-legible text (floors hold ~12px even here). */
   .hero--landing .hero__core{gap:clamp(3px,1svh,8px)}
   .hero--landing .type-title{font-size:clamp(19px,4.4svh,26px)}
-  .hero--landing .lead{font-size:clamp(11px,.8rem,12.5px);max-width:54ch}
-  .lookup-plate{padding:8px 12px;margin-top:2px}
-  .lookup-plate .lp-label{margin-bottom:5px;font-size:9.5px}
-  .lookup-plate input{padding:8px 10px;font-size:clamp(13px,.9rem,15px)}
-  .lookup-plate .lp-go{padding:8px 16px;font-size:13px}
-  .lookup-plate .lp-hint{margin-top:6px;font-size:10.5px}
-  .hero--landing .honesty{font-size:clamp(9px,.68rem,10px);line-height:1.3}
+  .hero--landing .lead{font-size:clamp(12px,.86rem,13px);max-width:56ch}
+  .lookup-plate{padding:7px 12px;margin-top:2px}
+  .lookup-plate .lp-label{margin-bottom:4px;font-size:11px;letter-spacing:.16em}
+  .lookup-plate input{min-height:40px;padding:7px 10px;font-size:16px}
+  .lookup-plate .lp-go{min-height:40px;padding:7px 16px;font-size:13.5px}
+  .lookup-plate .lp-hint{margin-top:5px;font-size:12px;line-height:1.4}
+  .hero--landing .honesty{font-size:clamp(11.5px,.8rem,12.5px);line-height:1.35}
 }`;
 }
 

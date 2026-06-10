@@ -311,12 +311,17 @@ export function createVerifyApp(deps: VerifyDeps): Hono<{ Variables: RequestVars
   // ── Favicons: the real dmj.one logo, embedded + served same-origin ─────────
   // Browsers probe /favicon.ico automatically; the pages also link the PNGs
   // explicitly (32px tabs, 180px apple-touch). All answer with image/png —
-  // universally accepted — under a long but non-immutable cache (the filenames
-  // are stable, so a future logo change must be able to propagate).
+  // universally accepted — under a day-long, non-immutable cache.
   const serveIcon = (c: Context, bytes: Buffer): Response => {
-    const buf = bytes.slice().buffer;
+    // EXACT copy into a fresh ArrayBuffer, never `bytes.slice().buffer`: a
+    // small Buffer lives in Node's shared 8 KiB pool, where `.slice()` is a
+    // view and `.buffer` is the WHOLE pool slab — serving that shipped
+    // neighbouring pool memory (Hono source text) as the favicon.
+    const copy = new Uint8Array(bytes.byteLength);
+    copy.set(bytes);
+    const buf = copy.buffer;
     c.header('Content-Type', 'image/png');
-    c.header('Cache-Control', 'public, max-age=604800');
+    c.header('Cache-Control', 'public, max-age=86400');
     c.header('Content-Length', String(bytes.byteLength));
     return c.body(buf);
   };

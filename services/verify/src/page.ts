@@ -566,8 +566,8 @@ function head(nonce: string, title: string): string {
 <meta name="theme-color" content="#F7F9FC">
 <title>${escapeHtml(title)}</title>
 <meta name="robots" content="noindex">
-<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
-<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=2">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=2">
 <link rel="preload" as="font" type="font/woff2" href="/fonts/playfair-display-latin-700-normal.woff2" crossorigin>
 <link rel="preload" as="font" type="font/woff2" href="/fonts/marcellus-latin-400-normal.woff2" crossorigin>
 <style nonce="${nonce}">

@@ -7,6 +7,7 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import { createVerifyApp, type VerifyDeps } from '../src/app.js';
 import { CINEMA_JS_HASH } from '../src/cinema.js';
+import { FAVICON_PNG_32, FAVICON_PNG_180 } from '../src/favicon.js';
 import {
   asJson,
   FakeAnchorRepository,
@@ -183,15 +184,24 @@ describe('health', () => {
 });
 
 describe('favicons (the real dmj.one logo, served same-origin)', () => {
-  it('answers the automatic /favicon.ico probe and the linked PNGs', async () => {
+  it('serves the EXACT icon bytes (a pooled small Buffer once leaked slab memory)', async () => {
     const { app } = makeHarness();
-    for (const path of ['/favicon.ico', '/favicon-32.png', '/apple-touch-icon.png']) {
+    const expected: Record<string, Buffer> = {
+      '/favicon.ico': FAVICON_PNG_32,
+      '/favicon-32.png': FAVICON_PNG_32,
+      '/apple-touch-icon.png': FAVICON_PNG_180,
+    };
+    for (const [path, want] of Object.entries(expected)) {
       const res = await app.request(path);
       expect(res.status).toBe(200);
       expect(res.headers.get('content-type')).toBe('image/png');
       const bytes = new Uint8Array(await res.arrayBuffer());
-      // PNG magic — these are real image bytes, not an HTML error page.
+      // PNG magic AND full byte equality with the source: `.slice().buffer` on
+      // a pool-allocated Buffer served the WHOLE 8 KiB slab (Hono source text)
+      // — a magic-only check passed by pool-offset luck in this process.
       expect(Array.from(bytes.slice(0, 4))).toEqual([0x89, 0x50, 0x4e, 0x47]);
+      expect(bytes.byteLength).toBe(want.byteLength);
+      expect(Buffer.from(bytes).equals(want)).toBe(true);
     }
   });
 
@@ -199,8 +209,8 @@ describe('favicons (the real dmj.one logo, served same-origin)', () => {
     const { app } = makeHarness();
     const res = await app.request(`/c/${ID}`);
     const html = await res.text();
-    expect(html).toContain('<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">');
-    expect(html).toContain('<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">');
+    expect(html).toContain('<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=2">');
+    expect(html).toContain('<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=2">');
     const csp = res.headers.get('content-security-policy') ?? '';
     expect(csp).toContain("img-src 'self'");
   });

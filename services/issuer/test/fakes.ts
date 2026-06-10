@@ -195,7 +195,16 @@ export class FakeSecretStore implements SecretStore {
 }
 
 export class FakeSigner implements HybridSigner {
-  constructor(private readonly trace?: CallTrace) {}
+  /**
+   * Optional RFC-3161 token to attach to the result, modelling a reachable TSA.
+   * Default (`undefined`) keeps the result token-free — the steady state when no
+   * TSA is configured — so existing tests stay unchanged and the omit-on-absent
+   * record path is exercised by default.
+   */
+  constructor(
+    private readonly trace?: CallTrace,
+    private readonly tsaTimestampToken?: string,
+  ) {}
   async sign(
     unsignedPdf: Uint8Array,
     buildCanonicalPayload: (pdfSha256: string) => string,
@@ -214,6 +223,11 @@ export class FakeSigner implements HybridSigner {
       mldsaSignature: 'c2lnbmF0dXJl',
       mldsaPublicKeyId: 'mldsa-key-1',
       padesCertFingerprint: 'd'.repeat(64),
+      // Only present when a token was injected — mirrors the real signer, which
+      // omits the field unless a TSA actually returned a token.
+      ...(this.tsaTimestampToken !== undefined && {
+        tsaTimestampToken: this.tsaTimestampToken,
+      }),
     };
   }
 }
@@ -372,6 +386,8 @@ export function buildDeps(opts: {
   env?: Partial<AppEnv>;
   logConflicts?: number;
   conflictError?: () => Error;
+  /** When set, the fake signer attaches this RFC-3161 token to every result. */
+  tsaTimestampToken?: string;
 } = {}): BuiltDeps {
   const trace: CallTrace = [];
   const logRepo = new FakeLogRepo(trace, opts.conflictError);
@@ -388,7 +404,7 @@ export function buildDeps(opts: {
     adminRepo: new FakeAdminRepo(),
     auditLog: new FakeAuditLog(trace),
     secretStore: new FakeSecretStore(),
-    signer: new FakeSigner(trace),
+    signer: new FakeSigner(trace, opts.tsaTimestampToken),
     logSigner: new FakeLogSigner(),
     anchorPublisher: new FakeAnchorPublisher(),
     passwordHasher: new FakePasswordHasher(),

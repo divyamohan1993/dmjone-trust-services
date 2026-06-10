@@ -45,6 +45,9 @@ export {
 // Signature verification (verify-side, keyless).
 export { createSignatureVerifier } from './verifier.js';
 
+// RFC-3161 timestamp-token verification (verify-side, keyless; token embeds chain).
+export { verifyTimestampToken, type TimestampVerifyResult } from './timestamp-verifier.js';
+
 // Transparency log (hash chain + Signed Tree Heads).
 export {
   createLogSigner,

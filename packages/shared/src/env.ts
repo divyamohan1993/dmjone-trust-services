@@ -66,10 +66,20 @@ const issuerEnvSchema = z.object({
    */
   ADMIN_SETUP_TOKEN: z.string().min(16).optional(),
   /**
-   * RFC-3161 Time-Stamping Authority endpoint for PAdES-B-T timestamps.
-   * Best-effort at sign time; unset = no embedded timestamp (the transparency
-   * log + anchor remain the primary trusted timestamp). e.g.
-   * http://timestamp.digicert.com
+   * RFC-3161 Time-Stamping Authority endpoint. When set, issuance obtains a
+   * trusted timestamp over the raw ML-DSA signature and stores it on the record
+   * (nothing is embedded in the delivered PDF — the bytes stay byte-identical to
+   * the render). Best-effort at sign time; unset = no timestamp (the
+   * transparency log + anchor remain the primary trusted timestamp).
+   *
+   * IMPORTANT: the token verifier (verifyTimestampToken) supports RSA TSAs with
+   * a SHA-2 signing digest only. VERIFIED-GOOD against live tokens:
+   *   - http://timestamp.digicert.com  (RSA / SHA-256)  ← recommended default
+   *   - http://timestamp.sectigo.com   (RSA / SHA-384)
+   * NOT yet verifiable: TSAs that sign with ECDSA — notably FreeTSA
+   * (ecdsa-with-SHA512) — whose tokens would be stored but verify as invalid.
+   * Point TSA_URL at an RSA TSA above; do NOT use FreeTSA until ECDSA token
+   * verification is added.
    */
   TSA_URL: z.string().url().optional(),
   /**

@@ -118,6 +118,31 @@ describe('POST /api/credentials — issuance happy path', () => {
   });
 });
 
+describe('POST /api/credentials — TSA timestamp persistence', () => {
+  it('persists tsaTimestampToken on the record when the signer produced one', async () => {
+    const deps = buildDeps({ tsaTimestampToken: 'fake-cert-token' }); // pragma: allowlist secret
+    const app = createIssuerApp(deps);
+    const cookie = await mintSessionCookie(deps.env);
+
+    await authedPost(app, cookie, '/api/credentials', issueBody());
+
+    const record = await deps.credentialRepo.getById('DMJ-IC-20260605-01');
+    expect(record?.tsaTimestampToken).toBe('fake-cert-token');
+  });
+
+  it('omits tsaTimestampToken entirely when the signer returned none', async () => {
+    const deps = buildDeps(); // default fake signer attaches no token
+    const app = createIssuerApp(deps);
+    const cookie = await mintSessionCookie(deps.env);
+
+    await authedPost(app, cookie, '/api/credentials', issueBody());
+
+    const record = await deps.credentialRepo.getById('DMJ-IC-20260605-01');
+    // The KEY is absent (not set to undefined) — mirrors the no-TSA steady state.
+    expect('tsaTimestampToken' in record!).toBe(false);
+  });
+});
+
 describe('POST /api/credentials — transparency-log retry', () => {
   it('retries the append once on LOG_CONFLICT then succeeds', async () => {
     const deps = buildDeps({

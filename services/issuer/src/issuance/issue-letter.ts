@@ -108,6 +108,10 @@ export async function issueLetter(
     mldsaSignature: sig.mldsaSignature,
     mldsaPublicKeyId: sig.mldsaPublicKeyId,
     padesCertFingerprint: sig.padesCertFingerprint,
+    // Best-effort RFC-3161 timestamp over the raw ML-DSA signature; present iff
+    // the signer reached a TSA. Conditional spread keeps the key absent (not
+    // `: undefined`) under exactOptionalPropertyTypes.
+    ...(sig.tsaTimestampToken !== undefined && { tsaTimestampToken: sig.tsaTimestampToken }),
     logSeq: append.logSeq,
     logLeafHash: append.logLeafHash,
     passwordHash,

@@ -159,6 +159,14 @@ export interface HybridSignatureResult {
   mldsaPublicKeyId: string;
   /** SHA-256 fingerprint of the PAdES signing certificate, hex. */
   padesCertFingerprint: string;
+  /**
+   * Base64 (DER) RFC-3161 TimeStampToken over the RAW ML-DSA signature bytes —
+   * an independent third-party attestation of WHEN the signature existed, so it
+   * cannot have been back-dated. Best-effort: ABSENT when no TSA is configured or
+   * the TSA call failed (a TSA outage never blocks issuance). This is
+   * independently-verifiable forensic evidence, not a statutory presumption.
+   */
+  tsaTimestampToken?: string;
 }
 
 /** BSA 2023 §63 certificate-of-authenticity metadata (Part A pre-filled). */
@@ -199,6 +207,10 @@ export interface CredentialRecord {
   mldsaSignature: string;
   mldsaPublicKeyId: string;
   padesCertFingerprint: string;
+  /** Persisted RFC-3161 timestamp over the raw ML-DSA signature (see
+   *  {@link HybridSignatureResult.tsaTimestampToken}). Absent on legacy records
+   *  and whenever no TSA was reachable at issue-time. */
+  tsaTimestampToken?: string;
   // transparency log linkage
   logSeq: number;
   logLeafHash: string;

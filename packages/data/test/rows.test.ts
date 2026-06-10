@@ -93,3 +93,33 @@ describe('credential row round-trip preserves kind', () => {
     expect(rowToCredential(credentialToRow(record)).kind).toBeUndefined();
   });
 });
+
+describe('credential row round-trip preserves the optional RFC-3161 timestamp', () => {
+  const content: CredentialContent = {
+    credentialId: 'DMJ-IC-20260609-01',
+    type: 'internship',
+    issueDate: '2026-06-09',
+    kicker: 'Certificate of',
+    title: 'INTERNSHIP',
+    intro: 'This is to certify that',
+    recipientName: 'Asha Rao',
+    bodyParagraphs: ['worked with us'],
+    signatory: SIGNATORY,
+  };
+
+  it('round-trips tsaTimestampToken when present', () => {
+    const record: CredentialRecord = {
+      ...baseRecord(),
+      content,
+      tsaTimestampToken: 'TUlJ...base64-der-token',
+    };
+    expect(rowToCredential(credentialToRow(record)).tsaTimestampToken).toBe('TUlJ...base64-der-token');
+  });
+
+  it('omits tsaTimestampToken entirely when absent (legacy/no-TSA record)', () => {
+    const record: CredentialRecord = { ...baseRecord(), content };
+    const back = rowToCredential(credentialToRow(record));
+    expect(back.tsaTimestampToken).toBeUndefined();
+    expect('tsaTimestampToken' in back).toBe(false);
+  });
+});

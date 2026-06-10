@@ -32,21 +32,28 @@ import {
   type HybridSigner,
   type SigningKeys,
 } from '@dmjone/shared';
+import forge from 'node-forge';
 import { bytesToBase64, sha256Hex, toUtf8Bytes } from './hash.js';
-import type { TsaOptions } from './tsa.js';
+import { binaryStringToBytes } from './pades-util.js';
+import { requestTimestampToken, type TsaOptions } from './tsa.js';
 
 /**
  * Build a {@link HybridSigner} bound to the issuer's decrypted signing keys.
  * Constructed only inside the issuer service; the verify service never has the
  * secret material to call this.
  *
- * `opts.tsa` is accepted for call-site compatibility (the issuer composition
- * root and the LTV smoke still pass it) but is IGNORED: with no embedded PAdES
- * there is no PKCS#7 signature to timestamp. The trusted timestamp is the
- * transparency-log head (+ external anchor), not an RFC-3161 token.
+ * When `opts.tsa` is set, the signer additionally obtains an RFC-3161 trusted
+ * timestamp over the RAW ML-DSA signature bytes and returns it (base64 DER) as
+ * {@link HybridSignatureResult.tsaTimestampToken}. The token is NOT embedded in
+ * the PDF — the delivered bytes stay byte-identical to the rendered PDF (the
+ * detached-signature design); it is stored server-side as independent forensic
+ * evidence of WHEN the signature existed. This is strictly best-effort: a TSA
+ * outage/timeout/rejection leaves the token absent and NEVER blocks or fails
+ * signing (the transparency-log head + external anchor remain the primary
+ * trusted timestamp).
  */
 export function createHybridSigner(keys: SigningKeys, opts?: { tsa?: TsaOptions }): HybridSigner {
-  void opts; // accepted for compatibility; no PAdES ⇒ no TSA timestamp to embed.
+  const tsa = opts?.tsa;
   return {
     async sign(
       unsignedPdf: Uint8Array,
@@ -64,12 +71,13 @@ export function createHybridSigner(keys: SigningKeys, opts?: { tsa?: TsaOptions 
       const canonicalBytes = toUtf8Bytes(canonicalPayload);
 
       // 5. Detached ML-DSA-87 signature over the canonical bytes.
-      const mldsaSignature = bytesToBase64(ml_dsa87.sign(canonicalBytes, keys.mldsaSecretKey));
+      const rawSignatureBytes = ml_dsa87.sign(canonicalBytes, keys.mldsaSecretKey);
+      const mldsaSignature = bytesToBase64(rawSignatureBytes);
 
       // 6. Canonical hash (the transparency-log leaf input).
       const canonicalSha256 = sha256Hex(canonicalBytes);
 
-      return {
+      const result: HybridSignatureResult = {
         signedPdf,
         pdfSha256,
         canonicalPayload,
@@ -80,6 +88,28 @@ export function createHybridSigner(keys: SigningKeys, opts?: { tsa?: TsaOptions 
         // signature + transparency log + QR, not a PKCS#7 signer cert.
         padesCertFingerprint: '',
       };
+
+      // 7. Best-effort RFC-3161 timestamp over the RAW ML-DSA signature bytes
+      //    (NOT the base64 string) — independent proof of when the signature
+      //    existed. The imprint is over exactly these bytes, so a verifier checks
+      //    it against base64ToBytes(record.mldsaSignature). requestTimestampToken
+      //    swallows every failure (returns null); the whole block is additionally
+      //    wrapped so a malformed token / serialization error can never throw —
+      //    the invariant is that a TSA never blocks or fails issuance.
+      if (tsa) {
+        try {
+          const token = await requestTimestampToken(rawSignatureBytes, tsa);
+          if (token) {
+            result.tsaTimestampToken = bytesToBase64(
+              binaryStringToBytes(forge.asn1.toDer(token).getBytes()),
+            );
+          }
+        } catch {
+          // Leave tsaTimestampToken absent; issuance proceeds unaffected.
+        }
+      }
+
+      return result;
     },
   };
 }

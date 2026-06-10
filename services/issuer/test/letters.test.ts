@@ -160,6 +160,30 @@ describe('POST /api/letters — issuance happy path', () => {
   });
 });
 
+describe('POST /api/letters — TSA timestamp persistence', () => {
+  it('persists tsaTimestampToken on the record when the signer produced one', async () => {
+    const deps = buildDeps({ tsaTimestampToken: 'fake-letter-token' }); // pragma: allowlist secret
+    const app = createIssuerApp(deps);
+    const cookie = await mintSessionCookie(deps.env);
+
+    await authedPost(app, cookie, LETTERS_PATH, letterBody());
+
+    const record = await deps.credentialRepo.getById('DMJ-LTR-20260605-01');
+    expect(record?.tsaTimestampToken).toBe('fake-letter-token');
+  });
+
+  it('omits tsaTimestampToken entirely when the signer returned none', async () => {
+    const deps = buildDeps(); // default fake signer attaches no token
+    const app = createIssuerApp(deps);
+    const cookie = await mintSessionCookie(deps.env);
+
+    await authedPost(app, cookie, LETTERS_PATH, letterBody());
+
+    const record = await deps.credentialRepo.getById('DMJ-LTR-20260605-01');
+    expect('tsaTimestampToken' in record!).toBe(false);
+  });
+});
+
 describe('POST /api/letters — auth + validation', () => {
   it('rejects unauthenticated issuance with a uniform 401', async () => {
     const deps = buildDeps();

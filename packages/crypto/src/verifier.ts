@@ -34,6 +34,7 @@ import {
 import forge from 'node-forge';
 import { base64ToBytes, sha256Hex, toUtf8Bytes } from './hash.js';
 import { binaryStringToBytes } from './pades-util.js';
+import { verifyTimestampToken } from './timestamp-verifier.js';
 
 /** Matches the filled `/ByteRange [a b c d]` written by @signpdf at sign-time. */
 const BYTE_RANGE_RE = /\/ByteRange\s*\[\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*\]/;
@@ -68,6 +69,12 @@ export function createSignatureVerifier(keys: VerifyingKeys): SignatureVerifier 
 
     async verifyPdfPades(signedPdf: Uint8Array): Promise<PadesVerifyResult> {
       return verifyPades(signedPdf);
+    },
+
+    verifyTimestamp(tokenB64: string, data: Uint8Array) {
+      // Delegate to the standalone RFC-3161 verifier (keyless — the token embeds
+      // its own TSA cert chain). Never throws; malformed → { valid: false }.
+      return verifyTimestampToken(tokenB64, data);
     },
   };
 }

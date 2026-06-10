@@ -383,6 +383,30 @@ describe('POST /api/uploads — the attest pipeline', () => {
     expect(ev?.meta?.signed).toBe(true);
   });
 
+  it('persists tsaTimestampToken on the record when the signer produced one', async () => {
+    const deps = buildDeps({ tsaTimestampToken: 'fake-upload-token' }); // pragma: allowlist secret
+    const app = createIssuerApp(deps);
+    const cookie = await mintSessionCookie(deps.env);
+
+    const res = await authedPost(app, cookie, SIGN_PATH, signBody());
+    const documentId = res.headers.get('x-document-id')!;
+
+    const record = await deps.credentialRepo.getById(documentId);
+    expect(record?.tsaTimestampToken).toBe('fake-upload-token');
+  });
+
+  it('omits tsaTimestampToken entirely when the signer returned none', async () => {
+    const deps = buildDeps(); // default fake signer attaches no token
+    const app = createIssuerApp(deps);
+    const cookie = await mintSessionCookie(deps.env);
+
+    const res = await authedPost(app, cookie, SIGN_PATH, signBody());
+    const documentId = res.headers.get('x-document-id')!;
+
+    const record = await deps.credentialRepo.getById(documentId);
+    expect('tsaTimestampToken' in record!).toBe(false);
+  });
+
   it('sanitizes a path-y / unsafe filename to a safe basename', async () => {
     const deps = buildDeps();
     const app = createIssuerApp(deps);

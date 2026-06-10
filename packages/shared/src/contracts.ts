@@ -104,6 +104,21 @@ export interface SignatureVerifier {
   verifyMldsaForRecord(record: CredentialRecord): boolean;
   /** Verify the embedded PAdES PKCS#7 (only meaningful in the file-upload flow). */
   verifyPdfPades(signedPdf: Uint8Array): Promise<PadesVerifyResult>;
+  /**
+   * Verify an RFC-3161 TimeStampToken over `data`. `tokenB64` is the base64 DER
+   * token (as stored on the record); `data` is the exact bytes that were
+   * timestamped — for a credential that is the RAW ML-DSA signature bytes
+   * (`base64ToBytes(record.mldsaSignature)`), NOT the base64 string. Returns
+   * whether the token's internal signature + message-imprint check out, plus the
+   * asserted time and TSA subject when available. Synchronous; NEVER throws — a
+   * malformed/absent token yields `{ valid: false }`. This proves WHEN the
+   * signature existed (independently-verifiable forensic evidence); full chain
+   * validation of the TSA cert to a public root is the relying party's step.
+   */
+  verifyTimestamp(
+    tokenB64: string,
+    data: Uint8Array,
+  ): { valid: boolean; genTime?: string; tsaSubject?: string };
 }
 
 /** Pure hash-chain math (no I/O). Persistence lives in {@link LogRepository}. */

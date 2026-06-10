@@ -56,6 +56,11 @@ export function rowToCredential(row: CredentialRow): CredentialRecord {
   // credentialToRow; restored here. Absent ⇒ legacy certificate (correct default).
   if (row.kind !== undefined) out.kind = row.kind;
   if (row.revokedAt !== undefined) out.revokedAt = row.revokedAt;
+  // Optional RFC-3161 timestamp: carried at-rest by the credentialToRow spread,
+  // dropped by ignoreUndefinedProperties when absent, and restored here only
+  // when present (omit-on-absent, like an absent revokedAt — never `= undefined`
+  // under exactOptionalPropertyTypes). Absent on legacy records, which is fine.
+  if (row.tsaTimestampToken !== undefined) out.tsaTimestampToken = row.tsaTimestampToken;
   return out;
 }
 

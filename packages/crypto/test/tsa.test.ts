@@ -12,6 +12,8 @@ import { describe, expect, it } from 'vitest';
 import { generateSelfSignedPadesCert } from '../src/keys.js';
 import { ForgePadesSigner } from '../src/pades-signer.js';
 import { requestTimestampToken, signerInfoSignature } from '../src/tsa.js';
+import { verifyTimestampToken } from '../src/timestamp-verifier.js';
+import { buildRealisticToken } from './rfc3161-helpers.js';
 
 const ID_AA_TIME_STAMP_TOKEN = '1.2.840.113549.1.9.16.2.14';
 
@@ -125,5 +127,45 @@ describe('PAdES-B-T injection is signature-preserving', () => {
     // Still a valid, parseable PKCS#7 — just no timestamp.
     expect(hasTimestampOid(der)).toBe(false);
     expect(signerInfoSignature(fromDer(der))).not.toBeNull();
+  });
+});
+
+describe('request → serialize → verify round-trip (the real signer/verifier seam)', () => {
+  // A TSA mock whose granted response embeds a REALISTIC token over `data`.
+  const tsaReturning = (data: Uint8Array): typeof fetch =>
+    (async () => {
+      const { asn1 } = forge;
+      const { tokenAsn1 } = buildRealisticToken({ data, genTime: '20260609123456Z' });
+      const resp = asn1.create(asn1.Class.UNIVERSAL, asn1.Type.SEQUENCE, true, [
+        // PKIStatusInfo { status = granted (0) }.
+        asn1.create(asn1.Class.UNIVERSAL, asn1.Type.SEQUENCE, true, [
+          asn1.create(asn1.Class.UNIVERSAL, asn1.Type.INTEGER, false, asn1.integerToDer(0).getBytes()),
+        ]),
+        tokenAsn1, // timeStampToken ContentInfo
+      ]);
+      const u = new Uint8Array(Buffer.from(asn1.toDer(resp).getBytes(), 'latin1'));
+      return {
+        ok: true,
+        arrayBuffer: async () => u.buffer.slice(u.byteOffset, u.byteOffset + u.byteLength),
+      };
+    }) as unknown as typeof fetch;
+
+  it('serializes the requested token exactly as the signer does, and verifies it', async () => {
+    const data = new Uint8Array([42, 7, 13, 99, 1, 250]);
+
+    // 1. Request the token (what createHybridSigner does over the raw ML-DSA sig).
+    const token = await requestTimestampToken(data, { url: 'http://tsa.test', fetchImpl: tsaReturning(data) });
+    expect(token).not.toBeNull();
+
+    // 2. Serialize to base64 DER exactly as createHybridSigner stores it.
+    const tokenB64 = Buffer.from(forge.asn1.toDer(token!).getBytes(), 'latin1').toString('base64');
+
+    // 3. Verify (what the verify service does with base64ToBytes(mldsaSignature)).
+    const res = verifyTimestampToken(tokenB64, data);
+    expect(res.valid).toBe(true);
+    expect(res.genTime).toBe('2026-06-09T12:34:56.000Z');
+
+    // The imprint is bound to THESE bytes: other data must not verify.
+    expect(verifyTimestampToken(tokenB64, new Uint8Array([0, 0, 0])).valid).toBe(false);
   });
 });

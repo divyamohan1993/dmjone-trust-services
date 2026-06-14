@@ -25,6 +25,8 @@ import {
   createLogVerifier,
   createPasswordHasher,
   createSignatureVerifier,
+  createStatusSigner,
+  createStatusVerifier,
   generateMldsaKeypair,
   generateSelfSignedPadesCert,
 } from '@dmjone/crypto';
@@ -150,6 +152,14 @@ beforeAll(async () => {
     content,
     status: 'valid',
     createdAt: ts,
+    statusSignature: {
+      value: createStatusSigner(cred.secretKey).sign({
+        credentialId: CREDENTIAL_ID,
+        status: 'valid',
+        asOf: ts,
+      }),
+      asOf: ts,
+    },
     pdfSha256: sig.pdfSha256,
     canonicalPayload: sig.canonicalPayload,
     canonicalSha256: sig.canonicalSha256,
@@ -182,6 +192,10 @@ beforeAll(async () => {
     logVerifier: createLogVerifier(verifyingKeys.logMldsaPublicKey),
     passwordHasher,
     trustedPadesCertFingerprint: padesFingerprint,
+    evidenceKeys: {
+      mldsaPublicKeyBase64: Buffer.from(cred.publicKey).toString('base64'),
+      logMldsaPublicKeyBase64: Buffer.from(log.publicKey).toString('base64'),
+    },
   }) as unknown as Hono;
 }, SLOW);
 
@@ -220,6 +234,33 @@ describe('issue → verify → download → tamper', () => {
     expect(body.checks.mldsaSignature).toBe(true);
     expect(body.checks.logInclusion).toBe(true);
     expect(body.publicFields?.recipientName).toBe('Aarav Sharma');
+  });
+
+  it('signed status assertion round-trips with REAL keys via the live /status endpoint', async () => {
+    // The flagship new feature, end-to-end with NO fakes: the issuer minted the
+    // assertion with the real credential ML-DSA key; the keyless verify service
+    // serves the stored signature; a verifier rebuilt from the PUBLIC key the
+    // endpoint returns confirms it (and rejects a tampered status).
+    const res = await verifyApp.request(`/api/credentials/${CREDENTIAL_ID}/status`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      status: string;
+      asOf: string;
+      signature: string | null;
+      mldsaPublicKeyBase64: string;
+    };
+    expect(body.status).toBe('valid');
+    expect(body.signature).not.toBeNull();
+
+    const publicKey = new Uint8Array(Buffer.from(body.mldsaPublicKeyBase64, 'base64'));
+    const verifier = createStatusVerifier(publicKey);
+    expect(
+      verifier.verify({ credentialId: CREDENTIAL_ID, status: 'valid', asOf: body.asOf }, body.signature!),
+    ).toBe(true);
+    // Tamper: same signature must NOT verify as 'revoked'.
+    expect(
+      verifier.verify({ credentialId: CREDENTIAL_ID, status: 'revoked', asOf: body.asOf }, body.signature!),
+    ).toBe(false);
   });
 
   it('password download → exact signed bytes', async () => {

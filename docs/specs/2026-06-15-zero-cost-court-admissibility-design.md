@@ -60,7 +60,32 @@ Closes the real gap: today the offline bundle carries `status` as **unsigned, un
 
 ---
 
-## WS4 — Real OpenTimestamps — **decision required** (see approval question)
+## WS4 — Real OpenTimestamps — **PARKED (2026-06-15)**
+
+> User chose **option A** (real stamping). On the A2 spike, `javascript-opentimestamps`
+> proved unusable: **LGPL-3.0** (violates "no GPL in proprietary"), last published
+> **2022** (unmaintained), and a vulnerable dep tree (`request`, `web3@0.18`,
+> `fs@0.0.1-security` squatter) that would **fail the WS6 fail-closed audit gate**.
+> So WS4 is **parked**, the fake stub was **removed** (WS1), and the README no longer
+> claims Bitcoin anchoring. To unpark: hand-roll a tiny **dependency-free OTS
+> calendar-HTTP client** (submit the 32-byte digest, persist the genuine receipt) —
+> or formally adopt option B (drop the claim). Decision for the user when awake.
+>
+> **When unparked, these are hard constraints (pre-mortem O1/O2/O4/O5):**
+> - **Stamping must mirror the TSA discipline** (tsa.ts): run **after** the record
+>   is persisted (issuance already succeeded), explicit per-call timeout + total
+>   cap, **swallow every error to "no receipt," never awaited on the critical
+>   path.** Acceptance must include an *"issuance succeeds when a calendar hangs"*
+>   test (not just "unreachable"). Cap the **combined** TSA+OTS issue-path egress.
+> - **The upgrade write must be transactional + non-downgrading** (never
+>   confirmed→pending; only advance). `anchorRepo.save` is today a blind
+>   `doc(seq).set()` with no optimistic concurrency — two scheduler runs (Cloud
+>   Scheduler can double-fire) or a run racing a re-publish will clobber. Add a
+>   two-upgrades-of-one-head concurrency test.
+> - **Bound the stored receipt size** (don't keep both pending+confirmed copies);
+>   note growth in the assumption ledger.
+
+## WS4 — Real OpenTimestamps — original options (for reference)
 
 The current `makeOtsStub` is a placeholder (anchor.ts:116) and the README claims Bitcoin anchoring that doesn't exist. The review showed **full** real-OTS (our own pending→confirmed upgrade + server-side Bitcoin verification) needs a scheduled job that **does not exist** + risks live-fetch egress bans + an SSRF/trust dep. Three honest ₹0 options:
 

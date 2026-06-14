@@ -57,6 +57,14 @@ export {
   type NextHeadResult,
 } from './log.js';
 
+// Signed status assertions (issuer-side signer; keyless/relying-party verifier).
+export {
+  createStatusSigner,
+  createStatusVerifier,
+  type StatusSigner,
+  type StatusVerifier,
+} from './status.js';
+
 // External anchoring (GitHub + OpenTimestamps).
 export { createAnchorPublisher, type AnchorPublisherConfig } from './anchor.js';
 

@@ -14,6 +14,7 @@
 import type {
   CredentialContent,
   CredentialRecord,
+  CredentialStatus,
   LetterContent,
   UploadAttestation,
 } from './types.js';
@@ -130,4 +131,49 @@ export function computeCanonicalPayloadForRecord(record: CredentialRecord): stri
     case 'upload':
       return computeUploadCanonicalPayload(record.content as UploadAttestation, record.pdfSha256);
   }
+}
+
+/** Canonical-payload schema version for the signed status assertion. Bump only with a migration plan. */
+export const STATUS_PAYLOAD_VERSION = 1;
+
+/**
+ * Domain-separation tag for the signed status assertion. Prepended (with a
+ * trailing newline) to the canonical JSON BEFORE signing, so a status assertion
+ * can NEVER share signed bytes with a credential canonical payload: credential
+ * payloads are bare canonical JSON (first byte `{`), a status assertion's signed
+ * bytes start with this tag. The issuer signs status assertions with the SAME
+ * ML-DSA-87 key it uses for credentials; this tag is what makes that reuse safe
+ * (cross-protocol signature confusion is impossible by construction, not luck).
+ * NEVER reuse this exact string for any other signed message type.
+ */
+export const STATUS_ASSERTION_DOMAIN = 'dmjone/status/v1';
+
+/** The fields a status assertion binds. `asOf` is the status-change instant
+ *  (createdAt for a `valid` record, revokedAt for a `revoked` one) — never the
+ *  signing wall-clock, so the signed bytes are reproducible by a verifier. */
+export interface StatusAssertionInput {
+  credentialId: string;
+  status: CredentialStatus;
+  /** ISO-8601 instant the status took effect (createdAt | revokedAt). */
+  asOf: string;
+}
+
+/**
+ * Build the exact UTF-8 string the status-assertion ML-DSA signature covers:
+ * the {@link STATUS_ASSERTION_DOMAIN} tag, a newline, then deterministic
+ * (recursively key-sorted) canonical JSON of the version + bound fields. Used by
+ * BOTH the issuer (sign-time) and any relying party (verify-time), so the bytes
+ * are identical on both sides.
+ */
+export function computeStatusAssertionPayload(input: StatusAssertionInput): string {
+  return (
+    STATUS_ASSERTION_DOMAIN +
+    '\n' +
+    canonicalJson({
+      v: STATUS_PAYLOAD_VERSION,
+      asOf: input.asOf,
+      credentialId: input.credentialId,
+      status: input.status,
+    })
+  );
 }

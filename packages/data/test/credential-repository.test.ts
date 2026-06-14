@@ -54,6 +54,23 @@ describe('in-memory CredentialRepository', () => {
     expect(back?.revokedAt).toBeUndefined();
   });
 
+  it('stores a provided statusSignature and drops a stale one when omitted', async () => {
+    const repo = createInMemoryCredentialRepository();
+    const record = makeRecord();
+    await repo.create(record);
+
+    const sig = { value: 'c2ln', asOf: '2026-06-05T00:00:00.000Z' };
+    await repo.setStatus(record.id, 'revoked', '2026-06-05T00:00:00.000Z', sig);
+    const revoked = await repo.getById(record.id);
+    expect(revoked?.statusSignature).toEqual(sig);
+
+    // A status change WITHOUT a fresh signature must drop the stale one (a
+    // signature must never outlive the status it attests).
+    await repo.setStatus(record.id, 'valid', '2026-06-06T00:00:00.000Z');
+    const back = await repo.getById(record.id);
+    expect(back?.statusSignature).toBeUndefined();
+  });
+
   it('throws CREDENTIAL_NOT_FOUND when setting status on a missing id', async () => {
     const repo = createInMemoryCredentialRepository();
     await expect(

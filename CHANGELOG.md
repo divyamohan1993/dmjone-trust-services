@@ -8,6 +8,42 @@ All notable changes to this project are documented here. Format follows
 
 ### Added
 
+- 2026-06-15: **Provable, signed revocation (court-admissibility hardening).** A
+  credential's status is now backed by a domain-separated, dated ML-DSA-87
+  assertion the issuer mints at issue-time and re-mints on every status change
+  (`STATUS_ASSERTION_DOMAIN = "dmjone/status/v1"`, signing
+  `tag + "\n" + canonicalJson({v,asOf,credentialId,status})`). The domain tag
+  makes reusing the credential key for status assertions safe by construction
+  (no cross-protocol confusion). New keyless endpoint
+  `GET /api/credentials/:id/status` serves the stored signature (legacy records
+  → `legacyUnsigned`, never 500; `Cache-Control: public, max-age=60,
+  stale-while-revalidate=300`), and the offline evidence bundle now carries a
+  checkable `signedStatus` + a verify step. Previously a revoked credential's
+  offline bundle passed every embedded check (status was unsigned, uncheckable).
+  Verify stays signing-keyless: all signing + writes are issuer-side.
+- 2026-06-15: **Court-readiness assessment + zero-cost hardening design.**
+  `docs/court-readiness-assessment.md` (two-axis verdict: leading on
+  cryptographic integrity, absent on Indian statutory recognition by design) and
+  `docs/specs/2026-06-15-zero-cost-court-admissibility-design.md` (4-lens
+  adversarially-reviewed plan).
+
+### Changed
+
+- 2026-06-15: **Honest §63 certificate, docs, and a fake removed.** The §63
+  Honest Disclosure now also disclaims the **§87 BSA-2023** (Electronic Signature
+  Certificate contents) presumption and frames both §86/§87 as **rebuttable**;
+  Part B's expert qualification tracks the SC standard ("special skill and
+  expertise in computer science and cyber forensics", per *Pune Bar Assn v. UoI*,
+  2026 — cited only in a `[VERIFY-WITH-COUNSEL]` code comment, never on the PDF
+  face); revoking now re-renders the §63 (best-effort, never blocking the
+  revocation) so the downloadable certificate shows "Revoked" + a revocation
+  date. README + `HybridSignatureResult`/`HybridSigner` JSDoc corrected
+  (ML-DSA-**87** not 65; the delivered PDF embeds **no** signature; identity
+  rests on a self-published key). The non-functional OpenTimestamps **stub was
+  removed** — no placeholder `.ots` receipt is emitted (it would falsely imply
+  Bitcoin anchoring); real OTS is deferred. CI `pnpm audit` is now **fail-closed**
+  on high/critical (documented `auditConfig.ignoredCves` override path).
+
 - 2026-06-10: **The real dmj.one logo as the verify portal's favicon.** The
   circular watercolor badge (assets/logo round.png) is resized offline (1500 →
   512 → 32/180 px, high-quality bicubic) and embedded as bytes, served

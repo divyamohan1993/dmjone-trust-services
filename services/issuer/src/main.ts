@@ -16,6 +16,7 @@ import {
   createHybridSigner,
   createLogSigner,
   createPasswordHasher,
+  createStatusSigner,
 } from '@dmjone/crypto';
 import { createCertificateRenderer, createSection63Generator } from '@dmjone/render';
 import { createIssuerApp } from './app.js';
@@ -58,6 +59,9 @@ async function main(): Promise<void> {
     secretStore: stores.secrets,
     signer: createHybridSigner(signingKeys, env.TSA_URL ? { tsa: { url: env.TSA_URL } } : undefined),
     logSigner: createLogSigner(logSecretKey),
+    // Status assertions reuse the credential ML-DSA key; the domain tag in the
+    // signed payload keeps that reuse safe (see @dmjone/crypto status.ts).
+    statusSigner: createStatusSigner(signingKeys.mldsaSecretKey),
     anchorPublisher: createAnchorPublisher(anchorConfig),
     passwordHasher: createPasswordHasher({
       memoryKiB: env.ARGON2_MEMORY_KIB,

@@ -38,6 +38,7 @@ import { stampAttestation, inspectPdf } from '@dmjone/render';
 
 import type { IssuerDeps } from '../deps.js';
 import { assembleUploadAttestation } from './assemble-upload-attestation.js';
+import { mintStatusSignature } from './sign-status.js';
 import { allocateCredentialId } from './credential-id.js';
 import { appendToLog } from './log-append.js';
 import { SIGNATURE_PNG_BYTES } from './signature-asset.js';
@@ -144,6 +145,7 @@ export async function attestUpload(
     content: attestation,
     status: 'valid',
     createdAt: now,
+    statusSignature: mintStatusSignature(deps.statusSigner, documentId, 'valid', now),
     pdfSha256: sig.pdfSha256,
     canonicalPayload: sig.canonicalPayload,
     canonicalSha256: sig.canonicalSha256,

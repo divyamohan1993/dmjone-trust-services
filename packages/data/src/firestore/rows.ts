@@ -61,6 +61,11 @@ export function rowToCredential(row: CredentialRow): CredentialRecord {
   // when present (omit-on-absent, like an absent revokedAt — never `= undefined`
   // under exactOptionalPropertyTypes). Absent on legacy records, which is fine.
   if (row.tsaTimestampToken !== undefined) out.tsaTimestampToken = row.tsaTimestampToken;
+  // Signed status assertion: carried at-rest by the credentialToRow spread,
+  // dropped by ignoreUndefinedProperties when absent, restored here only when
+  // present (omit-on-absent, like revokedAt/tsaTimestampToken). Absent on legacy
+  // records → the status endpoint reports `legacyUnsigned`.
+  if (row.statusSignature !== undefined) out.statusSignature = row.statusSignature;
   return out;
 }
 

@@ -38,6 +38,8 @@ import type {
 import {
   AppError,
   ERROR_CODE,
+  STATUS_ASSERTION_DOMAIN,
+  STATUS_PAYLOAD_VERSION,
   credentialIdParamSchema,
   documentKind,
   downloadSchema,
@@ -526,6 +528,41 @@ export function createVerifyApp(deps: VerifyDeps): Hono<{ Variables: RequestVars
     return pdfResponse(c, bytes, `${parsed.data.credentialId}-section63.pdf`, 'inline');
   });
 
+  // ── Signed, dated status assertion (public — provable revocation) ───────────
+  // The issuer's ML-DSA-87 attestation that this credential held `status` as of
+  // `asOf` (createdAt for valid, revokedAt for revoked). Lets a relying party
+  // PROVE "revoked on date X" — an unsigned status flag cannot. KEYLESS: verify
+  // only serves the STORED signature, it never signs. Legacy records (issued
+  // before signed assertions) return `signature:null` + `legacyUnsigned:true`
+  // (still admissible, just not independently provable) — never a 500. Revocation
+  // is a LIVING fact, so this signed snapshot is short-TTL cacheable; the VERDICT
+  // paths (/api/verify/:id, /c/:id) stay uncached.
+  app.get('/api/credentials/:credentialId/status', async (c) => {
+    const parsed = credentialIdParamSchema.safeParse({ credentialId: c.req.param('credentialId') });
+    if (!parsed.success) {
+      fail('VALIDATION_FAILED', 'Invalid credential id.', 400);
+    }
+    const record = await deps.credentialRepo.getById(parsed.data.credentialId);
+    if (!record) {
+      fail('CREDENTIAL_NOT_FOUND', 'No credential matches that id.', 404);
+    }
+    const sig = record.statusSignature;
+    const body: Record<string, unknown> = {
+      credentialId: record.id,
+      status: record.status,
+      // asOf = the status-change instant the signature binds; for a legacy
+      // record fall back to the record's own timestamps.
+      asOf: sig?.asOf ?? record.revokedAt ?? record.createdAt,
+      signature: sig?.value ?? null,
+      mldsaPublicKeyId: record.mldsaPublicKeyId,
+      mldsaPublicKeyBase64: deps.evidenceKeys.mldsaPublicKeyBase64,
+      signedPayloadNote: `ML-DSA-87 over UTF-8("${STATUS_ASSERTION_DOMAIN}\\n" + canonicalJson({v:${STATUS_PAYLOAD_VERSION},asOf,credentialId,status}))`,
+    };
+    if (sig === undefined) body['legacyUnsigned'] = true;
+    c.header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+    return c.json(body);
+  });
+
   // ── Court-ready, OFFLINE-verifiable evidence bundle (public, JSON download) ──
   // A self-contained "trust nobody" artifact: it carries the exact signed bytes,
   // the detached ML-DSA-87 signature + the issuer's PUBLIC key, the signed
@@ -738,6 +775,17 @@ async function buildEvidenceBundle(
         }
       : null;
 
+  // The issuer's SIGNED, dated status assertion — makes revocation provable
+  // OFFLINE (an unsigned status flag cannot be). `signature` is null on legacy
+  // records issued before signed assertions existed.
+  const signedStatus = {
+    status: record.status,
+    asOf: record.statusSignature?.asOf ?? record.revokedAt ?? record.createdAt,
+    signature: record.statusSignature?.value ?? null,
+    publicKeyBase64: deps.evidenceKeys.mldsaPublicKeyBase64,
+    note: `ML-DSA-87 over UTF-8("${STATUS_ASSERTION_DOMAIN}\\n" + canonicalJson({v:${STATUS_PAYLOAD_VERSION},asOf,credentialId,status})).`,
+  };
+
   return {
     meta: {
       credentialId: record.id,
@@ -773,6 +821,7 @@ async function buildEvidenceBundle(
     },
     externalAnchor,
     trustedTimestamp,
+    signedStatus,
     howToVerify: [
       'Confirm the canonical bytes: take canonical.payload (the exact UTF-8 string the signature covers) and check SHA-256(canonical.payload) equals canonical.sha256. The payload is deterministic JSON (recursively sorted keys, no insignificant whitespace) over the fields in `content` plus document.pdfSha256, so independently re-serialising `content` + document.pdfSha256 the same way reproduces canonical.payload byte-for-byte.',
       'Verify the ML-DSA-87 signature over those canonical bytes (the UTF-8 of canonical.payload) using signature.publicKeyBase64 — e.g. @noble/post-quantum ml_dsa87.verify(publicKey, utf8Bytes(canonical.payload), base64Decode(signature.valueBase64)), or any NIST FIPS 204 verifier.',
@@ -781,6 +830,9 @@ async function buildEvidenceBundle(
         : 'No independent RFC-3161 timestamp was obtained for this record (trustedTimestamp is null), so there is no timestamp step.',
       'Confirm the transparency-log leaf: leafHash equals SHA-256(canonical.sha256), then verify the head signature — ML-DSA-87 over transparencyLog.head.headHash, in transparencyLog.head.signature — using transparencyLog.logPublicKeyBase64. (Full Merkle audit-path proof is a relying-party step; this bundle pins leaf consistency under one signed head.)',
       'Confirm document.pdfSha256 equals the SHA-256 of the certificate file you are holding, so the bytes attested here are the bytes in your hand.',
+      signedStatus.signature
+        ? 'Verify the signed status assertion: ML-DSA-87 over the UTF-8 bytes signedStatus.note describes (the domain tag, a newline, then deterministic JSON of v/asOf/credentialId/status), using signedStatus.publicKeyBase64. This proves the status — and, if revoked, the revocation date — the issuer attested. Revocation is a LIVING fact: also re-check it live at /api/credentials/<id>/status before relying on a "valid" answer.'
+        : 'This record predates signed status assertions (signedStatus.signature is null), so its revocation status is not independently provable from this bundle — re-check it live at /api/credentials/<id>/status.',
     ],
     disclaimer:
       'This bundle is independently-verifiable forensic evidence: a self-signed cryptographic attestation by dmj.one, an independent educational initiative. It maximises evidentiary weight; it is NOT a licensed certifying-authority Digital Signature Certificate. ML-DSA-87 is a NIST FIPS 204 post-quantum algorithm but is NOT a CCA-recognized algorithm under Indian law, and no statutory presumption is asserted.' +

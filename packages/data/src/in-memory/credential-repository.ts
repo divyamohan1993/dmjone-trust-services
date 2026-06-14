@@ -41,7 +41,12 @@ export function createInMemoryCredentialRepository(): CredentialRepository {
       return records.has(id);
     },
 
-    async setStatus(id: string, status: CredentialStatus, at: string): Promise<void> {
+    async setStatus(
+      id: string,
+      status: CredentialStatus,
+      at: string,
+      statusSignature?: { value: string; asOf: string },
+    ): Promise<void> {
       const found = records.get(id);
       if (!found) {
         throw new AppError(
@@ -50,13 +55,17 @@ export function createInMemoryCredentialRepository(): CredentialRepository {
           404,
         );
       }
-      // Invariant: revokedAt is present iff status === 'revoked'. Drop any prior
-      // revokedAt first, then re-stamp only when revoking, so un-revoking clears
-      // it (and exactOptionalPropertyTypes keeps the key omitted otherwise).
-      const { revokedAt: _prev, ...rest } = structuredClone(found);
+      // Invariant: revokedAt is present iff status === 'revoked'; statusSignature,
+      // if present, matches the CURRENT status. Drop both first, then re-stamp,
+      // so un-revoking clears revokedAt and a stale signature never outlives its
+      // status (exactOptionalPropertyTypes keeps absent keys omitted).
+      const { revokedAt: _prev, statusSignature: _prevSig, ...rest } = structuredClone(found);
       const next: CredentialRecord = { ...rest, status };
       if (status === 'revoked') {
         next.revokedAt = at;
+      }
+      if (statusSignature !== undefined) {
+        next.statusSignature = statusSignature;
       }
       records.set(id, next);
     },

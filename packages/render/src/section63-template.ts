@@ -223,6 +223,12 @@ export function buildSection63Html(record: CredentialRecord, meta: Section63Meta
   // forensics expertise may validly sign Part B (subject to the court's satisfaction); whether,
   // in a contested matter, an expert who is NOT the operator should instead sign Part B is a
   // legal judgement to confirm with counsel.
+  // AUTHORITY [VERIFY-WITH-COUNSEL — post-cutoff, confirm against the primary judgment]:
+  // Pune Bar Assn v. Union of India, 2026 LiveLaw (SC) 551 (~May 2026) — held that a non-§79A
+  // expert skilled in computer science & cyber forensics may sign Part B, and upheld §63(4)'s
+  // mandatory hash-value disclosure (which Part 2 provides). Deliberately NOT cited on the
+  // certificate face: a fuzzy/post-cutoff cite on a court-facing instrument is a liability;
+  // add it verbatim only once counsel confirms the primary citation.
   const issuerIdentity =
     'dmj.one Trust Services, Document Signing function (country: IN), signing with a post-quantum ML-DSA-87 (NIST FIPS 204) key held by the issuer';
 
@@ -252,6 +258,11 @@ ${SECTION63_CSS}
         <table class="grid">
           ${part1Rows(record)}
           ${row('Current status', escapeHtml(record.status === 'revoked' ? 'Revoked' : 'Valid'))}
+          ${
+            record.status === 'revoked' && record.revokedAt
+              ? row('Date of revocation', escapeHtml(formatIsoDate(record.revokedAt.slice(0, 10))))
+              : ''
+          }
           ${row('Stored as', storedAsCopy(kind))}
         </table>
       </div>
@@ -291,7 +302,7 @@ ${SECTION63_CSS}
       <div class="sec">
         <h2>Part B &middot; Statement of the Expert (pre-filled)</h2>
         <div class="statement">
-          <p>I, possessing special skills and technical expertise in computer systems and cryptographic methods, having examined the manner of production and the device particulars stated in Part 3, do hereby certify, to the best of my knowledge and belief, that:</p>
+          <p>I, possessing special skill and expertise in computer science and cyber forensics (and in the cryptographic methods described), having examined the manner of production and the device particulars stated in Part 3, do hereby certify, to the best of my knowledge and belief, that:</p>
           <ol>
             <li>The computer system described in Part 3 is of a kind ordinarily used to produce electronic records of the nature identified in Part 1, and there is nothing before me to indicate that it was not operating properly during the material period.</li>
             <li>The methods stated in Part 3 &mdash; computation of a SHA-256 integrity hash and a detached post-quantum ML-DSA-87 (NIST FIPS&nbsp;204) signature over the canonical record of the document, with entry in a public, append-only transparency log &mdash; are technically sound and were applied to the said electronic record.</li>
@@ -308,7 +319,7 @@ ${SECTION63_CSS}
 
       <div class="disclosure">
         <h2>Honest Disclosure &middot; Nature &amp; Limits of this Attestation</h2>
-        <p>dmj.one is an independent educational initiative; it is <strong>not</strong> a Government body, a recognised University, or a licensed Certifying Authority. The detached ML-DSA-87 signature over this record is a <strong>self-signed</strong> attestation by dmj.one: it evidences that this document was issued by dmj.one and has not been altered since, no more and no less. The delivered PDF contains <strong>no</strong> embedded digital-signature object. It is <strong>not</strong> a digital signature issued or certified by a Certifying Authority licensed under the Information Technology Act, 2000, and is not a &ldquo;secure electronic signature&rdquo; within the meaning of that Act; it therefore attracts no statutory presumption of authenticity or integrity (such as that available, for a secure electronic record or secure electronic signature, under Section 86 of the Bharatiya Sakshya Adhiniyam, 2023) and is offered as evidence to be weighed on its own merits. Tamper-evidence rests on the post-quantum ML-DSA-87 signature and on inclusion in a public, append-only transparency log: an ordered hash chain of ML-DSA-87-signed heads. Where external anchoring is enabled, the issuer additionally publishes each new signed head to a public GitHub repository (github.com/divyamohan1993/dmjone-trust-anchor), yielding an externally-hosted, publicly-timestamped commit record; because the log is an append-only chain of signed heads, any attempt to silently rewrite or back-date it then becomes detectable by anyone who has recorded an earlier head. This external publication is best-effort and non-blocking &mdash; the in-log signed head remains the primary evidence, and the per-document publication status (published or pending) is shown on the verification page. Authenticity may be checked by anyone, without any password, at <strong>verify.dmj.one</strong>.</p>
+        <p>dmj.one is an independent educational initiative; it is <strong>not</strong> a Government body, a recognised University, or a licensed Certifying Authority. The detached ML-DSA-87 signature over this record is a <strong>self-signed</strong> attestation by dmj.one: it evidences that this document was issued by dmj.one and has not been altered since, no more and no less. The delivered PDF contains <strong>no</strong> embedded digital-signature object. It is <strong>not</strong> a digital signature issued or certified by a Certifying Authority licensed under the Information Technology Act, 2000, and is not a &ldquo;secure electronic signature&rdquo; within the meaning of that Act; it therefore attracts neither the rebuttable presumption available, for a secure electronic record or secure electronic signature, under Section 86 of the Bharatiya Sakshya Adhiniyam, 2023, nor the rebuttable presumption, under Section 87 of that Act, that the contents of an Electronic Signature Certificate are correct (no such certificate issued by a Certifying Authority licensed under the Information Technology Act, 2000 exists, and the delivered PDF embeds none); it is offered as evidence to be weighed on its own merits. Tamper-evidence rests on the post-quantum ML-DSA-87 signature and on inclusion in a public, append-only transparency log: an ordered hash chain of ML-DSA-87-signed heads. Where external anchoring is enabled, the issuer additionally publishes each new signed head to a public GitHub repository (github.com/divyamohan1993/dmjone-trust-anchor), yielding an externally-hosted, publicly-timestamped commit record; because the log is an append-only chain of signed heads, any attempt to silently rewrite or back-date it then becomes detectable by anyone who has recorded an earlier head. This external publication is best-effort and non-blocking &mdash; the in-log signed head remains the primary evidence, and the per-document publication status (published or pending) is shown on the verification page. Authenticity may be checked by anyone, without any password, at <strong>verify.dmj.one</strong>.</p>
       </div>
 
       <div class="signrow">

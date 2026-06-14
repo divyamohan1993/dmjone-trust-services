@@ -139,13 +139,16 @@ export interface UploadAttestation {
 // ──────────────────────────── Cryptographic record ─────────────────────────
 
 /**
- * Result of hybrid-signing. The PAdES PKCS#7 object is embedded in
- * {@link signedPdf}; the ML-DSA signature is DETACHED — stored in Firestore +
- * the transparency log, never written into the PDF, so {@link pdfSha256} stays
- * stable and upload-verify works.
+ * Result of hybrid-signing. The delivered PDF carries NO embedded signature
+ * object — `signedPdf` is byte-identical to the rendered PDF (a self-signed PAdES
+ * object was deliberately removed because browser viewers flagged it "Invalid
+ * Signature"). The ML-DSA signature is DETACHED — stored in Firestore + the
+ * transparency log, never written into the PDF, so {@link pdfSha256} stays stable
+ * and upload-verify works. {@link padesCertFingerprint} is `''` in production
+ * (the field is retained only for the dormant, test-only embedded-PAdES path).
  */
 export interface HybridSignatureResult {
-  /** The PDF with the PAdES PKCS#7 object embedded. This is final; never mutate it. */
+  /** The delivered PDF (NO embedded signature object). Final; never mutate it. */
   signedPdf: Uint8Array;
   /** SHA-256 of {@link signedPdf}, hex. */
   pdfSha256: string;
@@ -200,6 +203,17 @@ export interface CredentialRecord {
   status: CredentialStatus;
   createdAt: string;
   revokedAt?: string;
+  /**
+   * Detached ML-DSA-87 signature over the domain-tagged status assertion
+   * ({@link computeStatusAssertionPayload}) — makes the current status provable
+   * and dated (an unsigned `status` flag cannot be proven to a court). Minted by
+   * the ISSUER at issue-time and re-minted on every status change; `asOf` is the
+   * status-change instant (`createdAt` for valid, `revokedAt` for revoked).
+   * ABSENT on legacy records issued before signed status assertions existed —
+   * such a record's status reads as `legacyUnsigned` (still admissible, just not
+   * independently provable). Present iff it matches the CURRENT status.
+   */
+  statusSignature?: { value: string; asOf: string };
   // crypto
   pdfSha256: string;
   canonicalPayload: string;

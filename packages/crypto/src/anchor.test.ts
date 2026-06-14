@@ -114,14 +114,16 @@ describe('AnchorPublisher — degraded and OTS', () => {
     expect(proof).toMatchObject({ headSeq: 7, headHash: HEAD.headHash });
   });
 
-  it('records a pending OpenTimestamps stub when enabled', async () => {
+  it('emits NO opentimestamps receipt even when otsEnabled (real OTS deferred; never a fake stub)', async () => {
+    // Honesty invariant: a placeholder receipt would falsely claim Bitcoin
+    // anchoring that does not exist, and would leak into the court-facing
+    // evidence bundle. So `otsEnabled` is a no-op until the real implementation.
     const publisher = createAnchorPublisher({ otsEnabled: true });
     const proof = await publisher.publish(HEAD);
-    expect(proof.opentimestamps?.status).toBe('pending');
-    expect(proof.opentimestamps?.otsBase64).toMatch(/^[A-Za-z0-9+/]+=*$/);
+    expect(proof.opentimestamps).toBeUndefined();
   });
 
-  it('does not require GitHub when only OTS is enabled', async () => {
+  it('makes no network call and emits nothing extra when only otsEnabled is set', async () => {
     const fetchImpl = vi.fn();
     const publisher = createAnchorPublisher({
       otsEnabled: true,
@@ -129,7 +131,7 @@ describe('AnchorPublisher — degraded and OTS', () => {
     });
     const proof = await publisher.publish(HEAD);
     expect(fetchImpl).not.toHaveBeenCalled();
-    expect(proof.opentimestamps?.status).toBe('pending');
+    expect(proof.opentimestamps).toBeUndefined();
     expect(proof.github).toBeUndefined();
   });
 });

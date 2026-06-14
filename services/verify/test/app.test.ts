@@ -728,6 +728,76 @@ describe('GET /api/credentials/:id/section63', () => {
   });
 });
 
+describe('GET /api/credentials/:id/status (signed status assertion)', () => {
+  interface StatusBody {
+    credentialId: string;
+    status: string;
+    asOf: string;
+    signature: string | null;
+    mldsaPublicKeyId: string;
+    mldsaPublicKeyBase64: string;
+    legacyUnsigned?: boolean;
+  }
+  const statusOf = async (res: Response): Promise<StatusBody> => (await res.json()) as StatusBody;
+
+  it('serves the stored signature for a signed valid record (short-TTL cacheable)', async () => {
+    const sig = { value: 'SIG-VALID', asOf: '2026-06-04T00:00:00.000Z' };
+    const { app } = makeHarness({ statusSignature: sig });
+    const res = await app.request(`/api/credentials/${ID}/status`);
+    expect(res.status).toBe(200);
+    const body = await statusOf(res);
+    expect(body).toMatchObject({
+      credentialId: ID,
+      status: 'valid',
+      asOf: sig.asOf,
+      signature: 'SIG-VALID',
+      mldsaPublicKeyBase64: 'TUxEU0EtUFVCTElDLUtFWQ==',
+    });
+    expect(body.legacyUnsigned).toBeUndefined();
+    // Revocation is a living fact: short TTL, NOT immutable/no-store.
+    expect(res.headers.get('cache-control')).toBe('public, max-age=60, stale-while-revalidate=300');
+  });
+
+  it('proves a revocation date: revoked record returns status revoked + asOf=revokedAt', async () => {
+    const sig = { value: 'SIG-REV', asOf: '2026-06-10T00:00:00.000Z' };
+    const { app } = makeHarness({
+      status: 'revoked',
+      revokedAt: '2026-06-10T00:00:00.000Z',
+      statusSignature: sig,
+    });
+    const body = await statusOf(await app.request(`/api/credentials/${ID}/status`));
+    expect(body.status).toBe('revoked');
+    expect(body.asOf).toBe('2026-06-10T00:00:00.000Z');
+    expect(body.signature).toBe('SIG-REV');
+  });
+
+  it('marks a legacy (pre-assertion) record legacyUnsigned with a null signature, never 500', async () => {
+    const { app } = makeHarness(); // default record has no statusSignature
+    const res = await app.request(`/api/credentials/${ID}/status`);
+    expect(res.status).toBe(200);
+    const body = await statusOf(res);
+    expect(body.signature).toBeNull();
+    expect(body.legacyUnsigned).toBe(true);
+  });
+
+  it('404s an unknown id and 400s a malformed id', async () => {
+    const { app } = makeHarness();
+    expect((await app.request('/api/credentials/DMJ-IC-29990101-99/status')).status).toBe(404);
+    expect((await app.request('/api/credentials/not a valid id/status')).status).toBe(400);
+  });
+
+  it('the evidence bundle embeds the signed status + a verify step', async () => {
+    const { app } = makeHarness({ statusSignature: { value: 'SIG-VALID', asOf: '2026-06-04T00:00:00.000Z' } });
+    const b = (await (await app.request(`/api/credentials/${ID}/evidence`)).json()) as {
+      signedStatus: { status: string; asOf: string; signature: string | null; publicKeyBase64: string };
+      howToVerify: string[];
+    };
+    expect(b.signedStatus.signature).toBe('SIG-VALID');
+    expect(b.signedStatus.publicKeyBase64).toBe('TUxEU0EtUFVCTElDLUtFWQ==');
+    expect(b.howToVerify.some((s) => /signed status assertion/i.test(s))).toBe(true);
+  });
+});
+
 describe('GET /api/credentials/:id/evidence (court-ready evidence bundle)', () => {
   /** Permissive typed view over the bundle JSON for strict-TS field access. */
   interface Bundle {

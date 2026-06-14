@@ -82,6 +82,9 @@ describe('buildSection63Html', () => {
     // Honest: the default Part-B expert is the operator (self-attested), not an outside expert.
     expect(html).toContain('self-attestation');
     expect(html).toContain('technical expert (self-attested)');
+    // The expert qualification tracks the SC standard (Pune Bar Assn, 2026):
+    // special skill in computer science & cyber forensics.
+    expect(html).toContain('computer science and cyber forensics');
   });
 
   it('carries the issuer trust identity as the detached ML-DSA-87 signer (no embedded PDF signature)', () => {
@@ -110,6 +113,12 @@ describe('buildSection63Html', () => {
     expect(html).toContain('secure electronic signature');
     expect(html).toContain('Section 86 of the Bharatiya Sakshya Adhiniyam, 2023');
     expect(html).not.toContain('Section 85B'); // IEA numbering — wrong for the BSA
+    // It also disclaims the §87 (Electronic Signature Certificate contents)
+    // presumption, and frames BOTH presumptions as rebuttable (burden-shifting,
+    // not "deemed concluded").
+    expect(html).toContain('Section 87 of that Act');
+    expect(html).toContain('rebuttable presumption');
+    expect(html).not.toContain('Section 85C'); // IEA numbering — wrong for the BSA
     // Authenticity rests on detached ML-DSA-87 + public transparency log + external
     // anchor, independently checkable without a password at verify.dmj.one.
     expect(html).toContain('append-only transparency log');
@@ -139,6 +148,22 @@ describe('buildSection63Html', () => {
     expect(html).not.toMatch(/OpenTimestamps|Bitcoin/i);
     // The rewrite/back-date consequence is tied to an observer with an earlier head.
     expect(html).toContain('recorded an earlier head');
+  });
+
+  it('shows "Revoked" + a revocation-date row for a revoked record (no stale "Valid")', () => {
+    const revoked: CredentialRecord = {
+      ...SAMPLE_RECORD,
+      status: 'revoked',
+      revokedAt: '2026-06-10T08:30:00.000Z',
+    };
+    const out = buildSection63Html(revoked, SAMPLE_SECTION63);
+    expect(out).toContain('Revoked');
+    expect(out).toContain('Date of revocation');
+    expect(out).toContain('10 June 2026');
+  });
+
+  it('omits the revocation-date row for a valid record', () => {
+    expect(html).not.toContain('Date of revocation');
   });
 
   it('uses the brand fonts (embedded, no Google Fonts) and renders the operator name', () => {

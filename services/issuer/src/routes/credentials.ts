@@ -30,6 +30,7 @@ import type { IssuerHonoEnv } from '../http/context.js';
 import { requireAdmin } from '../http/middleware.js';
 import { assembleContent } from '../issuance/assemble-content.js';
 import { issueCredential } from '../issuance/issue.js';
+import { mintStatusSignature } from '../issuance/sign-status.js';
 
 /**
  * Fixed display-only id for the exact-preview render. Satisfies
@@ -196,7 +197,26 @@ export function registerCredentialRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerD
     }
 
     const revokedAt = new Date().toISOString();
-    await deps.credentialRepo.setStatus(credentialId, 'revoked', revokedAt);
+    // The status flip + its signed assertion ARE the revocation: pure compute,
+    // safe to be fatal. (Persisting an unsigned revocation would be unprovable.)
+    const statusSignature = mintStatusSignature(deps.statusSigner, credentialId, 'revoked', revokedAt);
+    await deps.credentialRepo.setStatus(credentialId, 'revoked', revokedAt, statusSignature);
+
+    // Best-effort: re-render the §63 so the downloadable certificate shows
+    // "Revoked" (the live verify page already does, from record.status). A
+    // Chromium failure here must NEVER block a revocation taking legal effect.
+    try {
+      const updated = await deps.credentialRepo.getById(credentialId);
+      if (updated) {
+        const s63pdf = await deps.section63.generate(updated);
+        await deps.blobStore.put(credentialId, 'section63', s63pdf);
+      }
+    } catch (err) {
+      deps.logger.error(
+        { err, credentialId, requestId: c.get('requestId') },
+        'section63 re-render on revoke failed (non-fatal); revocation stands and the verify page reflects it',
+      );
+    }
 
     const session = c.get('session');
     await deps.auditLog.append({

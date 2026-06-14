@@ -60,7 +60,11 @@ export interface VerifyingKeys {
  * any deviation breaks upload-verify or makes ML-DSA cover the wrong bytes:
  *
  *   1. (caller) render → unsignedPdf
- *   2. embed PAdES PKCS#7 placeholder + sign → signedPdf   (FINAL — never mutate after)
+ *   2. finalize delivered bytes → signedPdf   (FINAL — never mutate after). In
+ *      production this is byte-identical to unsignedPdf: NO embedded signature is
+ *      written (a self-signed PAdES object was removed — browsers flagged it
+ *      "Invalid Signature"). The dormant, test-only ForgePadesSigner is the only
+ *      path that would embed a PAdES PKCS#7 object.
  *   3. pdfSha256     = SHA-256(signedPdf)
  *   4. canonical     = buildCanonicalPayload(pdfSha256)    (caller-supplied; e.g. computeCanonicalPayload(content, pdfSha256))
  *   5. mldsaSignature = ML-DSA-87.sign(UTF8(canonical))    (DETACHED — not written into the PDF)
@@ -160,7 +164,19 @@ export interface CredentialRepository {
   create(record: CredentialRecord): Promise<void>;
   getById(id: string): Promise<CredentialRecord | null>;
   exists(id: string): Promise<boolean>;
-  setStatus(id: string, status: CredentialStatus, at: string): Promise<void>;
+  /**
+   * Set the status (and, when revoking, `revokedAt = at`). `statusSignature` is
+   * the issuer-minted, domain-tagged ML-DSA assertion matching the NEW status;
+   * the repo stores it as-is (it never signs). Omitting it DROPS any prior
+   * signature (a stale signature must never outlive its status) — so a status
+   * change without a fresh signature leaves the record `legacyUnsigned`.
+   */
+  setStatus(
+    id: string,
+    status: CredentialStatus,
+    at: string,
+    statusSignature?: { value: string; asOf: string },
+  ): Promise<void>;
   list(opts?: { limit?: number; cursor?: string }): Promise<{
     items: CredentialRecord[];
     nextCursor?: string;

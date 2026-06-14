@@ -49,7 +49,12 @@ export function createFirestoreCredentialRepository(db: Firestore): CredentialRe
       return snap.exists;
     },
 
-    async setStatus(id: string, status: CredentialStatus, at: string): Promise<void> {
+    async setStatus(
+      id: string,
+      status: CredentialStatus,
+      at: string,
+      statusSignature?: { value: string; asOf: string },
+    ): Promise<void> {
       const ref = col.doc(id);
       await db.runTransaction(async (tx) => {
         const snap = await tx.get(ref);
@@ -57,12 +62,14 @@ export function createFirestoreCredentialRepository(db: Firestore): CredentialRe
           throw new AppError(ERROR_CODE.CREDENTIAL_NOT_FOUND, `Credential ${id} not found`, 404);
         }
         const current = rowToCredential(snap.data() as CredentialRow);
-        // Enforce the invariant: revokedAt present iff revoked. Drop it first,
-        // then set only when revoking, so un-revoking clears it.
-        const { revokedAt: _prev, ...rest } = current;
+        // Enforce the invariants: revokedAt present iff revoked; statusSignature
+        // matches the CURRENT status. Drop both first, then re-stamp, so
+        // un-revoking clears revokedAt and a stale signature never outlives it.
+        const { revokedAt: _prev, statusSignature: _prevSig, ...rest } = current;
         const next: CredentialRecord = { ...rest, status };
         if (status === 'revoked') next.revokedAt = at;
-        // Full overwrite (no merge) so a cleared revokedAt actually disappears.
+        if (statusSignature !== undefined) next.statusSignature = statusSignature;
+        // Full overwrite (no merge) so a cleared revokedAt/signature disappears.
         tx.set(ref, credentialToRow(next));
       });
     },

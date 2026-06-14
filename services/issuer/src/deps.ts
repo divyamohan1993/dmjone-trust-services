@@ -27,6 +27,7 @@ import type {
 // `createCertificateRenderer()` already returns it. The issuer's letter
 // issuance (Mode 2) calls `renderer.renderLetter`.
 import type { TrustedDocumentRenderer } from '@dmjone/render';
+import type { StatusSigner } from '@dmjone/crypto';
 import type { Logger } from 'pino';
 
 /**
@@ -53,6 +54,8 @@ export interface IssuerDeps {
   secretStore: SecretStore;
   signer: HybridSigner;
   logSigner: LogSigner;
+  /** Mints domain-tagged ML-DSA status assertions (issue-time + on revoke). */
+  statusSigner: StatusSigner;
   anchorPublisher: AnchorPublisher;
   passwordHasher: PasswordHasher;
   renderer: TrustedDocumentRenderer;

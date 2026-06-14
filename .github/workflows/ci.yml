@@ -51,9 +51,13 @@ jobs:
           echo "Chrome: ${PUPPETEER_EXECUTABLE_PATH:-NOT FOUND}"
           pnpm -r --if-present test
 
+      # Fail-closed on high/critical advisories (security standard). If a high
+      # advisory is transitive + unpatchable and would block an urgent fix, add a
+      # REVIEWED, time-boxed entry to `pnpm.auditConfig.ignoredCves` in the root
+      # package.json (with a comment + a date to revisit) rather than reopening
+      # this gate for everything.
       - name: Audit (fail on high/critical)
         run: pnpm audit --audit-level high
-        continue-on-error: true
 
   codeql:
     name: CodeQL (SAST)

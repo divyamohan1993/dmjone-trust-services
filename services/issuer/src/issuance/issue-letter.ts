@@ -34,6 +34,7 @@ import type { IssuerDeps } from '../deps.js';
 import { assembleLetterContent } from './assemble-letter-content.js';
 import { allocateCredentialId } from './credential-id.js';
 import { appendToLog } from './log-append.js';
+import { mintStatusSignature } from './sign-status.js';
 
 export interface IssueLetterOutcome {
   documentId: string;
@@ -102,6 +103,7 @@ export async function issueLetter(
     content,
     status: 'valid',
     createdAt: now,
+    statusSignature: mintStatusSignature(deps.statusSigner, documentId, 'valid', now),
     pdfSha256: sig.pdfSha256,
     canonicalPayload: sig.canonicalPayload,
     canonicalSha256: sig.canonicalSha256,

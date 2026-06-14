@@ -59,11 +59,19 @@ export class FakeCredentialRepo implements CredentialRepository {
   async exists(id: string): Promise<boolean> {
     return this.records.has(id);
   }
-  async setStatus(id: string, status: CredentialStatus, at: string): Promise<void> {
+  async setStatus(
+    id: string,
+    status: CredentialStatus,
+    at: string,
+    statusSignature?: { value: string; asOf: string },
+  ): Promise<void> {
     const r = this.records.get(id);
     if (!r) return;
     r.status = status;
+    delete r.revokedAt;
+    delete r.statusSignature;
     if (status === 'revoked') r.revokedAt = at;
+    if (statusSignature !== undefined) r.statusSignature = statusSignature;
   }
   async list(opts?: { limit?: number; cursor?: string }): Promise<{
     items: CredentialRecord[];
@@ -360,6 +368,13 @@ export function makeTestEnv(overrides: Partial<AppEnv> = {}): AppEnv {
   return { ...base, ...overrides };
 }
 
+/** Deterministic, introspectable status signer (structurally a StatusSigner). */
+export class FakeStatusSigner {
+  sign(input: { credentialId: string; status: string; asOf: string }): string {
+    return `status-sig:${input.credentialId}:${input.status}:${input.asOf}`;
+  }
+}
+
 export interface BuiltDeps extends IssuerDeps {
   trace: CallTrace;
   credentialRepo: FakeCredentialRepo;
@@ -406,6 +421,7 @@ export function buildDeps(opts: {
     secretStore: new FakeSecretStore(),
     signer: new FakeSigner(trace, opts.tsaTimestampToken),
     logSigner: new FakeLogSigner(),
+    statusSigner: new FakeStatusSigner(),
     anchorPublisher: new FakeAnchorPublisher(),
     passwordHasher: new FakePasswordHasher(),
     renderer: new FakeRenderer(trace),

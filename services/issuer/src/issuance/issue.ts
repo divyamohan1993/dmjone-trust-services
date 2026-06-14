@@ -30,6 +30,7 @@ import type { IssuerDeps } from '../deps.js';
 import { assembleContent } from './assemble-content.js';
 import { allocateCredentialId } from './credential-id.js';
 import { appendToLog } from './log-append.js';
+import { mintStatusSignature } from './sign-status.js';
 
 export interface IssueOutcome {
   credentialId: string;
@@ -94,6 +95,8 @@ export async function issueCredential(
     content,
     status: 'valid',
     createdAt: now,
+    // Provable, dated status assertion (asOf = createdAt for a fresh 'valid').
+    statusSignature: mintStatusSignature(deps.statusSigner, credentialId, 'valid', now),
     pdfSha256: sig.pdfSha256,
     canonicalPayload: sig.canonicalPayload,
     canonicalSha256: sig.canonicalSha256,

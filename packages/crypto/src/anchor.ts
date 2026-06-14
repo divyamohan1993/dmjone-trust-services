@@ -4,9 +4,10 @@
  *
  *  - GitHub: commit `heads/<seq>.json` to a public repo via the contents API.
  *    The commit SHA + timestamp is an independent, publicly auditable record.
- *  - OpenTimestamps: a Bitcoin-anchored timestamp (recorded as 'pending' until a
- *    calendar confirms; the receipt is upgradeable later). v1 records the stamp
- *    best-effort and never blocks issuance on it.
+ *  - OpenTimestamps (Bitcoin): DEFERRED — not implemented. No receipt is emitted
+ *    (a placeholder would be a false claim of Bitcoin anchoring). The real
+ *    implementation will submit head digests to a free public OTS calendar and
+ *    persist the genuine, relying-party-upgradeable receipt.
  *
  * Everything is injectable (fetch) and degrades gracefully: with nothing
  * configured, {@link AnchorPublisher.publish} returns a proof carrying just the
@@ -15,7 +16,7 @@
  */
 
 import type { AnchorProof, AnchorPublisher, SignedTreeHead } from '@dmjone/shared';
-import { bytesToBase64, sha256Hex, toUtf8Bytes } from './hash.js';
+import { bytesToBase64, toUtf8Bytes } from './hash.js';
 
 export interface AnchorPublisherConfig {
   /** `owner/name` of the public GitHub repo to publish heads into. */
@@ -24,7 +25,8 @@ export interface AnchorPublisherConfig {
   githubToken?: string;
   /** Branch to commit to (defaults to the repo default branch). */
   githubBranch?: string;
-  /** Enable OpenTimestamps stamping (recorded as 'pending' in v1). */
+  /** RESERVED for the future real OpenTimestamps implementation. Currently a
+   *  no-op: no receipt (real or placeholder) is emitted. */
   otsEnabled?: boolean;
   /** Injected fetch (tests pass a mock; defaults to global fetch). */
   fetchImpl?: typeof fetch;
@@ -53,10 +55,13 @@ export function createAnchorPublisher(config: AnchorPublisherConfig = {}): Ancho
         if (github) proof.github = github;
       }
 
-      // OpenTimestamps anchor (best-effort, recorded pending).
-      if (config.otsEnabled) {
-        proof.opentimestamps = makeOtsStub(head);
-      }
+      // OpenTimestamps / Bitcoin anchoring is DEFERRED (no real implementation
+      // ships yet). We deliberately emit NOTHING here rather than a placeholder
+      // receipt: a fake `.ots` blob in a court-facing evidence bundle would be a
+      // dishonest claim of Bitcoin anchoring that does not exist. `otsEnabled` is
+      // reserved for the future real implementation (submit head digests to a
+      // free public OTS calendar + persist the genuine upgradeable receipt).
+      void config.otsEnabled;
 
       return proof;
     },
@@ -108,13 +113,3 @@ async function publishToGithub(
   }
 }
 
-/**
- * A deterministic OTS placeholder receipt, recorded as 'pending'. A real OTS
- * calendar submission upgrades this to a Bitcoin-anchored 'confirmed' receipt
- * later; the shape is stable so that upgrade needs no schema change.
- */
-function makeOtsStub(head: SignedTreeHead): { otsBase64: string; status: 'pending' } {
-  // Bind the stub to the head so it is not a constant blob.
-  const digest = sha256Hex(`ots:${head.seq}:${head.headHash}`);
-  return { otsBase64: bytesToBase64(toUtf8Bytes(digest)), status: 'pending' };
-}

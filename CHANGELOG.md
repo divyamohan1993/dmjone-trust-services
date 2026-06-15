@@ -42,7 +42,12 @@ All notable changes to this project are documented here. Format follows
   rests on a self-published key). The non-functional OpenTimestamps **stub was
   removed** — no placeholder `.ots` receipt is emitted (it would falsely imply
   Bitcoin anchoring); real OTS is deferred. CI `pnpm audit` is now **fail-closed**
-  on high/critical (documented `auditConfig.ignoredCves` override path).
+  on high/critical, with a documented, time-boxed `pnpm.auditConfig.ignoreGhsas`
+  override (revisit 2026-09-01) for three **dev/build-only** advisories with no
+  runtime exposure: crypto-js via the dormant test-only `@signpdf` chain
+  (GHSA-xwcq-pm8m-c4vf), vitest `--ui`-server RCE never run in CI/prod
+  (GHSA-5xrq-8626-4rwp; real fix = vitest 2→3 major bump, deferred), esbuild via
+  `tsx`/`vite` build tooling (GHSA-gv7w-rqvm-qjhr). New advisories still fail CI.
 
 - 2026-06-10: **The real dmj.one logo as the verify portal's favicon.** The
   circular watercolor badge (assets/logo round.png) is resized offline (1500 →

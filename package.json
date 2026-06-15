@@ -25,5 +25,15 @@
     "typescript": "^5.7.2",
     "typescript-eslint": "^8.18.1",
     "vitest": "^2.1.8"
+  },
+  "pnpm": {
+    "auditConfig": {
+      "//": "Time-boxed, reviewed audit ignores (WS6 fail-closed override). ALL THREE are DEV/BUILD-ONLY toolchain advisories with NO runtime/production exposure; revisit + bump by 2026-09-01. (1) crypto-js (GHSA-xwcq-pm8m-c4vf): pulled only via @signpdf, whose ForgePadesSigner is dormant/test-only (production embeds no PAdES). (2) vitest (GHSA-5xrq-8626-4rwp): UI-server RCE, only when running `vitest --ui`; never run in CI/prod; fix = vitest 2->3 major bump (deferred, validate separately). (3) esbuild (GHSA-gv7w-rqvm-qjhr): via tsx/vite build tooling, build-time only. Do NOT add runtime advisories here.",
+      "ignoreGhsas": [
+        "GHSA-xwcq-pm8m-c4vf",
+        "GHSA-5xrq-8626-4rwp",
+        "GHSA-gv7w-rqvm-qjhr"
+      ]
+    }
   }
 }

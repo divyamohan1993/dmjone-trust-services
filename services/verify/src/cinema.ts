@@ -852,6 +852,7 @@ export const CINEMA_JS: string = String.raw`/* dmj.one verify — cinema engine.
       if (!file) return;
       if (fcMsg) { fcMsg.className = "fc-msg"; fcMsg.textContent = "Verifying your file…"; }
       if (fcSubmit) fcSubmit.disabled = true;
+      if (fcDrop) fcDrop.hidden = true;   // auto-upload begun → retire the picker; the hero rite + status carry progress, restored below if the check can't pass
       body.classList.add("is-checking");
       if (fcDrop) fcDrop.classList.add("scanning");
       if (stage) { stage.setMode("rite"); }
@@ -875,10 +876,12 @@ export const CINEMA_JS: string = String.raw`/* dmj.one verify — cinema engine.
                 if (fcMsg) { fcMsg.className = "fc-msg ok"; fcMsg.textContent = "Verified: this file is the document we attested."; }
               } else if (result && result.outcome === "tampered") {
                 strike("tampered", true);
+                if (fcDrop) fcDrop.hidden = false;   // wrong file? let them try another
                 if (fcMsg) { fcMsg.className = "fc-msg err"; fcMsg.textContent = "This file does NOT match the attested document."; }
               } else {
                 body.classList.remove("is-checking");
                 if (stage) stage.setMode("fog");
+                if (fcDrop) fcDrop.hidden = false;   // inconclusive → keep the retry path open
                 if (fcMsg) { fcMsg.className = "fc-msg err"; fcMsg.textContent = "We could not confirm this file against the record."; }
               }
               if (fcSubmit) fcSubmit.disabled = false;
@@ -886,7 +889,7 @@ export const CINEMA_JS: string = String.raw`/* dmj.one verify — cinema engine.
           }, wait);
         })
         .catch(function () {
-          if (fcDrop) fcDrop.classList.remove("scanning");
+          if (fcDrop) { fcDrop.classList.remove("scanning"); fcDrop.hidden = false; }   // network/parse failure → restore the picker so they can retry
           clearRunning();
           body.classList.remove("is-checking");
           if (stage) stage.setMode("ambient");

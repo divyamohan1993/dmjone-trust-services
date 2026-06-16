@@ -446,7 +446,13 @@ body.js:not(.still) .checks li.lit .ic{animation:node-ignite .55s ease-out both}
 .filecheck{margin-top:22px;padding:20px;border-radius:16px;border:1px solid var(--line-strong);
   background:linear-gradient(180deg,rgba(255,255,255,.8),rgba(244,247,251,.85));
   backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.95),0 20px 44px -30px rgba(31,51,86,.35)}
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.95),0 20px 44px -30px rgba(31,51,86,.35);
+  transition:opacity .42s ease,transform .42s ease}
+/* once the held file is confirmed (a clean pass) the whole gate has done its job
+   → it bows out so the hero seal stands alone. JS adds .retired (fade), then
+   [hidden] (collapse); body.still skips straight to hidden. */
+.filecheck.retired{opacity:0;transform:translateY(-8px) scale(.985);pointer-events:none}
+.filecheck[hidden]{display:none}
 /* IN THE HERO (upload pages): the gate is the one action and lives in the
    first view — compact white-glass instrument under the verdict, the same
    prominence the landing gives its lookup plate */
@@ -476,8 +482,6 @@ body.js:not(.still) .checks li.lit .ic{animation:node-ignite .55s ease-out both}
   border:1.5px dashed var(--line-fn);background:rgba(231,237,245,.6);overflow:hidden;
   box-shadow:inset 0 3px 10px rgba(31,51,86,.12),inset 0 -1px 0 rgba(255,255,255,.8);
   transition:border-color .25s ease,background .25s ease,box-shadow .25s ease}
-/* once a file auto-uploads the picker retires (JS sets [hidden]); beats .fc-drop's display:grid */
-.fc-drop[hidden]{display:none}
 .fc-drop.over{border-color:var(--blue);background:rgba(61,111,181,.08);
   box-shadow:inset 0 3px 10px rgba(31,51,86,.1),inset 0 0 0 2px rgba(34,78,141,.25)}
 /* the scan beam sweeps the dropzone while the file is verified — COOL blue

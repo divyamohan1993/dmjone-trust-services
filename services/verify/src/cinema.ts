@@ -846,13 +846,18 @@ export const CINEMA_JS: string = String.raw`/* dmj.one verify — cinema engine.
   /* ---- The file gate (uploads): drop a file, the chain re-runs on IT. ---- */
   (function wireFileGate() {
     var fcForm = $("fc-form"), fcInput = $("fc-input"), fcDrop = $("fc-drop"),
-        fcMsg = $("fc-msg"), fcSubmit = $("fc-submit");
+        fcMsg = $("fc-msg"), fcSubmit = $("fc-submit"), fcBox = $("filecheck");
     if (!fcForm || !fcInput) return;
+    function retireFileCheck() {   // a clean pass → the whole gate has done its job; fade it out, then collapse, so the hero seal stands alone
+      if (!fcBox) return;
+      fcBox.classList.add("retired");
+      if (still) { fcBox.hidden = true; return; }
+      setTimeout(function () { fcBox.hidden = true; }, 480);
+    }
     function run(file) {
       if (!file) return;
       if (fcMsg) { fcMsg.className = "fc-msg"; fcMsg.textContent = "Verifying your file…"; }
       if (fcSubmit) fcSubmit.disabled = true;
-      if (fcDrop) fcDrop.hidden = true;   // auto-upload begun → retire the picker; the hero rite + status carry progress, restored below if the check can't pass
       body.classList.add("is-checking");
       if (fcDrop) fcDrop.classList.add("scanning");
       if (stage) { stage.setMode("rite"); }
@@ -874,14 +879,13 @@ export const CINEMA_JS: string = String.raw`/* dmj.one verify — cinema engine.
               if (result && result.outcome === "valid") {
                 strike("valid", true);
                 if (fcMsg) { fcMsg.className = "fc-msg ok"; fcMsg.textContent = "Verified: this file is the document we attested."; }
+                retireFileCheck();   // confirmed → the whole confirm-box bows out; the picker stays put on every non-pass below so a retry is always one click away
               } else if (result && result.outcome === "tampered") {
                 strike("tampered", true);
-                if (fcDrop) fcDrop.hidden = false;   // wrong file? let them try another
                 if (fcMsg) { fcMsg.className = "fc-msg err"; fcMsg.textContent = "This file does NOT match the attested document."; }
               } else {
                 body.classList.remove("is-checking");
                 if (stage) stage.setMode("fog");
-                if (fcDrop) fcDrop.hidden = false;   // inconclusive → keep the retry path open
                 if (fcMsg) { fcMsg.className = "fc-msg err"; fcMsg.textContent = "We could not confirm this file against the record."; }
               }
               if (fcSubmit) fcSubmit.disabled = false;
@@ -889,7 +893,7 @@ export const CINEMA_JS: string = String.raw`/* dmj.one verify — cinema engine.
           }, wait);
         })
         .catch(function () {
-          if (fcDrop) { fcDrop.classList.remove("scanning"); fcDrop.hidden = false; }   // network/parse failure → restore the picker so they can retry
+          if (fcDrop) fcDrop.classList.remove("scanning");
           clearRunning();
           body.classList.remove("is-checking");
           if (stage) stage.setMode("ambient");

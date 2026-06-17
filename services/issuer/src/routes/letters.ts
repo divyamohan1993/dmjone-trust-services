@@ -67,7 +67,7 @@ export function registerLetterRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps)
   // Exact preview — the real Chromium PDF for the SAME content issuance renders,
   // with NO side effects. Same body as issue minus `password`.
   api.post('/preview', async (c) => {
-    const previewSchema = issueLetterObject.omit({ password: true });
+    const previewSchema = issueLetterObject.omit({ password: true, attestation: true });
     const parsed = previewSchema.safeParse(await readJson(c));
     if (!parsed.success) {
       throw new AppError(

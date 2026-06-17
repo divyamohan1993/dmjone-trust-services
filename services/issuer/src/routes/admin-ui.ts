@@ -21,6 +21,8 @@ import { Hono } from 'hono';
 import { html } from 'hono/html';
 
 import { getBrandImages } from '@dmjone/render';
+import { DOC_TEMPLATES } from '@dmjone/shared';
+import type { DocumentKind } from '@dmjone/shared';
 
 import type { IssuerDeps } from '../deps.js';
 import type { IssuerHonoEnv } from '../http/context.js';
@@ -109,6 +111,77 @@ function composer(opts: {
 </div>`;
 }
 
+/**
+ * The single REQUIRED issuer good-faith attestation (WS1.3): one labelled
+ * checkbox + an honest helper line, shared verbatim by the certificate,
+ * letterhead, and upload forms (distinct id per surface). The label states the
+ * four-part declaration; the helper is honest that this is a good-faith log
+ * entry, NOT a legal guarantee. Styling is class-only (reuses `.upload-sign-row`
+ * for the checkbox row and `.body-hint`/`.muted` for the helper) so no new CSS,
+ * and no inline `style` attribute, is needed (CSP). `required` makes the browser
+ * block a bare submit; the admin script ALSO blocks (clear message) and the
+ * server schema rejects any issue without `attestation:true`.
+ *
+ * @param id  the checkbox id + describedby seed (`f-attest` cert / `lf-attest`
+ *            letter / `upload-attest` upload), unique per panel.
+ */
+function attestationRow(id: string): ReturnType<typeof html> {
+  const helpId = `${id}-help`;
+  // The label + helper are each authored as a SINGLE unbroken line: `html``
+  // preserves literal newlines/indentation, so wrapping these sentences would
+  // inject whitespace mid-phrase (and break the accessible name + assertions).
+  return html`<div class="upload-sign-row">
+    <input id="${id}" name="attestation" type="checkbox" required aria-describedby="${helpId}" />
+    <label for="${id}">I attest that the facts stated are true and dmj.one had this association, that I am authorised to issue this on dmj.one&#39;s behalf, and that the recipient consents to dmj.one issuing and hosting an independently-verifiable copy.</label>
+  </div>
+  <p class="muted body-hint" id="${helpId}">This is recorded as a good-faith declaration. It is not a legal guarantee, and a knowingly false document is still forgery.</p>`;
+}
+
+/**
+ * The "Start from a template" picker for one issue mode (WS1 §Picker): a labelled
+ * `<select>` whose options are the {@link DOC_TEMPLATES} entries of the matching
+ * `kind`, server-rendered (so it is testable and degrades without JS). A leading
+ * empty-value placeholder keeps the form blank until the issuer chooses. The
+ * change handler (in the admin script) reads the picked id, looks the content up
+ * in the injected catalog, confirms before replacing a non-empty composer, then
+ * fills the form. Labels (incl. the convention-extended "(lawyer-review)" suffix)
+ * are interpolated, so `html`` auto-escapes them; styling reuses `.upload-page-row`
+ * (label + select) so no new CSS / inline style is needed (CSP).
+ *
+ * @param kind      'certificate' | 'letter', selects which catalog entries show.
+ * @param selectId  the `<select>` id (`cert-template` / `letter-template`) + its
+ *                  label's `for`; the admin script keys the change handler off it.
+ */
+function templatePicker(kind: DocumentKind, selectId: string): ReturnType<typeof html> {
+  const options = DOC_TEMPLATES.filter((t) => t.kind === kind).map(
+    (t) => html`<option value="${t.id}">${t.label}</option>`,
+  );
+  return html`<div class="upload-page-row">
+    <label for="${selectId}">Start from a template</label>
+    <select id="${selectId}"><option value="">Blank (start from scratch)</option>${options}</select>
+  </div>`;
+}
+
+/**
+ * The catalog as a JS literal safe to embed INSIDE the nonce'd `<script>`. It is
+ * a build-time constant (never user input), but we still neutralise the only
+ * sequences that can break out of, or terminate, an inline script: `<` (so no
+ * `</script>` can appear) and the U+2028 / U+2029 line separators (legal in JSON
+ * strings but illegal raw in a script body). Escaped per-character against the
+ * codepoints (0x3c / 0x2028 / 0x2029) so the SOURCE here stays pure ASCII. The
+ * admin script embeds the result as `var DOC_TEMPLATES = <json>;`, data
+ * injection, not a new script tag or fetch.
+ */
+const DOC_TEMPLATES_JSON = JSON.stringify(DOC_TEMPLATES)
+  .split('')
+  .map((ch) => {
+    const code = ch.charCodeAt(0);
+    return code === 0x3c || code === 0x2028 || code === 0x2029
+      ? '\\u' + code.toString(16).padStart(4, '0')
+      : ch;
+  })
+  .join('');
+
 export function registerAdminUiRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps): void {
   app.get('/admin', async (c) => {
     const nonce = c.get('cspNonce');
@@ -126,7 +199,10 @@ export function registerAdminUiRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps
         role: 'Issuer Admin',
         nonce,
         body,
-        script: adminScript(),
+        // The picker change-handler reads the catalog from this injected literal
+        // (no extra fetch). Only the authenticated dashboard shows the pickers,
+        // but the constant is inert data, so passing it unconditionally is fine.
+        script: adminScript(DOC_TEMPLATES_JSON),
       }),
     );
   });
@@ -192,6 +268,7 @@ function certificatePanel(): ReturnType<typeof html> {
   ${STUDS}
   <h2>New credential</h2>
   <form id="issue-form">
+    ${templatePicker('certificate', 'cert-template')}
     <label for="f-type">Type</label>
     <input id="f-type" name="type" list="cert-types" value="internship" maxlength="40"
       autocomplete="off" spellcheck="false" required />
@@ -235,6 +312,7 @@ function certificatePanel(): ReturnType<typeof html> {
         <input id="f-pw" name="password" type="password" minlength="8" maxlength="128" required />
       </div>
     </div>
+    ${attestationRow('f-attest')}
     <div class="actions">
       <button type="submit">Issue certificate</button>
     </div>
@@ -250,6 +328,7 @@ function letterheadPanel(): ReturnType<typeof html> {
   ${STUDS}
   <h2>New letter</h2>
   <form id="letter-form">
+    ${templatePicker('letter', 'letter-template')}
     <label for="lf-reference">Reference (optional)</label>
     <input id="lf-reference" name="reference" maxlength="120" autocomplete="off" />
     <label for="lf-recipient">Recipient lines</label>
@@ -279,6 +358,7 @@ function letterheadPanel(): ReturnType<typeof html> {
         <input id="lf-pw" name="password" type="password" minlength="8" maxlength="128" required />
       </div>
     </div>
+    ${attestationRow('lf-attest')}
     <div class="actions">
       <button type="submit">Issue letter</button>
     </div>
@@ -346,6 +426,7 @@ function uploadPanel(): ReturnType<typeof html> {
     <label for="upload-pw">Candidate download password</label>
     <input id="upload-pw" name="password" type="password" minlength="8" maxlength="128"
       autocomplete="off" />
+    ${attestationRow('upload-attest')}
     <div class="actions">
       <button type="button" class="secondary" data-action="upload-preview">Preview exact PDF</button>
       <button type="submit">Sign &amp; download</button>

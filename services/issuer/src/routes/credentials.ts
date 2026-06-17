@@ -132,7 +132,7 @@ export function registerCredentialRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerD
   // audit). Same body as issue minus `password`. Strictly: validate →
   // assembleContent(placeholder id) → renderer.render → return PDF bytes.
   api.post('/preview', async (c) => {
-    const previewSchema = issueCredentialObject.omit({ password: true });
+    const previewSchema = issueCredentialObject.omit({ password: true, attestation: true });
     const parsed = previewSchema.safeParse(await readJson(c));
     if (!parsed.success) {
       throw new AppError(
@@ -229,6 +229,49 @@ export function registerCredentialRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerD
     });
 
     return c.json({ credentialId, status: 'revoked', revokedAt });
+  });
+
+  // Erase a credential (DPDP §8(7) true erasure) — DISTINCT from revoke. Purges
+  // the recipient PII from the record + the rendered certificate/§63 blobs; the
+  // non-PII crypto/log residue stays so the verify tombstone proves the document
+  // existed and was erased. Irreversible. Idempotent.
+  api.post('/:credentialId/erase', async (c) => {
+    const idParse = credentialIdParamSchema.safeParse({ credentialId: c.req.param('credentialId') });
+    if (!idParse.success) {
+      throw new AppError(ERROR_CODE.BAD_REQUEST, 'Malformed credential id', 400);
+    }
+    const { credentialId } = idParse.data;
+    const body = (await readJson(c)) ?? {};
+    const reason =
+      typeof body === 'object' && body !== null && typeof (body as { reason?: unknown }).reason === 'string'
+        ? ((body as { reason: string }).reason).slice(0, 300)
+        : undefined;
+
+    const existing = await deps.credentialRepo.getById(credentialId);
+    if (!existing) {
+      throw new AppError(ERROR_CODE.CREDENTIAL_NOT_FOUND, 'No such credential', 404);
+    }
+    if (existing.erased) {
+      // Idempotent: already a tombstone.
+      return c.json({ credentialId, erased: true, erasedAt: existing.erasedAt });
+    }
+
+    const erasedAt = new Date().toISOString();
+    await deps.credentialRepo.erase(credentialId, erasedAt);
+    // Purge the rendered blobs (the record redaction does not touch storage).
+    await deps.blobStore.delete(credentialId, 'certificate');
+    await deps.blobStore.delete(credentialId, 'section63');
+
+    const session = c.get('session');
+    await deps.auditLog.append({
+      actor: 'admin',
+      action: 'credential.erase',
+      subject: credentialId,
+      requestId: c.get('requestId'),
+      meta: { by: session?.sub ?? 'admin', ...(reason !== undefined && { reason }) },
+    });
+
+    return c.json({ credentialId, erased: true, erasedAt });
   });
 
   app.route('/api/credentials', api);

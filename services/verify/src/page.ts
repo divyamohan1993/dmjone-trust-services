@@ -109,6 +109,13 @@ export interface CredentialPageInput {
    * unverified ⇒ nothing is claimed about WHEN.
    */
   trustedTimestamp?: { genTime?: string; tsaSubject?: string };
+  /**
+   * WS2: the record's unguessable verify token. When present (all new issuance),
+   * the page routes its self-references — live verify, §63, evidence, file-gate —
+   * through `/v/<token>` / by-token endpoints, so the document is NOT reachable by
+   * its sequential id. Absent ⇒ a legacy record served by id.
+   */
+  verifyToken?: string;
 }
 
 /* ═══════════════════════ stage furniture (decorative) ═══════════════════════ */
@@ -300,7 +307,8 @@ function heroCompareLine(affirmative: boolean, kind: ReturnType<typeof documentK
  * not a government-licensed certifying authority.
  */
 function heroHonestyLine(): string {
-  return `          <p class="honesty">A cryptographic attestation by dmj.one, an independent educational initiative, not a government-licensed certifying authority.</p>`;
+  return `          <p class="honesty">A cryptographic attestation by dmj.one, an independent educational initiative, not a government-licensed certifying authority.</p>
+          <p class="honesty">We attest these are the exact bytes dmj.one issued; we do not independently audit the truth of the statements made in the document.</p>`;
 }
 
 /**
@@ -578,13 +586,33 @@ ${css}
 
 /* ═══════════════════════════════ the pages ══════════════════════════════════ */
 
-/** The branded 404 page (HTML, not JSON) for an unknown / malformed id. */
-export function renderErrorPage(input: { nonce: string; issuer: string }): string {
-  const { nonce, issuer } = input;
+/**
+ * The branded 404 page (HTML, not JSON) for an unknown / malformed id, OR — when
+ * `erased` is set — the PII-free TOMBSTONE for a record erased under DPDP §8(7).
+ * The erased copy is informative (the document existed and was erased on request)
+ * and never alarm-red: erasure is not forgery or revocation.
+ */
+export function renderErrorPage(input: { nonce: string; issuer: string; erased?: boolean }): string {
+  const { nonce, issuer, erased } = input;
   // Neutral, never alarm-red: a mistyped QR is not a forgery.
   const v = verdictCopy('unknown');
   const issuerTagline = issuer.replace(/^dmj\.one\s+/i, '').trim() || issuer;
-  return `${head(nonce, `Credential not found · ${IDENTITY.trustService}`)}
+  const pageTitle = erased ? 'Document erased' : 'Credential not found';
+  const heading = erased ? 'Document erased' : 'Credential not found';
+  const subCopy = erased
+    ? 'This document was erased at the data principal&rsquo;s request. Its contents are no longer available.'
+    : 'No credential matches this link. Check the ID or the QR code on the document.';
+  const whyEk = erased ? 'Erased' : 'Not found';
+  const statusLabel = erased ? 'ERASED' : 'UNKNOWN';
+  const statusDetail = erased
+    ? subCopy
+    : 'No credential matches this link. Check the ID or the QR code on the certificate.';
+  const whyTrust = erased
+    ? `This document existed and carried a genuine ${escapeHtml(issuer)} attestation, but the person it was about asked us to erase it under their data-protection rights, so its personal data has been removed. A cryptographic record of its existence is retained with no personal data. This does not mean the document was forged or revoked.`
+    : `If you scanned a QR code from a printed certificate and reached this page, the
+      credential may have been mistyped or may not exist. ${escapeHtml(issuer)} only attests to credentials it has issued.
+      You can re-enter the ID at <a href="/">the verification portal</a>.`;
+  return `${head(nonce, `${pageTitle} · ${IDENTITY.trustService}`)}
 <body data-page="error">
   <a class="skip" href="#main">Skip to content</a>
 ${stageLayers()}
@@ -601,13 +629,13 @@ ${stageLayers()}
       <div class="hero__core">
         <div class="identity">
           <p class="eyebrow">Verification</p>
-          <h1 class="type-title" id="nf-title">Credential not found</h1>
+          <h1 class="type-title" id="nf-title">${escapeHtml(heading)}</h1>
         </div>
 
         <div class="verdict ${v.cls}" id="verdict">
 ${ROSETTE_SVG}
           <p class="word"><span class="glyph" aria-hidden="true">${escapeHtml(v.glyph)}</span><span id="verdict-word">${escapeHtml(v.word)}</span></p>
-          <p class="sub" id="verdict-sub">No credential matches this link. Check the ID or the QR code on the document.</p>
+          <p class="sub" id="verdict-sub">${subCopy}</p>
 ${heroHonestyLine()}
         </div>
       </div>
@@ -620,16 +648,14 @@ ${heroHonestyLine()}
 
     <section class="proof" id="why" aria-labelledby="why-h">
       <div class="proof__intro">
-        <p class="ek">Not found</p>
+        <p class="ek">${escapeHtml(whyEk)}</p>
         <h2 id="why-h">Why you may be seeing this</h2>
       </div>
       <div class="status unknown" role="status">
         <span class="dot" aria-hidden="true"></span>
-        <span class="txt"><b>UNKNOWN</b><span>No credential matches this link. Check the ID or the QR code on the certificate.</span></span>
+        <span class="txt"><b>${statusLabel}</b><span>${statusDetail}</span></span>
       </div>
-      <p class="trust">If you scanned a QR code from a printed certificate and reached this page, the
-      credential may have been mistyped or may not exist. ${escapeHtml(issuer)} only attests to credentials it has issued.
-      You can re-enter the ID at <a href="/">the verification portal</a>.</p>
+      <p class="trust">${whyTrust}</p>
     </section>
 
     <footer class="foot">${escapeHtml(IDENTITY.trustService)} · ${escapeHtml(IDENTITY.email)}</footer>
@@ -754,6 +780,8 @@ export function renderCredentialPage(input: CredentialPageInput): string {
   const { record, issuer, issuerLegalName, nonce } = input;
   const kind = documentKind(record);
   const id = record.id;
+  // WS2 token (new issuance) — drives every self-reference below; absent ⇒ legacy by-id.
+  const tok = input.verifyToken;
   const face =
     kind === 'letter'
       ? letterFace(record.content as LetterContent, formatIssueDate((record.content as LetterContent).issueDate), issuer, id)
@@ -788,7 +816,9 @@ export function renderCredentialPage(input: CredentialPageInput): string {
           <p class="fc-lead">Confirm the document you&rsquo;re holding</p>
           <p class="fc-why">A QR code or document number can be copied onto any file. So we verify the file itself: its exact bytes must match the post-quantum signature we issued, and an altered or substituted file cannot pass.</p>
           <form id="fc-form" method="POST" action="/api/verify/file" enctype="multipart/form-data">
-            <input type="hidden" name="credentialId" value="${escapeHtml(id)}">
+            ${tok
+              ? `<input type="hidden" name="verifyToken" value="${escapeHtml(tok)}">`
+              : `<input type="hidden" name="credentialId" value="${escapeHtml(id)}">`}
             <div class="fc-drop" id="fc-drop">
               <label class="fc-cta" for="fc-input">Drop the PDF here, or choose a file</label>
               <input class="fc-input" id="fc-input" name="file" type="file" accept="application/pdf,.pdf" required>
@@ -830,13 +860,21 @@ export function renderCredentialPage(input: CredentialPageInput): string {
     })
     .join('\n');
 
-  const section63Path = `/api/credentials/${encodeURIComponent(id)}/section63`;
-  const evidencePath = `/api/credentials/${encodeURIComponent(id)}/evidence`;
-  const verifyApiPath = `/api/verify/${encodeURIComponent(id)}`;
+  // A tokened (new) record is reachable ONLY via /v/<token>; its sequential id is
+  // not a public lookup key, so every self-reference routes through the token.
+  const section63Path = tok
+    ? `/v/${encodeURIComponent(tok)}/section63`
+    : `/api/credentials/${encodeURIComponent(id)}/section63`;
+  const evidencePath = tok
+    ? `/v/${encodeURIComponent(tok)}/evidence`
+    : `/api/credentials/${encodeURIComponent(id)}/evidence`;
+  const verifyApiPath = tok
+    ? `/api/verify/by-token/${encodeURIComponent(tok)}`
+    : `/api/verify/${encodeURIComponent(id)}`;
   const issuerTagline = issuer.replace(/^dmj\.one\s+/i, '').trim() || issuer;
 
   return `${head(nonce, face.pageTitle)}
-<body data-page="credential" data-credential-id="${escapeHtml(id)}" data-verify-url="${escapeHtml(verifyApiPath)}" data-filegate="${fileGate ? '1' : '0'}">
+<body data-page="credential" data-credential-id="${escapeHtml(id)}" data-verify-token="${escapeHtml(tok ?? '')}" data-verify-url="${escapeHtml(verifyApiPath)}" data-filegate="${fileGate ? '1' : '0'}">
   <a class="skip" href="#main">Skip to content</a>
 ${stageLayers()}
   <main id="main" class="wrap verify">

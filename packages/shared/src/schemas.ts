@@ -83,6 +83,9 @@ export const issueCredentialObject = z.object({
   bodyParagraphs: z.array(z.string().trim().min(1).max(1200)).min(1).max(6),
   closingLine: z.string().trim().max(200).optional(),
   issueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'expected YYYY-MM-DD'),
+  /** Issuer's good-faith attestation (facts true + authority + recipient hosting
+   *  consent). Required to issue; recorded as a log entry, not a control. */
+  attestation: z.literal(true),
   /** The candidate's private download password (gates the signed PDF). */
   password: z.string().min(8).max(128),
 });
@@ -122,6 +125,9 @@ export const issueLetterObject = z.object({
   valediction: z.string().trim().max(80).optional(),
   /** Internship-group letters set this so employment/salary language is blocked. */
   scope: z.enum(['internship']).optional(),
+  /** Issuer's good-faith attestation (facts true + authority + recipient hosting
+   *  consent). Required to issue; recorded as a log entry, not a control. */
+  attestation: z.literal(true),
   /** The recipient's private download password (gates the signed PDF). */
   password: z.string().min(8).max(128),
 });
@@ -172,6 +178,9 @@ export const signUploadSchema = z.object({
     .min(1)
     .max(50)
     .optional(),
+  /** Issuer's good-faith attestation (facts true + authority + recipient hosting
+   *  consent). Required to attest; recorded as a log entry, not a control. */
+  attestation: z.literal(true),
   /** The recipient's private download password (gates the signed PDF). */
   password: z.string().min(8).max(128),
 });

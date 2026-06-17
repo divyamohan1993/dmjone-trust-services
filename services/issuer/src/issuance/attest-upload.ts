@@ -24,7 +24,7 @@
  * matches the stored bytes.
  */
 
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 
 import {
   computeUploadCanonicalPayload,
@@ -92,11 +92,20 @@ export async function attestUpload(
     pageCount,
   });
 
+  // Unguessable per-document retrieval token (≥128-bit base64url, CSPRNG),
+  // generated BEFORE stamping because the stamp's QR encodes the verify URL,
+  // which is keyed on the token (design WS2-B). Top-level record field only —
+  // never canonical-signed, never in /evidence. There is no `[auto]` step for
+  // uploads: an upload carries no issuer-authored prose, only attestation
+  // metadata about the uploaded bytes.
+  const verifyToken = randomBytes(16).toString('base64url');
+
   // 3. Stamp every page with the validation mark (QR → verify URL), plus the
   //    handwritten-signature PNG when requested. The placements on the
   //    attestation are present (non-empty) iff the request asked to place AND
   //    supplied at least one; the signature is drawn once per placement page.
-  const verifyUrl = `${deps.env.VERIFY_PUBLIC_URL}/c/${documentId}`;
+  //    The QR is keyed on the unguessable token, not the sequential id.
+  const verifyUrl = `${deps.env.VERIFY_PUBLIC_URL}/v/${verifyToken}`;
   const stamped = await stampAttestation({
     pdfBytes,
     documentId,
@@ -160,6 +169,10 @@ export async function attestUpload(
     logLeafHash: append.logLeafHash,
     passwordHash,
     section63: s63meta,
+    // WS2-B / attestation — top-level only, never canonical-signed or in
+    // /evidence. Always present on new records; attestedAt === createdAt.
+    verifyToken,
+    issuerAttestation: { confirmed: true, attestedAt: now },
   };
   await deps.credentialRepo.create(record);
 

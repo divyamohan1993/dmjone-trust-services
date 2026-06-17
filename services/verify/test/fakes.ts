@@ -182,6 +182,13 @@ export class FakeCredentialRepository implements CredentialRepository {
     return Promise.resolve(this.byId.get(id) ?? null);
   }
 
+  getByToken(verifyToken: string): Promise<CredentialRecord | null> {
+    for (const r of this.byId.values()) {
+      if (r.verifyToken && r.verifyToken === verifyToken) return Promise.resolve(r);
+    }
+    return Promise.resolve(null);
+  }
+
   exists(id: string): Promise<boolean> {
     return Promise.resolve(this.byId.has(id));
   }
@@ -189,6 +196,28 @@ export class FakeCredentialRepository implements CredentialRepository {
   setStatus(id: string, status: CredentialStatus, at: string): Promise<void> {
     const r = this.byId.get(id);
     if (r) this.byId.set(id, { ...r, status, revokedAt: at });
+    return Promise.resolve();
+  }
+
+  /** WS2 true erasure: blank the PII in `content` + `canonicalPayload`, set
+   *  erased/erasedAt, keep the crypto/log residue. Idempotent. */
+  erase(id: string, at: string): Promise<void> {
+    const r = this.byId.get(id);
+    if (r) {
+      const content = { ...(r.content as Record<string, unknown>) };
+      for (const k of ['recipientName', 'intro', 'title', 'kicker', 'closingLine', 'subject', 'salutation', 'valediction', 'reference', 'originalFilename']) {
+        if (k in content) content[k] = '';
+      }
+      if (Array.isArray(content['bodyParagraphs'])) content['bodyParagraphs'] = [];
+      if (Array.isArray(content['recipientLines'])) content['recipientLines'] = [];
+      this.byId.set(id, {
+        ...r,
+        content: content as unknown as CredentialRecord['content'],
+        canonicalPayload: '',
+        erased: true,
+        erasedAt: at,
+      });
+    }
     return Promise.resolve();
   }
 
@@ -215,6 +244,11 @@ export class FakeBlobStore implements BlobStore {
 
   get(credentialId: string, kind: BlobKind): Promise<Uint8Array | null> {
     return Promise.resolve(this.blobs.get(this.key(credentialId, kind)) ?? null);
+  }
+
+  delete(credentialId: string, kind: BlobKind): Promise<void> {
+    this.blobs.delete(this.key(credentialId, kind));
+    return Promise.resolve();
   }
 }
 

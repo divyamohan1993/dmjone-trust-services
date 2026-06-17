@@ -21,6 +21,8 @@
  *  11. audit the issuance
  */
 
+import { randomBytes } from 'node:crypto';
+
 import {
   computeLetterCanonicalPayload,
   DOCUMENT_ID_PREFIX,
@@ -32,6 +34,7 @@ import {
 
 import type { IssuerDeps } from '../deps.js';
 import { assembleLetterContent } from './assemble-letter-content.js';
+import { substituteAutoNumberLetter } from './auto-number.js';
 import { allocateCredentialId } from './credential-id.js';
 import { appendToLog } from './log-append.js';
 import { mintStatusSignature } from './sign-status.js';
@@ -61,11 +64,23 @@ export async function issueLetter(
     input.issueDate,
   );
 
-  // 2. Build the letter content ONCE; this exact reference is what we render,
-  //    sign over, and persist — so the verify-side recompute matches the bytes.
-  const content: LetterContent = assembleLetterContent(input, documentId);
+  // Unguessable per-document retrieval token (≥128-bit base64url, CSPRNG): the
+  // public verify URL is keyed on this, NOT the sequential id (design WS2-B).
+  // Top-level record field only — never canonical-signed, never in /evidence.
+  const verifyToken = randomBytes(16).toString('base64url');
 
-  const qrUrl = `${deps.env.VERIFY_PUBLIC_URL}/c/${documentId}`;
+  // 2. Build the letter content ONCE, then substitute the allocated id into any
+  //    `[auto]` tokens BEFORE render/sign/persist; this exact reference is what
+  //    we render, sign over, and persist — so the verify-side recompute matches
+  //    the bytes and the printed face number equals the record id.
+  const content: LetterContent = substituteAutoNumberLetter(
+    assembleLetterContent(input, documentId),
+    documentId,
+  );
+
+  // QR / verify URL keyed on the unguessable token (path, not query); the human
+  // `DMJ-LTR-…` id still prints on the face for phone/BGV reference.
+  const qrUrl = `${deps.env.VERIFY_PUBLIC_URL}/v/${verifyToken}`;
 
   // 3. Render the flowing, multi-page letterhead UNSIGNED pdf.
   const unsignedPdf = await deps.renderer.renderLetter(content, { qrUrl });
@@ -118,6 +133,10 @@ export async function issueLetter(
     logLeafHash: append.logLeafHash,
     passwordHash,
     section63: s63meta,
+    // WS2-B / attestation — top-level only, never canonical-signed or in
+    // /evidence. Always present on new records; attestedAt === createdAt.
+    verifyToken,
+    issuerAttestation: { confirmed: true, attestedAt: now },
   };
   await deps.credentialRepo.create(record);
 

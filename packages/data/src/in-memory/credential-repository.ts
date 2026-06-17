@@ -15,6 +15,7 @@ import {
   type CredentialRepository,
   type CredentialStatus,
 } from '@dmjone/shared';
+import { applyErasure } from '../erasure.js';
 
 export function createInMemoryCredentialRepository(): CredentialRepository {
   // Insertion-ordered map → deterministic, stable list() pagination.
@@ -35,6 +36,16 @@ export function createInMemoryCredentialRepository(): CredentialRepository {
     async getById(id: string): Promise<CredentialRecord | null> {
       const found = records.get(id);
       return found ? structuredClone(found) : null;
+    },
+
+    async getByToken(verifyToken: string): Promise<CredentialRecord | null> {
+      // Linear scan (mirrors the Firestore equality query). A legacy record with
+      // no verifyToken never matches (its field is undefined, never === a token).
+      // Cloned on return so callers can't mutate stored state by aliasing.
+      for (const r of records.values()) {
+        if (r.verifyToken === verifyToken) return structuredClone(r);
+      }
+      return null;
     },
 
     async exists(id: string): Promise<boolean> {
@@ -68,6 +79,21 @@ export function createInMemoryCredentialRepository(): CredentialRepository {
         next.statusSignature = statusSignature;
       }
       records.set(id, next);
+    },
+
+    async erase(id: string, at: string): Promise<void> {
+      const found = records.get(id);
+      if (!found) {
+        throw new AppError(ERROR_CODE.CREDENTIAL_NOT_FOUND, `Credential ${id} not found`, 404);
+      }
+      // Idempotent: a second erase is a true no-op (preserves the original
+      // erasedAt). Check BEFORE mutating.
+      if (found.erased === true) return;
+      // Clone-then-blank: applyErasure copies the record and blanks only the
+      // named PII fields, so the crypto/log residue (and verifyToken /
+      // issuerAttestation) is retained by default. The §63 blob is purged
+      // separately by the caller via BlobStore.delete — not here.
+      records.set(id, applyErasure(structuredClone(found), at));
     },
 
     async list(opts?: { limit?: number; cursor?: string }): Promise<{

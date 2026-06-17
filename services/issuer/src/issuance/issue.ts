@@ -18,6 +18,8 @@
  * the tests assert.
  */
 
+import { randomBytes } from 'node:crypto';
+
 import {
   computeCanonicalPayload,
   credentialTypeCode,
@@ -28,6 +30,7 @@ import {
 
 import type { IssuerDeps } from '../deps.js';
 import { assembleContent } from './assemble-content.js';
+import { substituteAutoNumber } from './auto-number.js';
 import { allocateCredentialId } from './credential-id.js';
 import { appendToLog } from './log-append.js';
 import { mintStatusSignature } from './sign-status.js';
@@ -59,13 +62,27 @@ export async function issueCredential(
     input.issueDate,
   );
 
-  // Build the certificate content. Factored into `assembleContent` so the
-  // preview route renders a byte-identical object (same field order/spread,
-  // same exactOptionalPropertyTypes handling of `closingLine`); the only
-  // difference is the real allocated id here vs the preview placeholder.
-  const content: CredentialContent = assembleContent(input, credentialId);
+  // Unguessable per-document retrieval token (≥128-bit base64url, CSPRNG): the
+  // public verify URL is keyed on this, NOT the sequential id, so a new document
+  // is not enumerable. Top-level record field only — NEVER in the canonical
+  // signed payload or the /evidence bundle (design WS2-B).
+  const verifyToken = randomBytes(16).toString('base64url');
 
-  const qrUrl = `${deps.env.VERIFY_PUBLIC_URL}/c/${credentialId}`;
+  // Build the certificate content, then substitute the allocated id into any
+  // `[auto]` tokens BEFORE render/sign/persist — the printed face number then
+  // equals the record id, and the one signed `content` reference carries the
+  // substituted prose. `assembleContent` is factored so the preview route
+  // renders a byte-identical object (same field order/spread, same
+  // exactOptionalPropertyTypes handling of `closingLine`); the only difference
+  // is the real allocated id here vs the preview placeholder.
+  const content: CredentialContent = substituteAutoNumber(
+    assembleContent(input, credentialId),
+    credentialId,
+  );
+
+  // QR / verify URL is keyed on the unguessable token (path, not query → no
+  // referer/log leakage); the human `DMJ-…` id still prints on the face.
+  const qrUrl = `${deps.env.VERIFY_PUBLIC_URL}/v/${verifyToken}`;
 
   // 2. Render the pixel-faithful UNSIGNED pdf.
   const unsignedPdf = await deps.renderer.render(content, { qrUrl });
@@ -111,6 +128,12 @@ export async function issueCredential(
     logLeafHash: append.logLeafHash,
     passwordHash,
     section63: s63meta,
+    // WS2-B / attestation — top-level only, never in the canonical signed
+    // payload or /evidence. The token is always present on new records (plain
+    // assignment, not the conditional-spread used for genuinely-maybe-absent
+    // fields); attestedAt reuses `now` so it equals createdAt.
+    verifyToken,
+    issuerAttestation: { confirmed: true, attestedAt: now },
   };
   await deps.credentialRepo.create(record);
 

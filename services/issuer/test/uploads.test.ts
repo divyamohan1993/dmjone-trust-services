@@ -264,6 +264,8 @@ describe('POST /api/uploads — the attest pipeline', () => {
     return {
       pdfBase64: ONE_PAGE_PDF_B64,
       originalFilename: 'offer-letter.pdf',
+      // Required issuer attestation (literal `true`); recorded as a log entry.
+      attestation: true,
       password: 'a-strong-password', // pragma: allowlist secret
       ...overrides,
     };
@@ -311,6 +313,13 @@ describe('POST /api/uploads — the attest pipeline', () => {
     );
     // No signature was requested → no placements recorded.
     expect('signaturePlacements' in content).toBe(false);
+
+    // WS2-B: an unguessable verify token is minted + stored, and the issuer
+    // attestation is recorded with attestedAt == createdAt.
+    expect(record?.verifyToken).toBeTruthy();
+    expect(record!.verifyToken!).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(record?.issuerAttestation?.confirmed).toBe(true);
+    expect(record?.issuerAttestation?.attestedAt).toBe(record?.createdAt);
 
     expect(await deps.blobStore.get(documentId, 'certificate')).not.toBeNull();
     expect(await deps.blobStore.get(documentId, 'section63')).not.toBeNull();
@@ -431,6 +440,20 @@ describe('POST /api/uploads — the attest pipeline', () => {
 
     const body = signBody();
     delete body.password;
+    const res = await authedPost(app, cookie, SIGN_PATH, body);
+
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { code: string }).code).toBe(ERROR_CODE.VALIDATION_FAILED);
+    expect(deps.credentialRepo.createCount).toBe(0);
+  });
+
+  it('rejects an upload WITHOUT the issuer attestation (400, no record written)', async () => {
+    const deps = buildDeps();
+    const app = createIssuerApp(deps);
+    const cookie = await mintSessionCookie(deps.env);
+
+    const body = signBody();
+    delete body.attestation; // the schema requires a literal `true`
     const res = await authedPost(app, cookie, SIGN_PATH, body);
 
     expect(res.status).toBe(400);

@@ -66,6 +66,19 @@ export function rowToCredential(row: CredentialRow): CredentialRecord {
   // present (omit-on-absent, like revokedAt/tsaTimestampToken). Absent on legacy
   // records → the status endpoint reports `legacyUnsigned`.
   if (row.statusSignature !== undefined) out.statusSignature = row.statusSignature;
+  // WS2 fields (all top-level; never in the canonical payload or /evidence;
+  // absent on legacy pre-WS2 records). Same omit-on-absent pattern: carried at
+  // rest by the credentialToRow spread, restored here only when present so
+  // read-back never produces `key: undefined` under exactOptionalPropertyTypes.
+  //   - verifyToken: the unguessable retrieval token (new issuance only).
+  //   - issuerAttestation: the issuer's good-faith log entry.
+  //   - erased/erasedAt: the true-erasure tombstone marker. This is also what
+  //     makes rowToCredential tolerate a redacted record — it copies the (blanked)
+  //     content through verbatim and asserts nothing about PII being populated.
+  if (row.verifyToken !== undefined) out.verifyToken = row.verifyToken;
+  if (row.issuerAttestation !== undefined) out.issuerAttestation = row.issuerAttestation;
+  if (row.erased !== undefined) out.erased = row.erased;
+  if (row.erasedAt !== undefined) out.erasedAt = row.erasedAt;
   return out;
 }
 

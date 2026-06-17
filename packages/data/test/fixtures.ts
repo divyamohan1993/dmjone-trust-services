@@ -7,9 +7,11 @@ import { GENESIS_HEAD_HASH } from '@dmjone/shared';
 import type {
   CredentialContent,
   CredentialRecord,
+  LetterContent,
   LogLeaf,
   Section63Metadata,
   SignedTreeHead,
+  UploadAttestation,
 } from '@dmjone/shared';
 
 export function makeContent(overrides: Partial<CredentialContent> = {}): CredentialContent {
@@ -63,6 +65,44 @@ export function makeRecord(overrides: Partial<CredentialRecord> = {}): Credentia
     section63: makeSection63('a'.repeat(64)),
     ...overrides,
   };
+}
+
+/**
+ * Letter record fixture (kind: 'letter'). PII lives in recipientLines / subject
+ * / salutation / bodyParagraphs / valediction / reference — the fields erase()
+ * must blank for a letter. Crypto residue mirrors {@link makeRecord}.
+ */
+export function makeLetterRecord(overrides: Partial<CredentialRecord> = {}): CredentialRecord {
+  const id = overrides.id ?? 'DMJ-LTR-20260608-01';
+  const content: LetterContent = {
+    documentId: id,
+    issueDate: '2026-06-08',
+    reference: 'Ref: DMJ/2026/01',
+    recipientLines: ['Asha Rao', '221B Baker Street'],
+    subject: 'Letter of recommendation for Asha Rao',
+    salutation: 'Dear Sir/Madam,',
+    bodyParagraphs: ['Asha Rao contributed to dmj.one with distinction.'],
+    valediction: 'Sincerely,',
+    signatory: { name: 'Divya Mohan', role: 'Founder · dmj.one', phone: '+91 79799 30293' },
+  };
+  return { ...makeRecord({ id }), kind: 'letter', content, ...overrides };
+}
+
+/**
+ * Upload-attestation record fixture (kind: 'upload'). The only recipient PII is
+ * originalFilename; originalSha256 / pageCount are retained machine facts.
+ */
+export function makeUploadRecord(overrides: Partial<CredentialRecord> = {}): CredentialRecord {
+  const id = overrides.id ?? 'DMJ-DOC-20260608-01';
+  const content: UploadAttestation = {
+    documentId: id,
+    issueDate: '2026-06-08',
+    originalFilename: 'asha-rao-question-paper.pdf',
+    originalSha256: 'c'.repeat(64),
+    pageCount: 3,
+    signatory: { name: 'Divya Mohan', role: 'Founder · dmj.one', phone: '+91 79799 30293' },
+  };
+  return { ...makeRecord({ id }), kind: 'upload', content, ...overrides };
 }
 
 /**

@@ -13,6 +13,7 @@ function issueBody(overrides: Record<string, unknown> = {}): Record<string, unkn
     intro: 'This is to certify that',
     bodyParagraphs: ['completed a software engineering internship at dmj.one.'],
     issueDate: '2026-06-05',
+    attestation: true, // required issuer attestation (literal `true`)
     password: 'a-strong-password', // pragma: allowlist secret
     ...overrides,
   };

@@ -56,6 +56,25 @@ export class FakeCredentialRepo implements CredentialRepository {
     const r = this.records.get(id);
     return r ? structuredClone(r) : null;
   }
+  async getByToken(verifyToken: string): Promise<CredentialRecord | null> {
+    for (const r of this.records.values()) {
+      if (r.verifyToken && r.verifyToken === verifyToken) return structuredClone(r);
+    }
+    return null;
+  }
+  async erase(id: string, at: string): Promise<void> {
+    const r = this.records.get(id);
+    if (!r) return;
+    const c = r.content as Record<string, unknown>;
+    for (const k of ['recipientName', 'intro', 'title', 'kicker', 'closingLine', 'subject', 'salutation', 'valediction', 'reference', 'originalFilename']) {
+      if (k in c) c[k] = '';
+    }
+    if (Array.isArray(c['bodyParagraphs'])) c['bodyParagraphs'] = [];
+    if (Array.isArray(c['recipientLines'])) c['recipientLines'] = [];
+    r.canonicalPayload = '';
+    r.erased = true;
+    r.erasedAt = at;
+  }
   async exists(id: string): Promise<boolean> {
     return this.records.has(id);
   }
@@ -94,6 +113,10 @@ export class FakeBlobStore implements BlobStore {
   }
   async get(credentialId: string, kind: BlobKind): Promise<Uint8Array | null> {
     return this.blobs.get(this.key(credentialId, kind)) ?? null;
+  }
+  async delete(credentialId: string, kind: BlobKind): Promise<void> {
+    this.trace?.push(`delete:${kind}`);
+    this.blobs.delete(this.key(credentialId, kind));
   }
 }
 

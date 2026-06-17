@@ -485,6 +485,9 @@ describe('renderCredentialPage — affirmative hero lines (Tier 1+2)', () => {
     // (#3) honesty line, surfaced BY the verdict (compact, no em dash).
     expect(html).toContain('class="honesty"');
     expect(flat).toMatch(/an independent educational initiative, not a government-licensed certifying authority/);
+    // Integrity != accuracy: the verdict attests the exact bytes, never that the
+    // document's statements are independently audited (anti-forgery honesty).
+    expect(flat).toContain('we do not independently audit the truth of the statements made in the document');
   });
 
   it('the hard-fact NEVER claims "all 4/N checks passed" (anchor may be pending — honesty lock)', () => {

@@ -20,16 +20,25 @@
 
 import { serializeBlock, serializeBody } from './serialize-body.js';
 
-export function adminScript(): string {
+export function adminScript(templatesJson: string = '[]'): string {
   // NB: authored as a template string. Avoid backticks inside; use string
   // concatenation. Everything is wrapped in an IIFE to avoid globals.
   //
   // SINGLE SOURCE OF TRUTH: the body serialiser is embedded by stringifying the
   // real, typed, unit-tested functions (transpiled identically by the test
   // runner and the build), so the shipped trust boundary === the tested one.
+  //
+  // The document-template catalog (WS1) is injected as a JS literal by the route
+  // (JSON.stringify(DOC_TEMPLATES), with '<' / U+2028 / U+2029 escaped so it can
+  // never break out of the inline <script>). It defaults to '[]' so the many
+  // zero-arg call sites (tests + the unauthenticated sign-in render) stay valid.
+  // It is DATA injected into the existing nonce'd script, not a new script tag
+  // and not a network fetch. The picker change handler reads it for an id->content
+  // lookup only; the bodies stay plain editable text the issuer fills in.
   const serializerSource = serializeBlock.toString() + '\n' + serializeBody.toString();
   return `(function(){
 "use strict";
+var DOC_TEMPLATES = ${templatesJson};
 ${serializerSource}
 var statusEl = document.getElementById('status');
 function setStatus(msg, isError){
@@ -38,6 +47,14 @@ function setStatus(msg, isError){
   statusEl.setAttribute('role', isError ? 'alert' : 'status');
   statusEl.setAttribute('aria-live', isError ? 'assertive' : 'polite');
 }
+// The issuer good-faith attestation gate (WS1.3). Each issue surface has its own
+// required checkbox (f-attest / lf-attest / upload-attest); attestChecked tells
+// whether the box for THIS surface is ticked. The submit handlers refuse to POST
+// when it is not (the server schema ALSO rejects an issue without
+// attestation:true, so this is the friendly first line of defence, never the
+// only one). It is a procedural log entry, NOT a safety control.
+function attestChecked(id){ var el = document.getElementById(id); return !!(el && el.checked); }
+var ATTEST_MSG = 'Please tick the attestation box to confirm you are authorised to issue this.';
 // base64url <-> ArrayBuffer
 function b64uToBuf(b64u){
   var b64 = b64u.replace(/-/g,'+').replace(/_/g,'/');
@@ -222,8 +239,11 @@ function renderRows(items){
   items.forEach(function(it){
     var tr = document.createElement('tr');
     tr.appendChild(cell(it.credentialId, {code:true}));
-    tr.appendChild(cell(it.recipientName));
-    tr.appendChild(cell(it.type));
+    // cert rows carry recipientName/type; letter+upload rows carry only the
+    // server-computed label (subject / filename) + kind, so fall back to those
+    // and never render an empty or "undefined" cell on a non-cert row.
+    tr.appendChild(cell(it.recipientName || it.label || ''));
+    tr.appendChild(cell(it.type || it.kind || ''));
     tr.appendChild(cell(it.status, {badge:true}));
     var actions = document.createElement('td');
     if(it.status !== 'revoked'){
@@ -255,12 +275,15 @@ function buildPayload(form, wantPassword){
     kicker: data.get('kicker'), title: data.get('title'), intro: data.get('intro'),
     bodyParagraphs: collectBody(), issueDate: data.get('issueDate')
   };
-  if(wantPassword) payload.password = data.get('password');
+  // attestation rides ISSUE only (gated on wantPassword); the preview schema
+  // omits both password and attestation, so preview must NOT send it.
+  if(wantPassword){ payload.password = data.get('password'); payload.attestation = true; }
   var closing = String(data.get('closingLine')||'').trim();
   if(closing) payload.closingLine = closing;
   return payload;
 }
 function issue(form){
+  if(!attestChecked('f-attest')){ setStatus(ATTEST_MSG, true); return; }
   setStatus('Issuing…');
   return api('/api/credentials', buildPayload(form, true))
     .then(function(j){ setStatus('Issued '+j.credentialId+'.'); resetEditor(); form.reset(); syncEcho(); return refreshList(); })
@@ -288,10 +311,15 @@ function buildLetterPayload(form, wantPassword){
   var subject = String(data.get('subject')||'').trim(); if(subject) payload.subject = subject;
   var salutation = String(data.get('salutation')||'').trim(); if(salutation) payload.salutation = salutation;
   var valediction = String(data.get('valediction')||'').trim(); if(valediction) payload.valediction = valediction;
-  if(wantPassword) payload.password = data.get('password');
+  var lr = letterRoot(); var scope = lr ? lr.getAttribute('data-scope') : '';
+  if(scope) payload.scope = scope; // internship-group letters → employment-term guard
+  // attestation rides ISSUE only (gated on wantPassword); the letter preview
+  // schema omits both password and attestation, so preview must NOT send it.
+  if(wantPassword){ payload.password = data.get('password'); payload.attestation = true; }
   return payload;
 }
 function issueLetter(form){
+  if(!attestChecked('lf-attest')){ setStatus(ATTEST_MSG, true); return; }
   setStatus('Issuing letter…');
   return api('/api/letters', buildLetterPayload(form, true))
     .then(function(j){
@@ -493,6 +521,111 @@ function syncEcho(){
   if(er && recip) er.textContent = recip.value || 'Recipient name';
 }
 
+// ===========================================================================
+// DOCUMENT-TEMPLATE PICKER (WS1). The two <select>s (cert-template /
+// letter-template) let the issuer START FROM a catalog entry. On change we look
+// the picked id up in the injected DOC_TEMPLATES, confirm before discarding a
+// non-empty composer, then PRE-FILL the existing form fields + REBUILD the body
+// composer blocks from the template's bodyParagraphs. Everything stays plain
+// editable text (incl. the bracketed slots the issuer fills per recipient) and
+// rides the SAME serialiser on submit; the picker only seeds the form, it changes
+// no trust boundary. CSP-clean: the selects are wired via addEventListener.
+// ===========================================================================
+function templateById(id){
+  if(!id) return null;
+  for(var i=0;i<DOC_TEMPLATES.length;i++){ if(DOC_TEMPLATES[i].id === id) return DOC_TEMPLATES[i]; }
+  return null;
+}
+// Set an <input>/<textarea> value by id (no-op when the field is absent).
+function setVal(id, value){ var el = document.getElementById(id); if(el) el.value = value || ''; }
+// Split a template paragraph into {align, text}: a leading anchored
+// [[align:left|center|right|justify]] sets the block alignment (parity with the
+// serialiser's grammar + render's ALIGN_DIRECTIVE); otherwise it defaults to
+// justify. The remaining in-band markup tokens are left verbatim (they round-trip
+// through serializeBlock on submit).
+function parseAlignedParagraph(p){
+  var s = String(p == null ? '' : p);
+  var m = s.match(/^\\[\\[align:(left|center|right|justify)\\]\\]/);
+  if(m){ return {align: m[1], text: s.slice(m[0].length)}; }
+  return {align: 'justify', text: s};
+}
+// True when ANY paragraph block in the editor holds non-whitespace text (so we
+// can ask before discarding the issuer's in-progress work).
+function composerNonEmpty(root){
+  var r = editorRoot(root); if(!r) return false;
+  var edits = r.querySelectorAll('.para-edit');
+  for(var i=0;i<edits.length;i++){ if(String(edits[i].textContent||'').trim() !== '') return true; }
+  return false;
+}
+// Rebuild a composer's blocks from a template's bodyParagraphs: clear the editor
+// root, then append one server-shaped block per paragraph (capped at the editor's
+// data-max-paras), set its text + parsed alignment, and relabel. Reuses the SAME
+// buildBlock/setAlign the live editor uses, so the rebuilt blocks are identical to
+// hand-authored ones (and serialise the same on submit).
+function rebuildBodyFromTemplate(root, paragraphs){
+  var r = editorRoot(root); if(!r) return;
+  var prefix = labelPrefixFor(r);
+  var max = maxParasFor(r);
+  var list = (paragraphs && paragraphs.length) ? paragraphs : [''];
+  while(r.firstChild) r.removeChild(r.firstChild);
+  if(activePara && composerOf(activePara) === composerOf(r)) activePara = null;
+  var n = Math.min(list.length, max);
+  for(var i=0;i<n;i++){
+    var parsed = parseAlignedParagraph(list[i]);
+    var block = buildBlock(i+1, prefix);
+    var edit = block.querySelector('.para-edit');
+    if(edit) edit.textContent = parsed.text;
+    r.appendChild(block);
+    setAlign(block, parsed.align);
+  }
+  relabelBlocks(r);
+}
+// Apply a certificate template: fill the scalar inputs + rebuild the cert body.
+function applyCertTemplate(t){
+  if(!t || !t.cert) return;
+  var c = t.cert;
+  setVal('f-type', c.type);
+  setVal('f-kicker', c.kicker);
+  setVal('f-title', c.title);
+  setVal('f-intro', c.intro);
+  setVal('f-closing', c.closingLine || '');
+  rebuildBodyFromTemplate(editorRoot(), c.bodyParagraphs || []);
+  syncEcho();
+}
+// Apply a letter template: fill the letter fields (recipientLines join the
+// textarea by newline, the inverse of splitLines) + rebuild the letter body.
+function applyLetterTemplate(t){
+  if(!t || !t.letter) return;
+  var l = t.letter;
+  setVal('lf-reference', l.reference || '');
+  setVal('lf-recipient', (l.recipientLines || []).join('\\n'));
+  setVal('lf-subject', l.subject || '');
+  setVal('lf-salutation', l.salutation || '');
+  setVal('lf-valediction', l.valediction || '');
+  rebuildBodyFromTemplate(letterRoot(), l.bodyParagraphs || []);
+  // Mark internship-group letters so the issue boundary blocks employment/salary
+  // language (certs auto-derive this from type==='internship'; letters need scope).
+  var lr = letterRoot();
+  if(lr){ lr.setAttribute('data-scope', (t.id || '').indexOf('internship-') === 0 ? 'internship' : ''); }
+}
+// One change handler for both pickers. 'rootGetter' resolves the body editor to
+// guard (cert vs letter); 'apply' fills the form. Confirm-if-nonempty THEN fill;
+// the select resets to its placeholder so the same template can be re-picked.
+function onTemplatePick(select, rootGetter, apply){
+  var id = select.value;
+  if(!id) return;
+  var t = templateById(id);
+  if(!t){ select.value = ''; return; }
+  if(composerNonEmpty(rootGetter())){
+    var ok = false;
+    try{ ok = window.confirm('Replace the current body with this template? Your edits will be lost.'); }catch(e){ ok = true; }
+    if(!ok){ select.value = ''; return; }
+  }
+  apply(t);
+  setStatus('Loaded the "' + (t.label || id) + '" template. Edit the bracketed details before issuing.');
+  select.value = '';
+}
+
 // --- SHARED exact-PDF preview helper. POST a JSON payload to a side-effect-free
 // preview endpoint, take the returned PDF blob, and show it in a same-origin
 // blob: iframe (frame-src 'self' blob:) inside the given host. Each host owns its
@@ -601,6 +734,15 @@ if(editorRoot()){
   if(introEl) introEl.addEventListener('input', syncEcho);
   if(recipEl) recipEl.addEventListener('input', syncEcho);
   syncEcho();
+  // Document-template pickers: each select seeds its panel's form on change.
+  var certPick = document.getElementById('cert-template');
+  if(certPick) certPick.addEventListener('change', function(){
+    onTemplatePick(certPick, function(){ return editorRoot(); }, applyCertTemplate);
+  });
+  var letterPick = document.getElementById('letter-template');
+  if(letterPick) letterPick.addEventListener('change', function(){
+    onTemplatePick(letterPick, letterRoot, applyLetterTemplate);
+  });
 }
 
 // Wire up clicks (event delegation; no inline handlers → CSP-clean).
@@ -960,13 +1102,16 @@ function previewUpload(){
 // blob as <id>.pdf, surface the id, and refresh the issued list.
 function signUpload(){
   if(!uploadPdfBase64){ setStatus('Choose a PDF first.', true); return; }
+  if(!attestChecked('upload-attest')){ setStatus(ATTEST_MSG, true); return; }
   var pwEl = uEl('upload-pw'); var password = pwEl ? pwEl.value : '';
   if(!password || password.length < 8){ setStatus('Enter a download password (at least 8 characters).', true); return; }
   var places = placingSignature() ? uploadPlacements() : [];
   var on = places.length > 0;
+  // attestation rides the SIGN request only (signUploadSchema requires it); the
+  // upload PREVIEW route is side-effect-free and does NOT take attestation.
   var payload = {
     pdfBase64: uploadPdfBase64, originalFilename: uploadFilename,
-    placeHandwrittenSignature: on, password: password
+    placeHandwrittenSignature: on, password: password, attestation: true
   };
   if(on) payload.signaturePlacements = places;
   setStatus('Signing & sealing the document…');

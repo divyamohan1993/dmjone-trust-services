@@ -34,6 +34,9 @@ function letterBody(overrides: Record<string, unknown> = {}): Record<string, unk
       'A second paragraph for body length.',
     ],
     valediction: 'Sincerely,',
+    // Required issuer attestation (literal `true`); the preview schema omits it,
+    // so it is harmless on a preview body and required on an issue body.
+    attestation: true,
     password: 'a-strong-password', // pragma: allowlist secret
     ...overrides,
   };
@@ -102,13 +105,20 @@ describe('POST /api/letters — issuance happy path', () => {
     expect(content.bodyParagraphs).toHaveLength(2);
     expect(content.signatory.name).toBe('Divya Mohan');
 
+    // WS2-B: an unguessable verify token is minted + stored, and the issuer
+    // attestation is recorded with attestedAt == createdAt.
+    expect(record?.verifyToken).toBeTruthy();
+    expect(record!.verifyToken!).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(record?.issuerAttestation?.confirmed).toBe(true);
+    expect(record?.issuerAttestation?.attestedAt).toBe(record?.createdAt);
+
     // Both PDFs stored at issue-time (signed letter under the 'certificate' blob kind).
     expect(await deps.blobStore.get('DMJ-LTR-20260605-01', 'certificate')).not.toBeNull();
     expect(await deps.blobStore.get('DMJ-LTR-20260605-01', 'section63')).not.toBeNull();
 
-    // QR points at the public verify document page for the allocated id.
+    // QR points at the public verify page keyed on the unguessable token.
     expect(deps.renderer.lastLetterOpts?.qrUrl).toBe(
-      'https://verify.example.test/c/DMJ-LTR-20260605-01',
+      `https://verify.example.test/v/${record!.verifyToken}`,
     );
   });
 
@@ -221,6 +231,60 @@ describe('POST /api/letters — auth + validation', () => {
     const res = await authedPost(app, cookie, LETTERS_PATH, letterBody({ password: 'short' }));
     expect(res.status).toBe(400);
     expect(((await res.json()) as { code: string }).code).toBe(ERROR_CODE.VALIDATION_FAILED);
+  });
+
+  it('rejects a letter WITHOUT the issuer attestation (400, no record written)', async () => {
+    const deps = buildDeps();
+    const app = createIssuerApp(deps);
+    const cookie = await mintSessionCookie(deps.env);
+
+    const body = letterBody();
+    delete body.attestation; // the schema requires a literal `true`
+    const res = await authedPost(app, cookie, LETTERS_PATH, body);
+
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { code: string }).code).toBe(ERROR_CODE.VALIDATION_FAILED);
+    expect(deps.credentialRepo.createCount).toBe(0);
+  });
+});
+
+describe('POST /api/letters — [auto] document-number substitution', () => {
+  it('substitutes the real DMJ-LTR id into [auto] before signing (no [auto] remains)', async () => {
+    const deps = buildDeps();
+    const app = createIssuerApp(deps);
+    const cookie = await mintSessionCookie(deps.env);
+
+    const res = await authedPost(
+      app,
+      cookie,
+      LETTERS_PATH,
+      letterBody({
+        // `[auto]` passes the letter unfilled-slot + denylist guards (treated as
+        // resolved) and reaches the pipeline, where the allocated id is filled in.
+        reference: 'Ref: [auto]',
+        subject: 'Confirmation [auto]',
+        bodyParagraphs: ['This letter (no. [auto]) confirms the association.'],
+        valediction: 'Sincerely, re [auto]',
+      }),
+    );
+    expect(res.status).toBe(201);
+
+    const record = await deps.credentialRepo.getById('DMJ-LTR-20260605-01');
+    const content = record?.content as LetterContent;
+    expect(content.reference).toBe('Ref: DMJ-LTR-20260605-01');
+    expect(content.subject).toBe('Confirmation DMJ-LTR-20260605-01');
+    expect(content.bodyParagraphs[0]).toBe(
+      'This letter (no. DMJ-LTR-20260605-01) confirms the association.',
+    );
+    expect(content.valediction).toBe('Sincerely, re DMJ-LTR-20260605-01');
+    // Zero `[auto]` survives into the signed/persisted content.
+    const joined = [
+      content.reference ?? '',
+      content.subject ?? '',
+      ...content.bodyParagraphs,
+      content.valediction ?? '',
+    ].join(' ');
+    expect(joined).not.toContain('[auto]');
   });
 });
 

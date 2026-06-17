@@ -661,6 +661,7 @@ export const CINEMA_JS: string = String.raw`/* dmj.one verify — cinema engine.
 
   var verifyUrl = body.getAttribute("data-verify-url");
   var credentialId = body.getAttribute("data-credential-id");
+  var verifyToken = body.getAttribute("data-verify-token");   // WS2: present on new issuance
   var fileGate = body.getAttribute("data-filegate") === "1";
   var statusEl = $("status"), labelEl = $("status-label"), noteEl = $("status-note");
   var checksEl = $("checks"), verdictEl = $("verdict"),
@@ -867,7 +868,8 @@ export const CINEMA_JS: string = String.raw`/* dmj.one verify — cinema engine.
       markRunning(true);
       var started = now();
       var fd = new FormData();
-      fd.append("credentialId", credentialId);
+      // New issuance is gated by the unguessable token, not the sequential id.
+      if (verifyToken) { fd.append("verifyToken", verifyToken); } else { fd.append("credentialId", credentialId); }
       fd.append("file", file);
       fetch("/api/verify/file", { method: "POST", headers: { accept: "application/json" }, body: fd })
         .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error("verify failed")); })

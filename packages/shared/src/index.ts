@@ -13,4 +13,5 @@ export * from './contracts.js';
 export * from './canonical.js';
 export * from './schemas.js';
 export * from './content-guards.js';
+export * from './doc-templates.js';
 export * from './env.js';

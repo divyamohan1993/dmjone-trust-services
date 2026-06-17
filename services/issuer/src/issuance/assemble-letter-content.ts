@@ -24,7 +24,7 @@ import type { IssueLetterInput, LetterContent } from '@dmjone/shared';
  * object typechecks under `exactOptionalPropertyTypes`.
  */
 export function assembleLetterContent(
-  input: Omit<IssueLetterInput, 'password'>,
+  input: Omit<IssueLetterInput, 'password' | 'attestation' | 'scope'>,
   documentId: string,
 ): LetterContent {
   return {

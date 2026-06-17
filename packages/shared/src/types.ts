@@ -232,6 +232,31 @@ export interface CredentialRecord {
   passwordHash: string;
   // legal
   section63: Section63Metadata;
+  // ── WS2 / attestation (all top-level; NEVER in the canonical signed payload
+  //    or the /evidence bundle; absent on legacy pre-WS2 records) ──
+  /**
+   * Unguessable per-document retrieval token (base64url, ≥128-bit, CSPRNG). New
+   * issuance is fetched at `/v/<verifyToken>`; the sequential `id` is a non-secret
+   * human reference only and does not, by itself, return PII. Absent on legacy
+   * records (which stay id-addressable behind the rate-limiter).
+   */
+  verifyToken?: string;
+  /**
+   * The issuer's good-faith attestation, recorded at issue-time: the facts are
+   * true, dmj.one had the association, the issuer is authorised, and the recipient
+   * consents to hosting a verifiable copy. A log entry — NOT a safety control and
+   * NOT legal immunity.
+   */
+  issuerAttestation?: { confirmed: true; attestedAt: string };
+  /**
+   * True erasure (distinct from revocation): when set, the PII in `content`,
+   * `canonicalPayload`, and the rendered/§63 blobs has been purged at the data
+   * principal's request. Every read path then renders a PII-free tombstone and
+   * MUST skip signature verification (which recomputes canonical bytes from
+   * `content` and would fail on purged content).
+   */
+  erased?: boolean;
+  erasedAt?: string;
 }
 
 /**

@@ -57,7 +57,28 @@ const revokedCert: CredentialRecord = {
 };
 const letter = makeLetterRecord({}, { pdfSha256, logSeq: 3 });
 const upload = makeUploadRecord({}, { pdfSha256, logSeq: 4 });
-const records: CredentialRecord[] = [validCert, revokedCert, letter, upload];
+// WS2: a tokened (new) record reached ONLY via /v/<token>, and an erased tombstone.
+const PREVIEW_NEW = 'demo-new-fixture-00000001'; // dev fixture (low-entropy), not a credential
+const tokenedBase = makeRecord({ pdfSha256, logSeq: 5, verifyToken: PREVIEW_NEW });
+const tokenedCert: CredentialRecord = {
+  ...tokenedBase,
+  id: 'DMJ-IC-20260604-05',
+  content: { ...tokenedBase.content, credentialId: 'DMJ-IC-20260604-05' },
+};
+const PREVIEW_GONE = 'demo-gone-fixture-00000001'; // dev fixture (low-entropy), not a credential
+const erasedBase = makeRecord({
+  pdfSha256,
+  logSeq: 6,
+  verifyToken: PREVIEW_GONE,
+  erased: true,
+  erasedAt: '2026-06-18T00:00:00.000Z',
+});
+const erasedCert: CredentialRecord = {
+  ...erasedBase,
+  id: 'DMJ-IC-20260604-06',
+  content: { ...erasedBase.content, credentialId: 'DMJ-IC-20260604-06' },
+};
+const records: CredentialRecord[] = [validCert, revokedCert, letter, upload, tokenedCert, erasedCert];
 
 const credentialRepo = new FakeCredentialRepository(records);
 const blobStore = new FakeBlobStore();
@@ -127,5 +148,5 @@ const app = createVerifyApp(deps);
 const port = Number(process.env['PREVIEW_PORT'] ?? 8787);
 serve({ fetch: app.fetch, port }, (info) => {
   // eslint-disable-next-line no-console -- dev preview banner, not app logging
-  console.log(`verify preview → http://localhost:${info.port}  (valid: /c/${validCert.id}, revoked: /c/${revokedCert.id}, letter: /c/${letter.id}, upload: /c/${upload.id})`);
+  console.log(`verify preview → http://localhost:${info.port}  (valid: /c/${validCert.id}, revoked: /c/${revokedCert.id}, letter: /c/${letter.id}, upload: /c/${upload.id}, tokened: /v/${PREVIEW_NEW}, erased: /v/${PREVIEW_GONE})`);
 });

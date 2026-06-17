@@ -62,6 +62,7 @@ describe('GET /api/credentials — kind-aware projection', () => {
       intro: 'This is to certify that',
       bodyParagraphs: ['completed an internship at dmj.one.'],
       issueDate: '2026-06-05',
+      attestation: true,
       password: 'a-strong-password', // pragma: allowlist secret
     });
     // 2) a letter
@@ -70,12 +71,14 @@ describe('GET /api/credentials — kind-aware projection', () => {
       recipientLines: ['The Registrar', 'Example University'],
       subject: 'Confirmation of standing',
       bodyParagraphs: ['Body of the letter.'],
+      attestation: true,
       password: 'a-strong-password', // pragma: allowlist secret
     });
     // 3) an upload
     await authedPost(app, cookie, '/api/uploads', {
       pdfBase64: ONE_PAGE_PDF_B64,
       originalFilename: 'offer-letter.pdf',
+      attestation: true,
       password: 'a-strong-password', // pragma: allowlist secret
     });
 
@@ -122,6 +125,7 @@ describe('GET /api/credentials — kind-aware projection', () => {
       issueDate: '2026-06-05',
       recipientLines: ['The Honourable Registrar', 'Example University'],
       bodyParagraphs: ['Body of the letter.'],
+      attestation: true,
       password: 'a-strong-password', // pragma: allowlist secret
     });
 

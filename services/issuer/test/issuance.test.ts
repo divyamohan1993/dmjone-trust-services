@@ -18,6 +18,9 @@ function issueBody(overrides: Record<string, unknown> = {}): Record<string, unkn
     intro: 'This is to certify that',
     bodyParagraphs: ['completed a software engineering internship at dmj.one.'],
     issueDate: '2026-06-05',
+    // Required issuer attestation (facts true + authority + recipient hosting
+    // consent). The schema demands a literal `true`; recorded as a log entry.
+    attestation: true,
     password: 'a-strong-password', // pragma: allowlist secret
     ...overrides,
   };
@@ -78,13 +81,24 @@ describe('POST /api/credentials — issuance happy path', () => {
     expect(record?.mldsaSignature).toBe('c2lnbmF0dXJl');
     expect(record?.section63.hashValue).toBe('a'.repeat(64));
 
+    // WS2-B: an unguessable verify token is minted and stored top-level.
+    expect(record?.verifyToken).toBeTruthy();
+    // base64url, ≥128-bit → ≥22 chars (16 raw bytes encode to 22 base64url chars).
+    expect(record!.verifyToken!.length).toBeGreaterThanOrEqual(22);
+    expect(record!.verifyToken!).toMatch(/^[A-Za-z0-9_-]+$/);
+
+    // The issuer attestation is recorded; attestedAt equals createdAt.
+    expect(record?.issuerAttestation?.confirmed).toBe(true);
+    expect(record?.issuerAttestation?.attestedAt).toBe(record?.createdAt);
+
     // Both PDFs stored at issue-time (verify service only ever serves stored bytes).
     expect(await deps.blobStore.get('DMJ-IC-20260605-01', 'certificate')).not.toBeNull();
     expect(await deps.blobStore.get('DMJ-IC-20260605-01', 'section63')).not.toBeNull();
 
-    // QR points at the public verify credential page.
+    // QR points at the public verify page keyed on the unguessable token (not
+    // the sequential id) — so a new document is not enumerable.
     expect(deps.renderer.lastOpts?.qrUrl).toBe(
-      'https://verify.example.test/c/DMJ-IC-20260605-01',
+      `https://verify.example.test/v/${record!.verifyToken}`,
     );
   });
 
@@ -115,6 +129,13 @@ describe('POST /api/credentials — issuance happy path', () => {
     expect(((await second.json()) as { credentialId: string }).credentialId).toBe(
       'DMJ-IC-20260605-02',
     );
+
+    // Each issuance mints its OWN unguessable token (CSPRNG; never reused).
+    const tokenA = (await deps.credentialRepo.getById('DMJ-IC-20260605-01'))?.verifyToken;
+    const tokenB = (await deps.credentialRepo.getById('DMJ-IC-20260605-02'))?.verifyToken;
+    expect(tokenA).toBeTruthy();
+    expect(tokenB).toBeTruthy();
+    expect(tokenA).not.toBe(tokenB);
   });
 });
 
@@ -206,6 +227,52 @@ describe('POST /api/credentials — auth + validation', () => {
     expect(res.status).toBe(400);
     expect(((await res.json()) as { code: string }).code).toBe(ERROR_CODE.VALIDATION_FAILED);
     expect(deps.credentialRepo.createCount).toBe(0);
+  });
+
+  it('rejects a body WITHOUT the issuer attestation (400, no record written)', async () => {
+    const deps = buildDeps();
+    const app = createIssuerApp(deps);
+    const cookie = await mintSessionCookie(deps.env);
+
+    const body = issueBody();
+    delete body.attestation; // the schema requires a literal `true`
+    const res = await authedPost(app, cookie, '/api/credentials', body);
+
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { code: string }).code).toBe(ERROR_CODE.VALIDATION_FAILED);
+    expect(deps.credentialRepo.createCount).toBe(0);
+  });
+});
+
+describe('POST /api/credentials — [auto] document-number substitution', () => {
+  it('substitutes the real id into [auto] before signing (no [auto] remains; face id == record id)', async () => {
+    const deps = buildDeps();
+    const app = createIssuerApp(deps);
+    const cookie = await mintSessionCookie(deps.env);
+
+    const res = await authedPost(
+      app,
+      cookie,
+      '/api/credentials',
+      issueBody({
+        // `[auto]` passes the unfilled-slot guard (it is treated as resolved)
+        // and reaches the pipeline, where the allocated id is substituted in.
+        kicker: 'Certificate No. [auto]',
+        intro: 'Ref [auto]: this is to certify that',
+        bodyParagraphs: ['completed an internship (doc [auto]) at dmj.one.'],
+      }),
+    );
+    expect(res.status).toBe(201);
+
+    const record = await deps.credentialRepo.getById('DMJ-IC-20260605-01');
+    const content = record?.content as CredentialContent;
+    // Every [auto] now carries the real allocated id.
+    expect(content.kicker).toBe('Certificate No. DMJ-IC-20260605-01');
+    expect(content.intro).toBe('Ref DMJ-IC-20260605-01: this is to certify that');
+    expect(content.bodyParagraphs[0]).toBe('completed an internship (doc DMJ-IC-20260605-01) at dmj.one.');
+    // Zero `[auto]` survives into the signed/persisted content.
+    const joined = [content.kicker, content.title, content.intro, ...content.bodyParagraphs].join(' ');
+    expect(joined).not.toContain('[auto]');
   });
 });
 

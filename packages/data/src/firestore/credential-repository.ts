@@ -15,6 +15,7 @@ import {
   type CredentialStatus,
 } from '@dmjone/shared';
 import { FieldPath, type Firestore } from '@google-cloud/firestore';
+import { applyErasure } from '../erasure.js';
 import { COLLECTIONS } from './paths.js';
 import { credentialToRow, rowToCredential, type CredentialRow } from './rows.js';
 
@@ -44,6 +45,15 @@ export function createFirestoreCredentialRepository(db: Firestore): CredentialRe
       return data ? rowToCredential(data) : null;
     },
 
+    async getByToken(verifyToken: string): Promise<CredentialRecord | null> {
+      // Single-field equality on the `verifyToken` field → Firestore auto-indexes
+      // it, so NO composite index is required. Legacy records (no verifyToken
+      // field) never match. limit(1): the token is unique per document.
+      const snap = await col.where('verifyToken', '==', verifyToken).limit(1).get();
+      const doc = snap.docs[0];
+      return doc ? rowToCredential(doc.data() as CredentialRow) : null;
+    },
+
     async exists(id: string): Promise<boolean> {
       const snap = await col.doc(id).get();
       return snap.exists;
@@ -71,6 +81,25 @@ export function createFirestoreCredentialRepository(db: Firestore): CredentialRe
         if (statusSignature !== undefined) next.statusSignature = statusSignature;
         // Full overwrite (no merge) so a cleared revokedAt/signature disappears.
         tx.set(ref, credentialToRow(next));
+      });
+    },
+
+    async erase(id: string, at: string): Promise<void> {
+      const ref = col.doc(id);
+      // Read-modify-write in a transaction (mirrors setStatus): both guards live
+      // INSIDE the transaction so a concurrent erase can't race or double-stamp.
+      await db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists) {
+          throw new AppError(ERROR_CODE.CREDENTIAL_NOT_FOUND, `Credential ${id} not found`, 404);
+        }
+        const current = rowToCredential(snap.data() as CredentialRow);
+        // Idempotent: a second erase is a no-op (preserves the original erasedAt).
+        if (current.erased === true) return;
+        // `current` is a fresh object from rowToCredential, so applyErasure may
+        // mutate it. Full overwrite with the blanked record; the §63/cert blobs
+        // are purged separately by the caller via BlobStore.delete.
+        tx.set(ref, credentialToRow(applyErasure(current, at)));
       });
     },
 

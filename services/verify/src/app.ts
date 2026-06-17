@@ -131,6 +131,9 @@ type AppContext = Context<{ Variables: RequestVars }>;
 /** Largest upload accepted by /api/verify/file. Generous for a PDF, cheap to reject above. */
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024; // 8 MiB
 
+/** Shape of an unguessable WS2 verify token (base64url, ≥128-bit ⇒ ≥22 chars). */
+const VERIFY_TOKEN_RE = /^[A-Za-z0-9_-]{16,64}$/;
+
 /** The cinema engine bytes, encoded once at module load (served immutable). */
 const CINEMA_JS_BYTES: Buffer = Buffer.from(CINEMA_JS, 'utf8');
 
@@ -374,37 +377,36 @@ export function createVerifyApp(deps: VerifyDeps): Hono<{ Variables: RequestVars
     if (!parsed.success) {
       return c.html(renderErrorPage({ nonce, issuer: issuerName }), 404);
     }
-    const record = await deps.credentialRepo.getById(parsed.data.credentialId);
-    if (!record) {
+    // WS2 gate: a new (tokened) record is NOT readable by its sequential id —
+    // it reads as not-found so the id is no enumeration oracle; an erased record
+    // renders a PII-free tombstone. Legacy (token-less) records serve as before.
+    const res = await resolveReadable(deps, { id: parsed.data.credentialId });
+    if (res.kind === 'notfound') {
       return c.html(renderErrorPage({ nonce, issuer: issuerName }), 404);
     }
-    // Compute the REAL verification result server-side so the no-JS badge is a
-    // genuine cryptographic verdict (court-presentable), not a status echo. The
-    // client script later re-runs the same check live for the animated ledger.
-    const checks = await buildChecks(deps, record);
-    // Verify any RFC-3161 trusted timestamp server-side so the honest, conditional
-    // "Independently timestamped …" line renders with JS off. Only a VERIFIED token
-    // earns the line; an absent or non-verifying token claims nothing.
-    const ts = verifyRecordTimestamp(deps, record);
-    const html = renderCredentialPage({
-      record,
-      issuer: issuerName,
-      issuerLegalName: env.ISSUER_LEGAL_NAME,
-      verifyBaseUrl: env.VERIFY_PUBLIC_URL,
-      nonce,
-      verification: { outcome: deriveOutcome(checks), checks },
-      // exactOptionalPropertyTypes: only include keys that are actually present,
-      // never set an optional field to `undefined`.
-      ...(ts && ts.valid
-        ? {
-            trustedTimestamp: {
-              ...(ts.genTime !== undefined ? { genTime: ts.genTime } : {}),
-              ...(ts.tsaSubject !== undefined ? { tsaSubject: ts.tsaSubject } : {}),
-            },
-          }
-        : {}),
-    });
-    return c.html(html);
+    if (res.kind === 'erased') {
+      return c.html(renderErrorPage({ nonce, issuer: issuerName, erased: true }), 410);
+    }
+    // The server-side verdict makes the no-JS badge a genuine cryptographic
+    // result; the client re-runs the same check live for the animated ledger.
+    return c.html(await credentialPageHtml(deps, res.record, nonce, issuerName));
+  });
+
+  // ── The unguessable-token credential page (WS2: how new issuance is reached) ─
+  app.get('/v/:token', async (c) => {
+    const nonce = c.get('nonce');
+    const token = c.req.param('token');
+    if (!VERIFY_TOKEN_RE.test(token)) {
+      return c.html(renderErrorPage({ nonce, issuer: issuerName }), 404);
+    }
+    const res = await resolveReadable(deps, { token });
+    if (res.kind === 'notfound') {
+      return c.html(renderErrorPage({ nonce, issuer: issuerName }), 404);
+    }
+    if (res.kind === 'erased') {
+      return c.html(renderErrorPage({ nonce, issuer: issuerName, erased: true }), 410);
+    }
+    return c.html(await credentialPageHtml(deps, res.record, nonce, issuerName));
   });
 
   // ── Verify by id (JSON) ────────────────────────────────────────────────────
@@ -413,8 +415,20 @@ export function createVerifyApp(deps: VerifyDeps): Hono<{ Variables: RequestVars
     if (!parsed.success) {
       fail('VALIDATION_FAILED', 'Invalid credential id.', 400);
     }
-    const result = await verifyById(deps, parsed.data.credentialId, issuerName);
-    return c.json(result);
+    // Gate: a tokened (new) record or an erased record yields the PII-free
+    // `unknown` shape by id — only legacy records verify by id.
+    const res = await resolveReadable(deps, { id: parsed.data.credentialId });
+    if (res.kind !== 'ok') return c.json(unknownResult(parsed.data.credentialId));
+    return c.json(await resultForRecord(deps, res.record, issuerName));
+  });
+
+  // ── Verify by unguessable token (JSON; the by-token twin of the id route) ───
+  app.get('/api/verify/by-token/:token', async (c) => {
+    const token = c.req.param('token');
+    if (!VERIFY_TOKEN_RE.test(token)) return c.json(unknownResult(''));
+    const res = await resolveReadable(deps, { token });
+    if (res.kind !== 'ok') return c.json(unknownResult(''));
+    return c.json(await resultForRecord(deps, res.record, issuerName));
   });
 
   // ── Verify an uploaded file (JSON, no password — employer flow) ────────────
@@ -424,12 +438,20 @@ export function createVerifyApp(deps: VerifyDeps): Hono<{ Variables: RequestVars
       fail('BAD_REQUEST', 'Expected multipart/form-data with a credentialId and a file.', 400);
     }
     const body = await c.req.parseBody();
+    const tokenRaw = typeof body['verifyToken'] === 'string' ? body['verifyToken'] : '';
     const credentialId = typeof body['credentialId'] === 'string' ? body['credentialId'] : '';
-    const file = body['file'];
-    const idCheck = credentialIdParamSchema.safeParse({ credentialId });
-    if (!idCheck.success) {
-      fail('VALIDATION_FAILED', 'Invalid or missing credential id.', 400);
+    // Validate the identifier FORMAT (cheap) before touching the file or the DB.
+    if (tokenRaw) {
+      if (!VERIFY_TOKEN_RE.test(tokenRaw)) {
+        fail('VALIDATION_FAILED', 'Invalid verify token.', 400);
+      }
+    } else {
+      const idCheck = credentialIdParamSchema.safeParse({ credentialId });
+      if (!idCheck.success) {
+        fail('VALIDATION_FAILED', 'Invalid or missing credential id.', 400);
+      }
     }
+    const file = body['file'];
     if (!(file instanceof File)) {
       fail('BAD_REQUEST', 'A file is required.', 400);
     }
@@ -437,8 +459,15 @@ export function createVerifyApp(deps: VerifyDeps): Hono<{ Variables: RequestVars
       fail('BAD_REQUEST', 'File too large.', 413);
     }
     const uploaded = new Uint8Array(await file.arrayBuffer());
-    const result = await verifyFile(deps, idCheck.data.credentialId, uploaded, issuerName);
-    return c.json(result);
+    // Resolve under the WS2 gate: prefer the token (new issuance), else the id (legacy).
+    const res = tokenRaw
+      ? await resolveReadable(deps, { token: tokenRaw })
+      : await resolveReadable(deps, { id: credentialId });
+    if (res.kind !== 'ok') {
+      // Missing / tokened-by-id / erased: a PII-free verdict, never the bytes.
+      return c.json(unknownResult(credentialId));
+    }
+    return c.json(await verifyFileForRecord(deps, res.record, uploaded, issuerName));
   });
 
   // ── Password-gated download of the signed certificate PDF ──────────────────
@@ -469,9 +498,14 @@ export function createVerifyApp(deps: VerifyDeps): Hono<{ Variables: RequestVars
     }
 
     const record = await deps.credentialRepo.getById(parsed.credentialId);
-    // Timing-equalise: a missing id still runs a verify against a fixed dummy
-    // hash, so the response time can't be used to probe which ids exist.
-    const storedHash = record?.passwordHash ?? dummyPasswordHash;
+    // An ERASED record has no downloadable bytes (PII + blob purged). Treat it as
+    // ABSENT for download so it flows into the SAME timing-equalized generic 403 as
+    // a missing id — a 410/500 here would make erased records distinguishable by
+    // their sequential id, reopening the enumeration oracle WS2 closes.
+    const usable = record && !record.erased ? record : null;
+    // Timing-equalise: a missing/erased id still runs a verify against a fixed
+    // dummy hash, so the response time can't be used to probe which ids exist.
+    const storedHash = usable?.passwordHash ?? dummyPasswordHash;
     // Wrap the verify: a well-formed-but-non-matching PHC string can make some
     // Argon2id implementations THROW. If the dummy-hash path threw while the
     // real-record path merely returned false, the resulting 500-vs-403 would
@@ -485,7 +519,7 @@ export function createVerifyApp(deps: VerifyDeps): Hono<{ Variables: RequestVars
       ok = false;
     }
 
-    if (!record || !ok) {
+    if (!usable || !ok) {
       downloadLimiter.recordFailure(clientKey);
       await safeAudit(deps, {
         actor: 'public',
@@ -493,15 +527,15 @@ export function createVerifyApp(deps: VerifyDeps): Hono<{ Variables: RequestVars
         subject: parsed.credentialId,
         requestId,
       });
-      // Identical generic failure for "no such id" and "wrong password".
+      // Identical generic failure for "no such id", "erased", and "wrong password".
       fail('DOWNLOAD_AUTH_FAILED', 'Verification failed. Check your details and try again.', 403);
     }
 
-    const bytes = await deps.blobStore.get(record.id, 'certificate');
+    const bytes = await deps.blobStore.get(usable.id, 'certificate');
     if (!bytes) {
       // The record exists but its bytes are missing — an internal fault, not an
       // auth signal. Still generic to the client.
-      logger.error({ requestId, credentialId: record.id }, 'certificate bytes missing for record');
+      logger.error({ requestId, credentialId: usable.id }, 'certificate bytes missing for record');
       fail('INTERNAL', 'Unable to complete the download. Please try again later.', 500);
     }
 
@@ -509,10 +543,10 @@ export function createVerifyApp(deps: VerifyDeps): Hono<{ Variables: RequestVars
     await safeAudit(deps, {
       actor: 'public',
       action: 'download.success',
-      subject: record.id,
+      subject: usable.id,
       requestId,
     });
-    return pdfResponse(c, bytes, `${record.id}.pdf`);
+    return pdfResponse(c, bytes, `${usable.id}.pdf`);
   });
 
   // ── §63 certificate of authenticity (public — a legal/verification artifact)
@@ -521,11 +555,49 @@ export function createVerifyApp(deps: VerifyDeps): Hono<{ Variables: RequestVars
     if (!parsed.success) {
       fail('VALIDATION_FAILED', 'Invalid credential id.', 400);
     }
-    const bytes = await deps.blobStore.get(parsed.data.credentialId, 'section63');
+    // Gate: a tokened (new) record is not reachable by id; an erased record's
+    // §63 blob is already purged. Either way → a uniform 404 (no PII, no oracle).
+    const res = await resolveReadable(deps, { id: parsed.data.credentialId });
+    if (res.kind !== 'ok') {
+      fail('CREDENTIAL_NOT_FOUND', 'No certificate of authenticity for that credential.', 404);
+    }
+    const bytes = await deps.blobStore.get(res.record.id, 'section63');
     if (!bytes) {
       fail('CREDENTIAL_NOT_FOUND', 'No certificate of authenticity for that credential.', 404);
     }
-    return pdfResponse(c, bytes, `${parsed.data.credentialId}-section63.pdf`, 'inline');
+    return pdfResponse(c, bytes, `${res.record.id}-section63.pdf`, 'inline');
+  });
+
+  // ── §63 + evidence by unguessable token (how new issuance reaches them) ─────
+  app.get('/v/:token/section63', async (c) => {
+    const token = c.req.param('token');
+    if (!VERIFY_TOKEN_RE.test(token)) {
+      fail('CREDENTIAL_NOT_FOUND', 'No certificate of authenticity for that credential.', 404);
+    }
+    const res = await resolveReadable(deps, { token });
+    if (res.kind !== 'ok') {
+      fail('CREDENTIAL_NOT_FOUND', 'No certificate of authenticity for that credential.', 404);
+    }
+    const bytes = await deps.blobStore.get(res.record.id, 'section63');
+    if (!bytes) {
+      fail('CREDENTIAL_NOT_FOUND', 'No certificate of authenticity for that credential.', 404);
+    }
+    return pdfResponse(c, bytes, `${res.record.id}-section63.pdf`, 'inline');
+  });
+  app.get('/v/:token/evidence', async (c) => {
+    const token = c.req.param('token');
+    if (!VERIFY_TOKEN_RE.test(token)) {
+      fail('CREDENTIAL_NOT_FOUND', 'No credential matches that token.', 404);
+    }
+    const res = await resolveReadable(deps, { token });
+    if (res.kind !== 'ok') {
+      fail('CREDENTIAL_NOT_FOUND', 'No credential matches that token.', 404);
+    }
+    const bundle = await buildEvidenceBundle(deps, res.record, issuerName);
+    c.header('Content-Type', 'application/json; charset=utf-8');
+    c.header('Content-Disposition', `attachment; filename="${res.record.id}-evidence.json"`);
+    c.header('Cache-Control', 'no-store');
+    return c.body(JSON.stringify(bundle, null, 2));
   });
 
   // ── Signed, dated status assertion (public — provable revocation) ───────────
@@ -537,21 +609,30 @@ export function createVerifyApp(deps: VerifyDeps): Hono<{ Variables: RequestVars
   // (still admissible, just not independently provable) — never a 500. Revocation
   // is a LIVING fact, so this signed snapshot is short-TTL cacheable; the VERDICT
   // paths (/api/verify/:id, /c/:id) stay uncached.
-  app.get('/api/credentials/:credentialId/status', async (c) => {
-    const parsed = credentialIdParamSchema.safeParse({ credentialId: c.req.param('credentialId') });
-    if (!parsed.success) {
-      fail('VALIDATION_FAILED', 'Invalid credential id.', 400);
-    }
-    const record = await deps.credentialRepo.getById(parsed.data.credentialId);
-    if (!record) {
+  // Build the status body for an already-resolved record, applying the SAME WS2
+  // gate as every other read path: a tokened (new) record is NOT reachable by its
+  // sequential id (→ uniform 404, so the id is no existence/status/volume oracle);
+  // an erased record returns a PII-free tombstone marker; a legacy record serves
+  // by id. New issuance reads status via the `/v/:token/status` twin below.
+  const statusJson = (c: AppContext, res: Awaited<ReturnType<typeof resolveReadable>>): Response => {
+    if (res.kind === 'notfound') {
       fail('CREDENTIAL_NOT_FOUND', 'No credential matches that id.', 404);
     }
+    if (res.kind === 'erased') {
+      c.header('Cache-Control', 'public, max-age=60');
+      return c.json({
+        credentialId: res.record.id,
+        status: 'erased',
+        asOf: res.record.erasedAt ?? res.record.createdAt,
+        signature: null,
+        erased: true,
+      });
+    }
+    const record = res.record;
     const sig = record.statusSignature;
     const body: Record<string, unknown> = {
       credentialId: record.id,
       status: record.status,
-      // asOf = the status-change instant the signature binds; for a legacy
-      // record fall back to the record's own timestamps.
       asOf: sig?.asOf ?? record.revokedAt ?? record.createdAt,
       signature: sig?.value ?? null,
       mldsaPublicKeyId: record.mldsaPublicKeyId,
@@ -561,6 +642,20 @@ export function createVerifyApp(deps: VerifyDeps): Hono<{ Variables: RequestVars
     if (sig === undefined) body['legacyUnsigned'] = true;
     c.header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
     return c.json(body);
+  };
+  app.get('/api/credentials/:credentialId/status', async (c) => {
+    const parsed = credentialIdParamSchema.safeParse({ credentialId: c.req.param('credentialId') });
+    if (!parsed.success) {
+      fail('VALIDATION_FAILED', 'Invalid credential id.', 400);
+    }
+    return statusJson(c, await resolveReadable(deps, { id: parsed.data.credentialId }));
+  });
+  app.get('/v/:token/status', async (c) => {
+    const token = c.req.param('token');
+    if (!VERIFY_TOKEN_RE.test(token)) {
+      fail('CREDENTIAL_NOT_FOUND', 'No credential matches that token.', 404);
+    }
+    return statusJson(c, await resolveReadable(deps, { token }));
   });
 
   // ── Court-ready, OFFLINE-verifiable evidence bundle (public, JSON download) ──
@@ -576,14 +671,16 @@ export function createVerifyApp(deps: VerifyDeps): Hono<{ Variables: RequestVars
     if (!parsed.success) {
       fail('VALIDATION_FAILED', 'Invalid credential id.', 400);
     }
-    const record = await deps.credentialRepo.getById(parsed.data.credentialId);
-    if (!record) {
+    // Gate: a tokened (new) record is reachable only by token; an erased record
+    // has no PII to bundle. Either way → uniform 404.
+    const res = await resolveReadable(deps, { id: parsed.data.credentialId });
+    if (res.kind !== 'ok') {
       fail('CREDENTIAL_NOT_FOUND', 'No credential matches that id.', 404);
     }
-    const bundle = await buildEvidenceBundle(deps, record, issuerName);
+    const bundle = await buildEvidenceBundle(deps, res.record, issuerName);
     // Self-contained download; never cached (it embeds the live head + anchor state).
     c.header('Content-Type', 'application/json; charset=utf-8');
-    c.header('Content-Disposition', `attachment; filename="${record.id}-evidence.json"`);
+    c.header('Content-Disposition', `attachment; filename="${res.record.id}-evidence.json"`);
     c.header('Cache-Control', 'no-store');
     // Pretty-print: the bundle is meant to be opened and read by a human expert.
     return c.body(JSON.stringify(bundle, null, 2));
@@ -615,65 +712,21 @@ export function createVerifyApp(deps: VerifyDeps): Hono<{ Variables: RequestVars
 
 // ───────────────────────────── verification flows ────────────────────────────
 
-/** Verify a credential by id lookup. No PAdES check (that needs the file). */
-async function verifyById(
+/**
+ * Verify an uploaded file against an ALREADY-RESOLVED record (adds hashMatch +
+ * PAdES). The route resolves + gates the record (token/id, erased) first; this
+ * step does the byte-level tamper check an id/QR scan alone cannot.
+ */
+async function verifyFileForRecord(
   deps: VerifyDeps,
-  credentialId: string,
-  issuer: string,
-): Promise<VerificationResult> {
-  const record = await deps.credentialRepo.getById(credentialId);
-  const verifiedAt = new Date().toISOString();
-  if (!record) {
-    return {
-      credentialId,
-      outcome: 'unknown',
-      checks: {
-        mldsaSignature: false,
-        hashMatch: false,
-        logInclusion: false,
-        anchorProof: false,
-        notRevoked: false,
-      },
-      verifiedAt,
-    };
-  }
-  const checks = await buildChecks(deps, record);
-  return {
-    credentialId,
-    outcome: deriveOutcome(checks),
-    checks,
-    publicFields: publicFieldsOf(record, issuer),
-    verifiedAt,
-  };
-}
-
-/** Verify an uploaded file against the stored record (adds hashMatch + PAdES). */
-async function verifyFile(
-  deps: VerifyDeps,
-  credentialId: string,
+  record: CredentialRecord,
   uploaded: Uint8Array,
   issuer: string,
 ): Promise<VerificationResult> {
-  const record = await deps.credentialRepo.getById(credentialId);
   const verifiedAt = new Date().toISOString();
-  if (!record) {
-    return {
-      credentialId,
-      outcome: 'unknown',
-      checks: {
-        mldsaSignature: false,
-        hashMatch: false,
-        logInclusion: false,
-        anchorProof: false,
-        notRevoked: false,
-      },
-      verifiedAt,
-    };
-  }
-
-  // Decisive tamper gate: the uploaded bytes must hash to exactly what we
-  // signed. A swapped, re-signed, or 1-bit-altered file fails here → 'tampered'
-  // (deriveOutcome ranks this above everything). This does not depend on PAdES.
+  // Decisive tamper gate: the uploaded bytes must hash to exactly what we signed.
+  // A swapped, re-signed, or 1-bit-altered file fails here → 'tampered'
+  // (deriveOutcome ranks this above everything). Independent of PAdES.
   const hashMatch = sha256Hex(uploaded) === record.pdfSha256;
   // PAdES is only meaningful against an actual file. Tolerate verifier faults
   // as "not intact" rather than 500-ing the whole verification.
@@ -683,20 +736,20 @@ async function verifyFile(
     // `intact:true` only means the embedded signature is internally consistent —
     // a PDF carrying a SWAPPED foreign cert can also read intact. So pin the
     // signing cert to our trusted fingerprint (and, defence in depth, to this
-    // credential's recorded fingerprint). Only then does "PAdES valid" mean
+    // record's recorded fingerprint). Only then does "PAdES valid" mean
     // "signed by dmj.one Trust Services".
     const fpOk =
       pades.certFingerprint === deps.trustedPadesCertFingerprint &&
       pades.certFingerprint === record.padesCertFingerprint;
     padesSignature = pades.present && pades.intact && fpOk;
   } catch (err) {
-    deps.logger.warn({ credentialId, err: String(err) }, 'PAdES verification threw');
+    deps.logger.warn({ credentialId: record.id, err: String(err) }, 'PAdES verification threw');
   }
 
   const base = await buildChecks(deps, record);
   const checks: VerificationChecks = { ...base, hashMatch, padesSignature };
   return {
-    credentialId,
+    credentialId: record.id,
     outcome: deriveOutcome(checks),
     checks,
     publicFields: publicFieldsOf(record, issuer),
@@ -727,6 +780,97 @@ async function buildChecks(
     logInclusion,
     anchorProof,
     notRevoked: record.status === 'valid',
+  };
+}
+
+/**
+ * The WS2 read gate, shared by every PUBLIC content route. A record that carries
+ * a `verifyToken` (all new issuance) is reachable ONLY by that token: looked up
+ * by id it reads as `notfound`, indistinguishable from a truly-absent id, so the
+ * sequential id is not an enumeration/PII oracle. A legacy (token-less) record
+ * stays id-addressable. An `erased` record short-circuits to a PII-free tombstone
+ * BEFORE any signature verification (which recomputes canonical bytes from
+ * `content` and would otherwise fail on purged content).
+ */
+async function resolveReadable(
+  deps: VerifyDeps,
+  ref: { token: string } | { id: string },
+): Promise<
+  | { kind: 'ok'; record: CredentialRecord }
+  | { kind: 'notfound' }
+  | { kind: 'erased'; record: CredentialRecord }
+> {
+  let record: CredentialRecord | null;
+  if ('token' in ref) {
+    record = await deps.credentialRepo.getByToken(ref.token);
+  } else {
+    record = await deps.credentialRepo.getById(ref.id);
+    if (record && record.verifyToken) record = null; // tokened ⇒ not readable by id
+  }
+  if (!record) return { kind: 'notfound' };
+  if (record.erased) return { kind: 'erased', record };
+  return { kind: 'ok', record };
+}
+
+/** Render the full credential page for a resolved record (shared by /c and /v).
+ *  The record's own `verifyToken` (present ⇒ new issuance) drives the page's
+ *  self-references through /v/<token>; absent ⇒ legacy id-based paths. */
+async function credentialPageHtml(
+  deps: VerifyDeps,
+  record: CredentialRecord,
+  nonce: string,
+  issuer: string,
+): Promise<string> {
+  const checks = await buildChecks(deps, record);
+  const ts = verifyRecordTimestamp(deps, record);
+  return renderCredentialPage({
+    record,
+    issuer,
+    issuerLegalName: deps.env.ISSUER_LEGAL_NAME,
+    verifyBaseUrl: deps.env.VERIFY_PUBLIC_URL,
+    nonce,
+    verification: { outcome: deriveOutcome(checks), checks },
+    ...(ts && ts.valid
+      ? {
+          trustedTimestamp: {
+            ...(ts.genTime !== undefined ? { genTime: ts.genTime } : {}),
+            ...(ts.tsaSubject !== undefined ? { tsaSubject: ts.tsaSubject } : {}),
+          },
+        }
+      : {}),
+    ...(record.verifyToken ? { verifyToken: record.verifyToken } : {}),
+  });
+}
+
+/** A full verification result for an already-resolved record (no re-lookup). */
+async function resultForRecord(
+  deps: VerifyDeps,
+  record: CredentialRecord,
+  issuer: string,
+): Promise<VerificationResult> {
+  const checks = await buildChecks(deps, record);
+  return {
+    credentialId: record.id,
+    outcome: deriveOutcome(checks),
+    checks,
+    publicFields: publicFieldsOf(record, issuer),
+    verifiedAt: new Date().toISOString(),
+  };
+}
+
+/** The PII-free `unknown` result for a missing / erased / tokened-by-id lookup. */
+function unknownResult(credentialId: string): VerificationResult {
+  return {
+    credentialId,
+    outcome: 'unknown',
+    checks: {
+      mldsaSignature: false,
+      hashMatch: false,
+      logInclusion: false,
+      anchorProof: false,
+      notRevoked: false,
+    },
+    verifiedAt: new Date().toISOString(),
   };
 }
 
@@ -786,6 +930,15 @@ async function buildEvidenceBundle(
     note: `ML-DSA-87 over UTF-8("${STATUS_ASSERTION_DOMAIN}\\n" + canonicalJson({v:${STATUS_PAYLOAD_VERSION},asOf,credentialId,status})).`,
   };
 
+  // WS2: a tokened (new) record is reachable ONLY via /v/<token>, so the bundle's
+  // self-references must use the token, never the (now-gated) sequential-id paths.
+  const verifyUrl = record.verifyToken
+    ? `${deps.env.VERIFY_PUBLIC_URL}/v/${record.verifyToken}`
+    : `${deps.env.VERIFY_PUBLIC_URL}/c/${record.id}`;
+  const statusPath = record.verifyToken
+    ? `/v/${record.verifyToken}/status`
+    : `/api/credentials/${record.id}/status`;
+
   return {
     meta: {
       credentialId: record.id,
@@ -796,7 +949,7 @@ async function buildEvidenceBundle(
       issuedDate: record.content.issueDate,
       generatedAt: new Date().toISOString(),
       issuer,
-      verifyUrl: `${deps.env.VERIFY_PUBLIC_URL}/c/${record.id}`,
+      verifyUrl,
     },
     // The exact data that was signed (the canonical payload is derived from this).
     content: record.content,
@@ -831,8 +984,8 @@ async function buildEvidenceBundle(
       'Confirm the transparency-log leaf: leafHash equals SHA-256(canonical.sha256), then verify the head signature — ML-DSA-87 over transparencyLog.head.headHash, in transparencyLog.head.signature — using transparencyLog.logPublicKeyBase64. (Full Merkle audit-path proof is a relying-party step; this bundle pins leaf consistency under one signed head.)',
       'Confirm document.pdfSha256 equals the SHA-256 of the certificate file you are holding, so the bytes attested here are the bytes in your hand.',
       signedStatus.signature
-        ? 'Verify the signed status assertion: ML-DSA-87 over the UTF-8 bytes signedStatus.note describes (the domain tag, a newline, then deterministic JSON of v/asOf/credentialId/status), using signedStatus.publicKeyBase64. This proves the status — and, if revoked, the revocation date — the issuer attested. Revocation is a LIVING fact: also re-check it live at /api/credentials/<id>/status before relying on a "valid" answer.'
-        : 'This record predates signed status assertions (signedStatus.signature is null), so its revocation status is not independently provable from this bundle — re-check it live at /api/credentials/<id>/status.',
+        ? `Verify the signed status assertion: ML-DSA-87 over the UTF-8 bytes signedStatus.note describes (the domain tag, a newline, then deterministic JSON of v/asOf/credentialId/status), using signedStatus.publicKeyBase64. This proves the status (and, if revoked, the revocation date) the issuer attested. Revocation is a LIVING fact: also re-check it live at ${statusPath} before relying on a "valid" answer.`
+        : `This record predates signed status assertions (signedStatus.signature is null), so its revocation status is not independently provable from this bundle; re-check it live at ${statusPath}.`,
     ],
     disclaimer:
       'This bundle is independently-verifiable forensic evidence: a self-signed cryptographic attestation by dmj.one, an independent educational initiative. It maximises evidentiary weight; it is NOT a licensed certifying-authority Digital Signature Certificate. ML-DSA-87 is a NIST FIPS 204 post-quantum algorithm but is NOT a CCA-recognized algorithm under Indian law, and no statutory presumption is asserted.' +

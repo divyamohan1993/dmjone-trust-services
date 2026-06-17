@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { DOC_TEMPLATES } from '@dmjone/shared';
+
 import { createIssuerApp } from '../src/app.js';
 import { adminScript } from '../src/ui/admin-script.js';
 import { serializeBlock, serializeBody, type SNode } from '../src/ui/serialize-body.js';
@@ -376,6 +378,276 @@ describe('GET /admin — 3-mode console shell (§E)', () => {
     // (the negated [^>] stops at the first >, so the design-system <style> block's
     // CSS comments that mention style="" descriptively can never match).
     expect(body).not.toMatch(/<[a-z][^>]*\sstyle=/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issuer good-faith attestation (WS1.3): a SINGLE required checkbox on EACH of
+// the three issue surfaces (certificate, letterhead, upload). The label states
+// the four-part declaration (facts true · had the association · authorised to
+// issue · recipient consents to hosting a verifiable copy); the helper text is
+// honest about what it is (a good-faith log entry, NOT a legal guarantee, and a
+// knowingly false document is still forgery). Each is a labelled, required
+// checkbox with a distinct id (cert / letter / upload) — CSP-clean, no inline
+// handler. The substrings asserted avoid apostrophes (static html`` text is not
+// auto-escaped today, but a future interpolation refactor WOULD escape `'` to
+// `&#39;`; apostrophe-free anchors keep this test honest either way).
+// ---------------------------------------------------------------------------
+describe('GET /admin — issuer attestation checkbox (WS1.3)', () => {
+  async function dashboardHtml(): Promise<string> {
+    const deps = buildDeps();
+    const app = createIssuerApp(deps);
+    const cookie = await mintSessionCookie(deps.env);
+    return (await app.request('/admin', { headers: { cookie } })).text();
+  }
+
+  it('puts a required, labelled attestation checkbox on the certificate form', async () => {
+    const body = await dashboardHtml();
+    // A required checkbox with a distinct id inside the certificate panel/form.
+    expect(body).toMatch(/<input[^>]*id="f-attest"[^>]*type="checkbox"/);
+    expect(body).toMatch(/<input[^>]*id="f-attest"[^>]*required/);
+    expect(body).toMatch(/<label[^>]*for="f-attest"/);
+    expect(body).toMatch(/id="panel-certificate"[\s\S]*id="f-attest"/);
+  });
+
+  it('puts a required, labelled attestation checkbox on the letterhead form', async () => {
+    const body = await dashboardHtml();
+    expect(body).toMatch(/<input[^>]*id="lf-attest"[^>]*type="checkbox"/);
+    expect(body).toMatch(/<input[^>]*id="lf-attest"[^>]*required/);
+    expect(body).toMatch(/<label[^>]*for="lf-attest"/);
+    expect(body).toMatch(/id="panel-letterhead"[\s\S]*id="lf-attest"/);
+  });
+
+  it('puts a required, labelled attestation checkbox on the upload form', async () => {
+    const body = await dashboardHtml();
+    expect(body).toMatch(/<input[^>]*id="upload-attest"[^>]*type="checkbox"/);
+    expect(body).toMatch(/<input[^>]*id="upload-attest"[^>]*required/);
+    expect(body).toMatch(/<label[^>]*for="upload-attest"/);
+    expect(body).toMatch(/id="panel-upload"[\s\S]*id="upload-attest"/);
+  });
+
+  it('states the four-part declaration + the honest "not a guarantee" helper text', async () => {
+    const body = await dashboardHtml();
+    // The declaration wording (apostrophe-free anchors so escaping can't break it).
+    expect(body).toContain('the facts stated are true');
+    expect(body).toContain('had this association');
+    expect(body).toContain('authorised to issue this');
+    expect(body).toContain('independently-verifiable copy');
+    // The honest framing: a good-faith declaration, not a legal guarantee.
+    expect(body).toContain('good-faith declaration');
+    expect(body).toContain('knowingly false document is still forgery');
+  });
+
+  it('keeps the attestation rows class-based — still NO inline style="" attribute (CSP)', async () => {
+    const body = await dashboardHtml();
+    expect(body).not.toMatch(/<[a-z][^>]*\sstyle=/i);
+    // No inline event handler attributes introduced with the new controls.
+    expect(body).not.toMatch(/\son[a-z]+=/);
+  });
+});
+
+describe('adminScript() — issuer attestation wiring (WS1.3)', () => {
+  it('sends attestation:true ONLY on issuance (never on preview), gated on the box', () => {
+    const src = adminScript();
+    // Issue payloads carry the literal attestation flag; preview payloads do NOT.
+    expect(src).toContain('payload.attestation = true');
+    // The flag is coupled to wantPassword (issue), exactly like the password —
+    // preview omits both. So the only attestation assignment sits under that gate.
+    expect(src).toMatch(/if\(wantPassword\)\{[\s\S]*payload\.attestation = true/);
+    // Each issue surface gates on ITS OWN required checkbox id (cert/letter/upload).
+    expect(src).toContain("attestChecked('f-attest')");
+    expect(src).toContain("attestChecked('lf-attest')");
+    expect(src).toContain("attestChecked('upload-attest')");
+    // The upload sign path (no buildPayload) sets attestation on its own JSON body.
+    expect(src).toMatch(/attestation: true[\s\S]*signaturePlacements|placeHandwrittenSignature[\s\S]*attestation: true/);
+  });
+
+  it('blocks an unattested issuance client-side with a clear status message', () => {
+    const src = adminScript();
+    // The submit handlers refuse to POST when the box is unchecked (the server
+    // also rejects; this is the friendly first line of defence).
+    expect(src).toContain('attestChecked');
+    // The block path surfaces a clear message and returns BEFORE the POST.
+    expect(src).toMatch(/if\(!attestChecked\([^)]*\)\)\{ setStatus\(/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Document-template picker (WS1 §Picker): a "Start from a template" <select> in
+// the certificate panel (kind='certificate' entries) and the letterhead panel
+// (kind='letter' entries). Options are SERVER-RENDERED from DOC_TEMPLATES
+// (testable + degrades without JS); the full catalog content is injected ONCE
+// into the existing nonce'd admin script (no new fetch, no inline script) for the
+// change handler's id→content lookup. Convention-extended labels keep their
+// "(lawyer-review)" suffix verbatim. CSP-clean: labelled <select>, no inline
+// handler, the change is wired by the delegated admin script.
+// ---------------------------------------------------------------------------
+describe('GET /admin — document-template picker (WS1)', () => {
+  async function dashboardHtml(): Promise<string> {
+    const deps = buildDeps();
+    const app = createIssuerApp(deps);
+    const cookie = await mintSessionCookie(deps.env);
+    return (await app.request('/admin', { headers: { cookie } })).text();
+  }
+
+  const certTemplates = DOC_TEMPLATES.filter((t) => t.kind === 'certificate');
+  const letterTemplates = DOC_TEMPLATES.filter((t) => t.kind === 'letter');
+
+  it('renders a labelled certificate-template <select> inside the certificate panel', async () => {
+    const body = await dashboardHtml();
+    expect(body).toMatch(/<select[^>]*id="cert-template"/);
+    expect(body).toMatch(/<label[^>]*for="cert-template"/);
+    expect(body).toMatch(/id="panel-certificate"[\s\S]*id="cert-template"/);
+    // A non-selecting placeholder leads the list (empty value).
+    expect(body).toMatch(/<select[^>]*id="cert-template"[^>]*>\s*<option value="">/);
+  });
+
+  it('renders a labelled letter-template <select> inside the letterhead panel', async () => {
+    const body = await dashboardHtml();
+    expect(body).toMatch(/<select[^>]*id="letter-template"/);
+    expect(body).toMatch(/<label[^>]*for="letter-template"/);
+    expect(body).toMatch(/id="panel-letterhead"[\s\S]*id="letter-template"/);
+    expect(body).toMatch(/<select[^>]*id="letter-template"[^>]*>\s*<option value="">/);
+  });
+
+  // The inner HTML of a specific <select id="…"> … </select> region — so the
+  // cross-kind isolation check is scoped to ONE picker, not the whole document
+  // (the OTHER picker, and the catalog JSON injected into the admin script, both
+  // legitimately mention every id elsewhere on the page).
+  function selectRegion(body: string, selectId: string): string {
+    const open = body.indexOf(`<select id="${selectId}"`);
+    expect(open).toBeGreaterThanOrEqual(0);
+    const end = body.indexOf('</select>', open);
+    expect(end).toBeGreaterThan(open);
+    return body.slice(open, end);
+  }
+
+  it('offers exactly the certificate-kind templates as cert options (id + label)', async () => {
+    const body = await dashboardHtml();
+    expect(certTemplates.length).toBeGreaterThan(0);
+    const region = selectRegion(body, 'cert-template');
+    for (const t of certTemplates) {
+      // Each cert template is an <option value="{id}">{label}</option>.
+      expect(region).toContain(`<option value="${t.id}">${t.label}</option>`);
+    }
+    // No letter template leaks into the certificate select's own option set.
+    for (const t of letterTemplates) {
+      expect(region).not.toContain(`value="${t.id}"`);
+    }
+  });
+
+  it('offers exactly the letter-kind templates as letter options (id + label)', async () => {
+    const body = await dashboardHtml();
+    expect(letterTemplates.length).toBeGreaterThan(0);
+    const region = selectRegion(body, 'letter-template');
+    for (const t of letterTemplates) {
+      expect(region).toContain(`<option value="${t.id}">${t.label}</option>`);
+    }
+    // No certificate template leaks into the letter select's own option set.
+    for (const t of certTemplates) {
+      expect(region).not.toContain(`value="${t.id}"`);
+    }
+  });
+
+  it('keeps the convention-extended "(lawyer-review)" labels verbatim in the picker', async () => {
+    const body = await dashboardHtml();
+    // At least one lawyer-review label exists in the catalog and surfaces as-is.
+    const lr = DOC_TEMPLATES.filter((t) => /lawyer-review/.test(t.label));
+    expect(lr.length).toBeGreaterThan(0);
+    for (const t of lr) {
+      expect(body).toContain(t.label);
+    }
+  });
+
+  it('keeps the picker CSP-clean (no inline style or handler on the new controls)', async () => {
+    const body = await dashboardHtml();
+    expect(body).not.toMatch(/<[a-z][^>]*\sstyle=/i);
+    expect(body).not.toMatch(/\son[a-z]+=/);
+  });
+});
+
+describe('adminScript() — document-template picker wiring (WS1)', () => {
+  it('injects the catalog JSON ONCE into the nonce-ready script (no new fetch)', () => {
+    // The route passes JSON.stringify(DOC_TEMPLATES); adminScript() defaults to
+    // an empty catalog so the 8 zero-arg call sites stay green.
+    const src = adminScript(JSON.stringify(DOC_TEMPLATES));
+    expect(src).toContain('var DOC_TEMPLATES =');
+    // The catalog rides the inline script, NOT a network fetch for templates.
+    expect(src).not.toContain("fetch('/api/templates'");
+    // The injection is breakout-safe: no raw </script> survives (the route
+    // escapes '<' → '<' before embedding).
+    expect(src).not.toContain('</script>');
+    // Default (zero-arg) stays an empty array literal — IIFE bounds intact.
+    const bare = adminScript();
+    expect(bare).toContain('var DOC_TEMPLATES = [];');
+    expect(bare.startsWith('(function(){')).toBe(true);
+    expect(bare.trimEnd().endsWith('})();')).toBe(true);
+  });
+
+  it('wires both picker <select>s by id to a confirm-then-populate change handler', () => {
+    const src = adminScript();
+    // Both selects are resolved by their ids and listened to.
+    expect(src).toContain("getElementById('cert-template')");
+    expect(src).toContain("getElementById('letter-template')");
+    expect(src).toContain("addEventListener('change'");
+    // A non-empty composer prompts before being replaced (window.confirm).
+    expect(src).toContain('confirm');
+  });
+
+  it('rebuilds the certificate body composer blocks from the template paragraphs', () => {
+    const src = adminScript();
+    // The cert path fills the scalar inputs and REBUILDS the contenteditable body
+    // (one block per paragraph) via the existing buildBlock/setAlign machinery —
+    // honouring a leading [[align:…]] directive when present.
+    expect(src).toContain('applyCertTemplate');
+    expect(src).toContain('buildBlock');
+    expect(src).toContain('setAlign');
+    // The align directive is parsed off the front of a paragraph (parity with the
+    // serializer's [[align:…]] grammar) so a directed paragraph lands aligned. The
+    // alternation is unique to parseAlignedParagraph's own regex (the embedded
+    // serializer uses normalizeAlign, never this literal) — so this pins the parse
+    // branch, not the serializer source that also mentions "[[align:".
+    expect(src).toContain('align:(left|center|right|justify)');
+  });
+
+  it('fills the letterhead fields + body from a letter template', () => {
+    const src = adminScript();
+    expect(src).toContain('applyLetterTemplate');
+    // recipientLines populate the textarea (joined by newlines — the inverse of
+    // splitLines), and the body composer is rebuilt the same way as the cert.
+    expect(src).toContain('recipientLines');
+    expect(src).toContain('letterRoot()');
+  });
+
+  // Belt-and-suspenders contract guard. applyCertTemplate / applyLetterTemplate
+  // read these NESTED fields off the catalog at RUNTIME (the injected JSON is an
+  // untyped JS blob, so a rename of any cert.*/letter.* key would break populate
+  // SILENTLY — typecheck only guards the top-level {id,label,kind} the SSR uses).
+  // These names are the frozen CredentialContent/LetterContent fields, so a drift
+  // would be a cross-package contract change; asserting them here makes any such
+  // drift trip THIS suite loudly too. (Optional fields like cert.closingLine /
+  // letter.{reference,subject,salutation,valediction} are read defensively with
+  // `|| ''`, so only the always-present keys are required here.)
+  it('catalog still carries the nested fields the populate path reads (contract guard)', () => {
+    const certs = DOC_TEMPLATES.filter((t) => t.kind === 'certificate');
+    const letters = DOC_TEMPLATES.filter((t) => t.kind === 'letter');
+    expect(certs.length).toBeGreaterThan(0);
+    expect(letters.length).toBeGreaterThan(0);
+    for (const t of certs) {
+      expect(t.cert, `${t.id} is kind=certificate but has no cert payload`).toBeDefined();
+      for (const key of ['type', 'kicker', 'title', 'intro', 'bodyParagraphs'] as const) {
+        expect(t.cert, `${t.id}.cert is missing required field ${key}`).toHaveProperty(key);
+      }
+      expect(Array.isArray(t.cert?.bodyParagraphs)).toBe(true);
+    }
+    for (const t of letters) {
+      expect(t.letter, `${t.id} is kind=letter but has no letter payload`).toBeDefined();
+      for (const key of ['recipientLines', 'bodyParagraphs'] as const) {
+        expect(t.letter, `${t.id}.letter is missing required field ${key}`).toHaveProperty(key);
+      }
+      expect(Array.isArray(t.letter?.recipientLines)).toBe(true);
+      expect(Array.isArray(t.letter?.bodyParagraphs)).toBe(true);
+    }
   });
 });
 

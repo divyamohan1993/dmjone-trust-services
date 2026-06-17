@@ -52,6 +52,10 @@ const STATUS_TERMS: readonly string[] = [
   'registered under', 'registered', 'recognised by', 'recognized by', 'recognised', 'recognized',
   'accredited', 'affiliated', 'institution', 'institute', 'foundation', 'society', 'trust', 'ngo',
   'section 8', 'iso certified', 'iso-certified', 'cin', 'gstin',
+  // academic-status class (an educational initiative must not imply a degree-granting body).
+  // Only unambiguous status terms; 'school'/'academy'/'campus'/'autonomous' are
+  // omitted as too common in legitimate work descriptions.
+  'university', 'college', 'deemed university', 'degree', 'diploma',
   // government recognition
   'government approved', 'government-approved', 'government recognised', 'government-recognised',
   'government recognized', 'government-recognized', 'government registered', 'government-registered',

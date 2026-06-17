@@ -58,5 +58,16 @@ export function createFirestoreBlobStore(
       const chunks = snap.docs.map((d) => base64ToBytes((d.data() as PdfChunkRow).data));
       return concatChunks(chunks);
     },
+
+    async delete(credentialId: string, kind: BlobKind): Promise<void> {
+      // WS2-A erasure purge. Drops only THIS kind's chunks (its own
+      // subcollection; the other kind is untouched). Idempotent — when the blob
+      // is absent, listDocuments() is empty and the batch commit is a no-op.
+      const refs = await chunksCol(credentialId, kind).listDocuments();
+      if (refs.length === 0) return;
+      const batch = db.batch();
+      for (const ref of refs) batch.delete(ref);
+      await batch.commit();
+    },
   };
 }

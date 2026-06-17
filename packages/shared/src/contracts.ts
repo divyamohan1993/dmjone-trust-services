@@ -163,6 +163,12 @@ export interface PasswordHasher {
 export interface CredentialRepository {
   create(record: CredentialRecord): Promise<void>;
   getById(id: string): Promise<CredentialRecord | null>;
+  /**
+   * WS2 non-enumerable lookup: fetch by the unguessable `verifyToken` (the only
+   * way new issuance exposes content). Returns null for an unknown token.
+   * Firestore: an equality query on the indexed `verifyToken` field; in-memory: a scan.
+   */
+  getByToken(verifyToken: string): Promise<CredentialRecord | null>;
   exists(id: string): Promise<boolean>;
   /**
    * Set the status (and, when revoking, `revokedAt = at`). `statusSignature` is
@@ -181,6 +187,17 @@ export interface CredentialRepository {
     items: CredentialRecord[];
     nextCursor?: string;
   }>;
+  /**
+   * WS2 true erasure (DPDP §8(7)) — distinct from revocation. Redact the PII in
+   * the stored record: blank `content` PII (cert: recipientName/intro/title/kicker/
+   * bodyParagraphs/closingLine; letter: recipientLines/subject/salutation/
+   * bodyParagraphs/valediction/reference) and the plaintext `canonicalPayload`,
+   * and set `erased=true`, `erasedAt=at`. RETAIN the non-PII crypto/log residue
+   * (id, pdfSha256, canonicalSha256, mldsaSignature, logSeq/logLeafHash,
+   * statusSignature, timestamps). The caller separately purges rendered blobs via
+   * {@link BlobStore.delete}. Idempotent: a second erase is a no-op.
+   */
+  erase(id: string, at: string): Promise<void>;
 }
 
 /** What a stored blob represents. A credential has up to two: the signed
@@ -191,6 +208,8 @@ export type BlobKind = 'certificate' | 'section63';
 export interface BlobStore {
   put(credentialId: string, kind: BlobKind, bytes: Uint8Array): Promise<void>;
   get(credentialId: string, kind: BlobKind): Promise<Uint8Array | null>;
+  /** Purge a stored blob (WS2 erasure). Idempotent — a no-op if absent. */
+  delete(credentialId: string, kind: BlobKind): Promise<void>;
 }
 
 export interface LogRepository {

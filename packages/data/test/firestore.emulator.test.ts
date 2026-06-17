@@ -75,6 +75,55 @@ describe.skipIf(!EMULATOR)('Firestore stores (emulator) — parity with in-memor
     ).rejects.toBeInstanceOf(AppError);
   });
 
+  it('getByToken resolves by verifyToken; unknown/absent → null (WS2-B)', async () => {
+    const repo = createFirestoreCredentialRepository(client);
+    const token = `tok_${rnd()}${rnd()}`;
+    const id = `DMJ-IC-20260610-${rnd()}`;
+    await repo.create(makeRecord({ id, verifyToken: token }));
+
+    expect((await repo.getByToken(token))?.id).toBe(id);
+    expect(await repo.getByToken(`tok_${rnd()}_nope`)).toBeNull();
+    // A legacy record (no verifyToken) is not matched by any token probe.
+    const legacyId = `DMJ-IC-20260610-${rnd()}`;
+    await repo.create(makeRecord({ id: legacyId }));
+    expect(await repo.getByToken('')).toBeNull();
+  });
+
+  it('erase blanks PII + canonicalPayload, retains crypto residue, idempotent (WS2-A)', async () => {
+    const repo = createFirestoreCredentialRepository(client);
+    const id = `DMJ-IC-20260610-${rnd()}`;
+    const token = `tok_${rnd()}${rnd()}`;
+    const record = makeRecord({
+      id,
+      verifyToken: token,
+      issuerAttestation: { confirmed: true, attestedAt: '2026-06-04T10:00:00.000Z' },
+    });
+    await repo.create(record);
+
+    await repo.erase(id, '2026-06-10T00:00:00.000Z');
+    const erased = await repo.getById(id);
+    const content = erased?.content as { recipientName: string; bodyParagraphs: string[] };
+    expect(content.recipientName).toBe('');
+    expect(content.bodyParagraphs).toEqual([]);
+    expect(erased?.canonicalPayload).toBe('');
+    expect(erased?.erased).toBe(true);
+    expect(erased?.erasedAt).toBe('2026-06-10T00:00:00.000Z');
+    // Crypto residue + token + section63 retained.
+    expect(erased?.mldsaSignature).toBe(record.mldsaSignature);
+    expect(erased?.canonicalSha256).toBe(record.canonicalSha256);
+    expect(erased?.verifyToken).toBe(token);
+    expect(erased?.section63).toEqual(record.section63);
+
+    // Idempotent: a second erase preserves the original erasedAt.
+    await repo.erase(id, '2030-01-01T00:00:00.000Z');
+    expect((await repo.getById(id))?.erasedAt).toBe('2026-06-10T00:00:00.000Z');
+
+    // Missing id → CREDENTIAL_NOT_FOUND (parity with setStatus).
+    await expect(repo.erase(`DMJ-IC-20260610-${rnd()}`, 'x')).rejects.toMatchObject({
+      code: 'CREDENTIAL_NOT_FOUND',
+    });
+  });
+
   it('credential list paginates id-ascending with no dangling cursor at the boundary', async () => {
     const repo = createFirestoreCredentialRepository(client);
     const prefix = `DMJ-PG-${rnd()}-`;
@@ -113,6 +162,24 @@ describe.skipIf(!EMULATOR)('Firestore stores (emulator) — parity with in-memor
     expect(got?.byteLength).toBe(small.byteLength);
     expect(Buffer.from(got!).equals(Buffer.from(small))).toBe(true);
     expect(Buffer.from((await store.get(id, 'section63'))!).equals(Buffer.from(s63))).toBe(true);
+  });
+
+  it('blob delete purges only the named kind; idempotent (WS2-A erasure)', async () => {
+    const store = createFirestoreBlobStore(client);
+    const id = `DMJ-BL-${rnd()}`;
+    const cert = pseudoRandomBytes(300 * 1024); // multi-chunk
+    const s63 = pseudoRandomBytes(60 * 1024);
+    await store.put(id, 'certificate', cert);
+    await store.put(id, 'section63', s63);
+
+    await store.delete(id, 'certificate');
+    expect(await store.get(id, 'certificate')).toBeNull();
+    // The other kind is untouched.
+    expect(Buffer.from((await store.get(id, 'section63'))!).equals(Buffer.from(s63))).toBe(true);
+
+    // Idempotent: deleting an already-absent blob is a no-op.
+    await expect(store.delete(id, 'certificate')).resolves.toBeUndefined();
+    await expect(store.delete(`DMJ-BL-${rnd()}`, 'section63')).resolves.toBeUndefined();
   });
 
   it('log append optimistic concurrency: stale second append throws, chain stays linear', async () => {

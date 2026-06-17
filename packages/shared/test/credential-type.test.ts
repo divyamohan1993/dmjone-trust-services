@@ -112,6 +112,7 @@ describe('issueCredentialSchema.type — relaxed but backward-compatible', () =>
       intro: 'This is to certify that',
       bodyParagraphs: ['did the thing.'],
       issueDate: '2026-06-05',
+      attestation: true,
       password: 'a-strong-password', // pragma: allowlist secret
     };
   }

@@ -80,4 +80,38 @@ describe('in-memory BlobStore (chunked, per-kind)', () => {
     expect(out?.byteLength).toBe(20);
     expect(Buffer.from(out!).equals(Buffer.from(small))).toBe(true);
   });
+
+  // ── WS2-A erasure: purge a stored blob ────────────────────────────────────
+  it('delete purges a stored blob (get → null afterwards)', async () => {
+    const store = createInMemoryBlobStore();
+    await store.put('c', 'certificate', pseudoRandomBytes(40));
+    expect(await store.get('c', 'certificate')).not.toBeNull();
+
+    await store.delete('c', 'certificate');
+    expect(await store.get('c', 'certificate')).toBeNull();
+  });
+
+  it('delete is idempotent (no-op on an absent blob)', async () => {
+    const store = createInMemoryBlobStore();
+    // Never put anything; deleting must not throw.
+    await expect(store.delete('never', 'certificate')).resolves.toBeUndefined();
+    // Delete twice on a real blob.
+    await store.put('c', 'section63', pseudoRandomBytes(10));
+    await store.delete('c', 'section63');
+    await expect(store.delete('c', 'section63')).resolves.toBeUndefined();
+    expect(await store.get('c', 'section63')).toBeNull();
+  });
+
+  it('delete removes only the named kind, leaving the other intact', async () => {
+    const store = createInMemoryBlobStore(16);
+    const cert = pseudoRandomBytes(40);
+    const s63 = pseudoRandomBytes(24);
+    await store.put('c', 'certificate', cert);
+    await store.put('c', 'section63', s63);
+
+    await store.delete('c', 'certificate');
+    expect(await store.get('c', 'certificate')).toBeNull();
+    // section63 untouched.
+    expect(Buffer.from((await store.get('c', 'section63'))!).equals(Buffer.from(s63))).toBe(true);
+  });
 });

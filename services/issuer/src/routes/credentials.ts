@@ -14,6 +14,7 @@ import {
   credentialIdParamSchema,
   documentKind,
   issueCredentialSchema,
+  issueCredentialObject,
   revokeSchema,
 } from '@dmjone/shared';
 import type {
@@ -131,7 +132,7 @@ export function registerCredentialRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerD
   // audit). Same body as issue minus `password`. Strictly: validate →
   // assembleContent(placeholder id) → renderer.render → return PDF bytes.
   api.post('/preview', async (c) => {
-    const previewSchema = issueCredentialSchema.omit({ password: true });
+    const previewSchema = issueCredentialObject.omit({ password: true });
     const parsed = previewSchema.safeParse(await readJson(c));
     if (!parsed.success) {
       throw new AppError(

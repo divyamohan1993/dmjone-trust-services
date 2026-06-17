@@ -17,7 +17,7 @@
 
 import { Hono } from 'hono';
 
-import { AppError, ERROR_CODE, issueLetterSchema } from '@dmjone/shared';
+import { AppError, ERROR_CODE, issueLetterSchema, issueLetterObject } from '@dmjone/shared';
 
 import type { IssuerDeps } from '../deps.js';
 import type { IssuerHonoEnv } from '../http/context.js';
@@ -67,7 +67,7 @@ export function registerLetterRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps)
   // Exact preview — the real Chromium PDF for the SAME content issuance renders,
   // with NO side effects. Same body as issue minus `password`.
   api.post('/preview', async (c) => {
-    const previewSchema = issueLetterSchema.omit({ password: true });
+    const previewSchema = issueLetterObject.omit({ password: true });
     const parsed = previewSchema.safeParse(await readJson(c));
     if (!parsed.success) {
       throw new AppError(

@@ -7,7 +7,7 @@ import type { DocumentEmailMessage } from './provider.js';
 const RETRY_WINDOW = 23 * 60 * 60 * 1000; // shorter than Resend's 24-hour idempotency retention
 const MAX_ATTEMPTS = 3;
 export interface DeliverySummary {
-  status: DocumentEmailDelivery['status'] | 'pending' | 'not_queued';
+  status: DocumentEmailDelivery['status'] | 'pending' | 'not_queued' | 'quota_limited';
   canRetry: boolean;
 }
 export function emailSummary(record: CredentialRecord, now = Date.now()): DeliverySummary | undefined {
@@ -16,7 +16,8 @@ export function emailSummary(record: CredentialRecord, now = Date.now()): Delive
   return {
     status: d?.status ?? 'pending',
     canRetry: record.status === 'valid' && (!d || (d.status !== 'accepted' && d.status !== 'outcome_unknown' &&
-      d.attempts < MAX_ATTEMPTS && now >= d.createdAt && now < d.createdAt + RETRY_WINDOW && now >= d.leaseUntil)),
+      d.attempts < MAX_ATTEMPTS && now >= d.createdAt && (d.provider === 'oci' || now < d.createdAt + RETRY_WINDOW) && now >= d.leaseUntil &&
+      (d.provider !== 'oci' || d.status === 'rejected'))),
   };
 }
 export function requireEmailRequest(c: {req: {header(name: string): string | undefined}}, deps: IssuerDeps): void {
@@ -48,7 +49,11 @@ export async function sendDocumentEmail(deps: IssuerDeps, documentId: string, re
   if (!pdf || !section63) throw new AppError(ERROR_CODE.BAD_REQUEST, 'Document generation is incomplete; email was not sent', 409);
   const now = Date.now(), previous = record.emailDelivery ?? null;
   if (previous?.status === 'accepted') return {status:'accepted', canRetry:false};
-  if (previous && (previous.provider !== sender.provider || now < previous.createdAt || now >= previous.createdAt + RETRY_WINDOW || previous.attempts >= MAX_ATTEMPTS)) {
+  if (previous?.provider === 'oci' && (previous.status === 'uncertain' || (previous.status === 'sending' && now >= previous.leaseUntil))) {
+    await deps.credentialRepo.compareAndSetEmailDelivery(documentId,previous,{...previous,status:'outcome_unknown',updatedAt:now});
+    return {status:'outcome_unknown',canRetry:false};
+  }
+  if (previous && (previous.provider !== sender.provider || now < previous.createdAt || (previous.provider !== 'oci' && now >= previous.createdAt + RETRY_WINDOW) || previous.attempts >= MAX_ATTEMPTS)) {
     if (previous.status === 'rejected') return {status:'rejected', canRetry:false};
     if (previous.status !== 'outcome_unknown') await deps.credentialRepo.compareAndSetEmailDelivery(documentId, previous, {...previous, status:'outcome_unknown', updatedAt:now});
     return {status:'outcome_unknown', canRetry:false};
@@ -65,6 +70,11 @@ export async function sendDocumentEmail(deps: IssuerDeps, documentId: string, re
     createdAt:previous?.createdAt ?? now, updatedAt:now, attempts:(previous?.attempts ?? 0)+1,
     leaseId:randomUUID(), leaseUntil:now+60000,
   };
+  if (sender.provider === 'oci') {
+    if (!deps.emailQuota) throw new AppError(ERROR_CODE.INTERNAL,'OCI email quota is not configured',503);
+    if (!await deps.emailQuota.reserve(now)) throw new AppError(ERROR_CODE.RATE_LIMITED,
+      'Email not sent: the free-tier guard allows 90 submission attempts per rolling 24 hours and 2,700 per UTC calendar month. Retry after the limit resets.',429);
+  }
   if (!await deps.credentialRepo.compareAndSetEmailDelivery(documentId, previous, claim)) {
     const current = await deps.credentialRepo.getById(documentId);
     return current ? emailSummary(current) ?? {status:'not_queued', canRetry:false} : {status:'not_queued', canRetry:false};
@@ -72,12 +82,12 @@ export async function sendDocumentEmail(deps: IssuerDeps, documentId: string, re
   // Freeze the provider payload and key across all attempts; never auto-resend
   // an uncertain result outside the provider's deduplication window.
   let result: Awaited<ReturnType<typeof sender.send>>;
-  if (Date.now() + 20000 >= claim.leaseUntil || Date.now() >= claim.createdAt + RETRY_WINDOW) result = {status:'uncertain'};
+  if (Date.now() + (sender.provider === 'oci' ? 35000 : 20000) >= claim.leaseUntil || (sender.provider !== 'oci' && Date.now() >= claim.createdAt + RETRY_WINDOW)) result = {status:'uncertain'};
   else {
     try { result = await sender.send(body, `dmj-trust-v1/${documentId}`); }
     catch { result = {status:'uncertain'}; }
   }
-  const done: DocumentEmailDelivery = {...claim, status:result.status, updatedAt:Date.now(), leaseUntil:Date.now(),
+  const done: DocumentEmailDelivery = {...claim, status:sender.provider === 'oci' && result.status === 'uncertain' ? 'outcome_unknown' : result.status, updatedAt:Date.now(), leaseUntil:Date.now(),
     ...(result.status === 'accepted' && {providerId:result.providerId}),
   };
   const stored = await deps.credentialRepo.compareAndSetEmailDelivery(documentId, claim, done);
@@ -90,7 +100,8 @@ export async function sendDocumentEmail(deps: IssuerDeps, documentId: string, re
 export async function emailAfterIssuance(deps: IssuerDeps, documentId: string, recipientEmail: string | undefined, requestId: string): Promise<DeliverySummary | undefined> {
   if (!recipientEmail) return undefined;
   try {return await sendDocumentEmail(deps, documentId, requestId);}
-  catch {
+  catch (error) {
+    if (error instanceof AppError && error.code === ERROR_CODE.RATE_LIMITED) return {status:'quota_limited',canRetry:false};
     deps.logger.warn({documentId, requestId}, 'document generated; email delivery needs attention');
     const record = await deps.credentialRepo.getById(documentId).catch(() => null);
     return record ? emailSummary(record) ?? {status:'not_queued', canRetry:false} : {status:'not_queued', canRetry:false};

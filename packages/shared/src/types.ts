@@ -198,7 +198,7 @@ export interface Section63Metadata {
 /** Private email delivery state; never part of a signed/public document projection. */
 export interface DocumentEmailDelivery {
   status: 'sending' | 'accepted' | 'rejected' | 'uncertain' | 'outcome_unknown';
-  provider: 'resend' | 'pactmail';
+  provider: 'resend' | 'pactmail' | 'oci';
   encryptedMessage: string;
   createdAt: number;
   updatedAt: number;

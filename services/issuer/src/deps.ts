@@ -8,6 +8,7 @@ import type { DocumentEmailSender } from './email/provider.js';
  */
 
 import type {
+  EmailQuotaRepository,
   AdminRepository,
   AnchorPublisher,
   AnchorRepository,
@@ -46,6 +47,7 @@ export interface SecretSealer {
 export interface IssuerDeps {
   env: AppEnv;
   emailSender?: DocumentEmailSender;
+  emailQuota?: EmailQuotaRepository;
   logger: Logger;
   credentialRepo: CredentialRepository;
   blobStore: BlobStore;

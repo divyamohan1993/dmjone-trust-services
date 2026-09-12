@@ -413,7 +413,7 @@ function buildPayload(form, wantPassword){
   return payload;
 }
 function emailStatus(status){
-  return {pending:'Not sent yet', sending:'Sending', accepted:'Accepted by mail provider', rejected:'Email not sent', uncertain:'Delivery unconfirmed — retry email', outcome_unknown:'Delivery unconfirmed — check with the mail provider', not_queued:'Email not queued'}[status] || status;
+  return {pending:'Not sent yet', sending:'Sending', accepted:'Accepted by mail provider', rejected:'Email not sent', uncertain:'Delivery unconfirmed — retry email', outcome_unknown:'Delivery unconfirmed — check with the mail provider', not_queued:'Email not queued', quota_limited:'Email not sent — free sending limit reached; retry later'}[status] || status;
 }
 function syncEmailFields(form){
   var toggle = form.querySelector('[name="sendEmail"]'), input = form.querySelector('[name="recipientEmail"]');

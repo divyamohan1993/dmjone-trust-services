@@ -28,3 +28,5 @@ export * from './in-memory/index.js';
 
 // Firestore + Secret Manager implementations (production).
 export * from './firestore/index.js';
+
+export { createInMemoryEmailQuotaRepository, createFirestoreEmailQuotaRepository, reserveEmailQuota, OCI_EMAIL_DAILY_LIMIT, OCI_EMAIL_MONTHLY_LIMIT } from './email-quota.js';

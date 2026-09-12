@@ -9,7 +9,7 @@ export type DocumentEmailOutcome =
   | { status: 'accepted'; providerId: string }
   | { status: 'rejected' | 'uncertain' };
 export interface DocumentEmailSender {
-  readonly provider: 'resend' | 'pactmail';
+  readonly provider: 'resend' | 'pactmail' | 'oci';
   prepare(message: DocumentEmailMessage): string;
   send(body: string, idempotencyKey: string): Promise<DocumentEmailOutcome>;
 }

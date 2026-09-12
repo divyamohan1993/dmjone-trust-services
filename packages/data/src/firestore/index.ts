@@ -1,3 +1,4 @@
+import { createFirestoreEmailQuotaRepository } from '../email-quota.js';
 /**
  * Firestore + Secret Manager persistence implementations (Stream D, production).
  * Every impl mirrors the in-memory family's behavior exactly. Exposed as factory
@@ -35,6 +36,7 @@ export { BLOB_CHUNK_COLLECTIONS, COLLECTIONS, DOC_IDS, seqDocId } from './paths.
 export function createFirestoreStores(env: FirestoreEnv): DataStores {
   const db: Firestore = createFirestore(env);
   return {
+    emailQuota: createFirestoreEmailQuotaRepository(db),
     credentials: createFirestoreCredentialRepository(db),
     blobs: createFirestoreBlobStore(db),
     log: createFirestoreLogRepository(db),

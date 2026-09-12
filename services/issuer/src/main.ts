@@ -51,6 +51,7 @@ async function main(): Promise<void> {
   const emailSender = await buildEmailSender(env);
   const app = createIssuerApp({
     ...(emailSender && { emailSender }),
+    emailQuota: stores.emailQuota,
     env,
     logger,
     credentialRepo: stores.credentials,

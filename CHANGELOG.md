@@ -6,6 +6,17 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### OCI Email Delivery — 2026-09-12
+
+- Added the Phoenix SMTP adapter with mandatory TLS and a dedicated send-only
+  OCI identity whose credentials are mounted from Secret Manager.
+- Added persistent guards of 90 submission reservations per rolling 24 hours
+  and 2,700 per UTC calendar month. A reached limit preserves the generated PDF.
+- SMTP uncertainty and expired sending leases require reconciliation; SMTP
+  Message-ID is not treated as an idempotency guarantee.
+- Deployment checks validate DKIM/SPF DNS and preserve Cloudflare inbound MX.
+
+
 ### Security page and document email workflow — 2026-09-12
 
 - Moved account security to `/admin/security` with authenticated navigation and

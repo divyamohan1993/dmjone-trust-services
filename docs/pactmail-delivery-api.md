@@ -1,9 +1,10 @@
 # Document email integration
 
-Status: issuer-side sending and retry support is implemented. Production sending
-remains disabled until the outbound provider is chosen and configured. The
-existing Pactmail deployment supports only authenticated self-link emails; the
-integration endpoint below is a proposed contract, not an existing API.
+Status: OCI Email Delivery in Phoenix is the selected production provider. See
+[OCI setup](oci-email-setup.md) for the active configuration. The Resend and
+Pactmail adapters below remain alternatives; they are not used as automatic
+fallbacks. Pactmail's integration endpoint below is a proposed contract, not an
+existing API.
 
 Incoming email must remain Cloudflare Email Routing: `*@dmj.one` continues
 forwarding to the existing Gmail inbox. Do not change the root-domain MX records or forwarding
@@ -110,7 +111,7 @@ replace previous settings. The issuer sends from `dmj.one <contact@dmj.one>`.
 Do not copy a provider key into source, a chat, an ordinary configuration file,
 or a service-account JSON key. No live sending is enabled by this code change.
 
-## OCI alternative under consideration
+## Selected provider: OCI
 
 OCI Email Delivery supports SMTP and HTTPS submission with custom domains and
 attachments. It can be used for outbound delivery while keeping Cloudflare's
@@ -119,8 +120,8 @@ records and the appropriate SPF/DMARC authentication, and use a separate bounce
 subdomain if a custom return path is wanted. Never add a second SPF policy at the
 same DNS name or replace Cloudflare's root MX records.
 
-The OCI region and sending interface must be selected before providing exact
-DNS and credential configuration. An OCI adapter is not configured here. Do not
+The selected home region is Phoenix (`us-phoenix-1`) and the issuer uses authenticated
+SMTP with mandatory STARTTLS. Credentials are mounted from Secret Manager. Do not
 reuse Resend-specific idempotency assumptions for SMTP; an uncertain SMTP outcome
 needs reconciliation before another send. No provider guarantees avoiding spam.
 

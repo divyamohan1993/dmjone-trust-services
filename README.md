@@ -74,7 +74,7 @@ CNAMEs, or run [`infra/autoconfig.sh`](infra/autoconfig.sh) for a one-command de
 
 For lost passkeys or recovery codes, see [the recovery runbook](docs/admin-recovery.md).
 
-For outgoing certificate and letter emails, see [the sending integration contract](docs/pactmail-delivery-api.md). Sending stays disabled until a provider is configured.
+For outgoing certificate and letter emails, see [the sending integration contract](docs/pactmail-delivery-api.md). Production uses OCI Email Delivery in Phoenix with guarded submission limits; see [OCI setup and limits](docs/oci-email-setup.md).
 
 ## Status
 

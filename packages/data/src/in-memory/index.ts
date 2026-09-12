@@ -1,3 +1,4 @@
+import { createInMemoryEmailQuotaRepository } from '../email-quota.js';
 /**
  * In-memory persistence implementations (Stream D). First-class deliverables:
  * issuer/verify and their tests run entirely on these without GCP. Every impl
@@ -25,6 +26,7 @@ export { createInMemorySecretStore } from './secret-store.js';
 /** Construct a complete, independent set of in-memory stores. */
 export function createInMemoryStores(): DataStores {
   return {
+    emailQuota: createInMemoryEmailQuotaRepository(),
     credentials: createInMemoryCredentialRepository(),
     blobs: createInMemoryBlobStore(),
     log: createInMemoryLogRepository(),

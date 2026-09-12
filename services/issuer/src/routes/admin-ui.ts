@@ -21,7 +21,7 @@ import { Hono } from 'hono';
 import { html } from 'hono/html';
 
 import { getBrandImages } from '@dmjone/render';
-import { DOC_TEMPLATES } from '@dmjone/shared';
+import { DOC_TEMPLATES, OCI_EMAIL_DAILY_LIMIT, OCI_EMAIL_MONTHLY_LIMIT } from '@dmjone/shared';
 import type { AdminAccount, DocumentKind } from '@dmjone/shared';
 
 import type { IssuerDeps } from '../deps.js';
@@ -191,7 +191,7 @@ export function registerAdminUiRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps
 
     if (session && c.req.query('section') === 'security') return c.redirect('/admin/security');
     const body = session
-      ? html`${adminNavigation('documents')}${dashboardBody(!!deps.emailSender)}`
+      ? html`${adminNavigation('documents')}${dashboardBody(!!deps.emailSender, deps.emailSender?.provider === 'oci')}`
       : signInBody(provisioned);
 
     return c.html(
@@ -474,9 +474,10 @@ function uploadPanel(): ReturnType<typeof html> {
 }
 
 /** Document workspace; account security has its own authenticated page. */
-function dashboardBody(emailEnabled: boolean): ReturnType<typeof html> {
+function dashboardBody(emailEnabled: boolean, ociBudget: boolean): ReturnType<typeof html> {
   return html`<h1>Issue a certificate</h1>
 <p class="lede">Compose a fresh credential. Each issuance is signed, logged, and sealed.</p>
+${ociBudget ? html`<p class="muted">Email sending is capped at ${OCI_EMAIL_DAILY_LIMIT} submissions per rolling 24 hours and ${OCI_EMAIL_MONTHLY_LIMIT.toLocaleString('en-US')} per UTC calendar month. Document generation continues when the email limit is reached.</p>` : ''}
 <p class="muted" id="status" role="status" aria-live="polite"></p>
 
 <div class="mode-tabs" role="tablist" aria-label="Document mode">

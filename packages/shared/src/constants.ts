@@ -154,3 +154,7 @@ export const DEFAULT_SIGNATORY = {
   role: 'Founder · dmj.one',
   phone: '+91 79799 30293',
 } as const;
+
+/** Application caps below OCI Email Delivery's documented free allowance. */
+export const OCI_EMAIL_DAILY_LIMIT = 90;
+export const OCI_EMAIL_MONTHLY_LIMIT = 2700;

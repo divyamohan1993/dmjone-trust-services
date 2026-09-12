@@ -271,3 +271,8 @@ export interface Section63Generator {
   metadata(content: CredentialContent, pdfSha256: string): Section63Metadata;
   generate(record: CredentialRecord): Promise<Uint8Array>;
 }
+
+/** Conservative OCI email submission budget, persisted across instances/restarts. */
+export interface EmailQuotaRepository {
+  reserve(now: number): Promise<boolean>;
+}

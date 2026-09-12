@@ -189,8 +189,9 @@ export function registerAdminUiRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps
     const account = await deps.adminRepo.get().catch(() => null);
     const provisioned = isProvisioned(account);
 
+    if (session && c.req.query('section') === 'security') return c.redirect('/admin/security');
     const body = session
-      ? dashboardBody(account)
+      ? html`${adminNavigation('documents')}${dashboardBody(!!deps.emailSender)}`
       : signInBody(provisioned);
 
     return c.html(
@@ -206,6 +207,27 @@ export function registerAdminUiRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps
       }),
     );
   });
+
+  app.get('/admin/security', async (c) => {
+    const session = await readSession(c, deps.env, deps.adminRepo);
+    if (!session) return c.redirect('/admin?section=security');
+    const account = await deps.adminRepo.get();
+    return c.html(await page({
+      title: 'Account security — Issuer Admin', role: 'Issuer Admin', nonce: c.get('cspNonce'),
+      body: html`${adminNavigation('security')}<h1>Account security</h1>
+        <p class="lede">Manage your sign-in keys, authenticator, and recovery codes.</p>
+        <p id="status" class="muted" role="status" aria-live="polite"></p>${securityBody(account)}`,
+      script: adminScript(),
+    }));
+  });
+}
+
+function adminNavigation(section: 'documents' | 'security'): ReturnType<typeof html> {
+  return html`<nav class="admin-nav" aria-label="Administration">
+    <a href="/admin" aria-current="${section === 'documents' ? 'page' : 'false'}">Documents</a>
+    <a href="/admin/security" aria-current="${section === 'security' ? 'page' : 'false'}">Account security</a>
+    <button type="button" class="secondary" data-action="logout">Sign out</button>
+  </nav>`;
 }
 
 /** Sign-in view: passkey login (or first-time bootstrap) + recovery entry. */
@@ -259,9 +281,20 @@ ${provisioned
 </div>`}`;
 }
 
+function emailFields(prefix: string, enabled: boolean): ReturnType<typeof html> {
+  return html`<fieldset class="email-fields">
+    <legend>Email delivery</legend>
+    ${enabled ? html`<label class="email-toggle"><input type="checkbox" id="${prefix}-send-email" name="sendEmail" checked /> Automatically email the recipient after generation</label>
+      <label for="${prefix}-email">Recipient email</label>
+      <input id="${prefix}-email" type="email" name="recipientEmail" maxlength="254" autocomplete="off" required />
+      <p class="muted">Sent from contact@dmj.one with a secure download link. Share the download password separately.</p>`
+    : html`<p class="muted">Email delivery is awaiting mail service configuration. You can still generate and secure documents.</p>`}
+  </fieldset>`;
+}
+
 /** The certificate panel — the existing issue form, unchanged except Type is now
  * a free-text input backed by a datalist of the five presets. */
-function certificatePanel(): ReturnType<typeof html> {
+function certificatePanel(emailEnabled: boolean): ReturnType<typeof html> {
   const certEcho = html`<div class="body-echo" aria-hidden="true">
           <div class="echo-intro" id="echo-intro">This is to certify that</div>
           <div class="echo-recipient" id="echo-recipient">Recipient name</div>
@@ -314,9 +347,10 @@ function certificatePanel(): ReturnType<typeof html> {
         <input id="f-pw" name="password" type="password" minlength="8" maxlength="128" required />
       </div>
     </div>
+    ${emailFields('f', emailEnabled)}
     ${attestationRow('f-attest')}
     <div class="actions">
-      <button type="submit">Issue certificate</button>
+      <button type="submit">Generate certificate</button>
     </div>
   </form>
 </div>`;
@@ -325,7 +359,7 @@ function certificatePanel(): ReturnType<typeof html> {
 /** The letterhead panel (Mode 2) — a NEW form reusing the SAME rich body editor.
  * Preview → POST /api/letters/preview; Issue → POST /api/letters. Distinct ids
  * throughout (never reuse the cert's f-* ids). */
-function letterheadPanel(): ReturnType<typeof html> {
+function letterheadPanel(emailEnabled: boolean): ReturnType<typeof html> {
   return html`<div class="card">
   ${STUDS}
   <h2>New letter</h2>
@@ -360,9 +394,10 @@ function letterheadPanel(): ReturnType<typeof html> {
         <input id="lf-pw" name="password" type="password" minlength="8" maxlength="128" required />
       </div>
     </div>
+    ${emailFields('lf', emailEnabled)}
     ${attestationRow('lf-attest')}
     <div class="actions">
-      <button type="submit">Issue letter</button>
+      <button type="submit">Generate letter</button>
     </div>
   </form>
 </div>`;
@@ -438,9 +473,8 @@ function uploadPanel(): ReturnType<typeof html> {
 </div>`;
 }
 
-/** Authenticated dashboard: a 3-mode console (Certificate · Letterhead · Upload)
- * above the always-present issued-list + account-security cards. */
-function dashboardBody(account: AdminAccount | null): ReturnType<typeof html> {
+/** Document workspace; account security has its own authenticated page. */
+function dashboardBody(emailEnabled: boolean): ReturnType<typeof html> {
   return html`<h1>Issue a certificate</h1>
 <p class="lede">Compose a fresh credential. Each issuance is signed, logged, and sealed.</p>
 <p class="muted" id="status" role="status" aria-live="polite"></p>
@@ -459,11 +493,11 @@ function dashboardBody(account: AdminAccount | null): ReturnType<typeof html> {
 
 <div id="panel-certificate" class="mode-panel" role="tabpanel" tabindex="0"
   aria-labelledby="tab-certificate">
-  ${certificatePanel()}
+  ${certificatePanel(emailEnabled)}
 </div>
 <div id="panel-letterhead" class="mode-panel" role="tabpanel" tabindex="0"
   aria-labelledby="tab-letterhead" hidden>
-  ${letterheadPanel()}
+  ${letterheadPanel(emailEnabled)}
 </div>
 <div id="panel-upload" class="mode-panel" role="tabpanel" tabindex="0"
   aria-labelledby="tab-upload" hidden>
@@ -475,17 +509,22 @@ function dashboardBody(account: AdminAccount | null): ReturnType<typeof html> {
   <h2>Issued credentials</h2>
   <div class="actions">
     <button type="button" class="secondary" data-action="refresh-list">Refresh list</button>
-    <button type="button" class="secondary" data-action="logout">Sign out</button>
   </div>
+  <div class="issued-table-scroll" role="region" aria-label="Issued documents" tabindex="0">
   <table>
-    <thead><tr><th>Credential ID</th><th>Recipient</th><th>Type</th><th>Status</th><th><span class="sr-only">Actions</span></th></tr></thead>
-    <tbody id="cred-rows"><tr><td colspan="5" class="muted">Loading…</td></tr></tbody>
+    <thead><tr><th>Credential ID</th><th>Recipient</th><th>Type</th><th>Status</th><th>Email delivery</th><th><span class="sr-only">Actions</span></th></tr></thead>
+    <tbody id="cred-rows"><tr><td colspan="6" class="muted">Loading…</td></tr></tbody>
   </table>
+  </div>
 </div>
 
-<div class="card" id="account-security">
+`;
+}
+
+function securityBody(account: AdminAccount | null): ReturnType<typeof html> {
+  return html`<div class="card" id="account-security">
   ${STUDS}
-  <h2>Account security</h2>
+  <h2>Sign-in and recovery</h2>
   <p><span id="passkey-count">${account?.webauthnCredentials.length ?? 0} registered passkeys</span> · ${account?.recoveryCodeHashes.length ?? 0} recovery codes remaining · Authenticator ${account?.totpSecretEnc ? 'active' : 'not confirmed'}</p>
   <p>Keep at least two working passkeys on separate devices. After recovery, add a new passkey here and test it in a separate browser session before signing out. Save recovery codes somewhere you can reach if your phone is lost.</p>
   <h3>Passkeys and security keys</h3>

@@ -1,3 +1,4 @@
+import type { DocumentEmailSender } from './email/provider.js';
 /**
  * The injected collaborator set for the issuer service.
  *
@@ -44,6 +45,7 @@ export interface SecretSealer {
 
 export interface IssuerDeps {
   env: AppEnv;
+  emailSender?: DocumentEmailSender;
   logger: Logger;
   credentialRepo: CredentialRepository;
   blobStore: BlobStore;

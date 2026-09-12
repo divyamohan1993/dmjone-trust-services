@@ -88,6 +88,7 @@ export const issueCredentialObject = z.object({
   attestation: z.literal(true),
   /** The candidate's private download password (gates the signed PDF). */
   password: z.string().min(8).max(128),
+  recipientEmail: z.string().trim().email().max(254).optional(),
 });
 
 /** Content guard for a certificate; internship type also blocks employment language. */
@@ -130,6 +131,7 @@ export const issueLetterObject = z.object({
   attestation: z.literal(true),
   /** The recipient's private download password (gates the signed PDF). */
   password: z.string().min(8).max(128),
+  recipientEmail: z.string().trim().email().max(254).optional(),
 });
 
 /** Content guard for a letter; recipient address lines are NOT denylist-scanned

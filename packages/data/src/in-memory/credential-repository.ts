@@ -9,6 +9,7 @@
  */
 
 import {
+  canonicalJson,
   AppError,
   ERROR_CODE,
   type CredentialRecord,
@@ -22,6 +23,13 @@ export function createInMemoryCredentialRepository(): CredentialRepository {
   const records = new Map<string, CredentialRecord>();
 
   return {
+    async compareAndSetEmailDelivery(id, expected, next) {
+      const record = records.get(id);
+      if (!record || record.erased || (next.status === 'sending' && record.status !== 'valid')) return false;
+      if (canonicalJson(record.emailDelivery ?? null) !== canonicalJson(expected)) return false;
+      record.emailDelivery = structuredClone(next);
+      return true;
+    },
     async create(record: CredentialRecord): Promise<void> {
       if (records.has(record.id)) {
         throw new AppError(

@@ -1,3 +1,4 @@
+import { emailAfterIssuance, requireEmailRequest, requireEmailConfiguration, emailSummary, sendDocumentEmail } from '../email/delivery.js';
 /**
  * Authenticated credential API: issue, revoke, list.
  *
@@ -82,6 +83,7 @@ function toListItem(record: CredentialRecord): ListItem {
     status: record.status,
     createdAt: record.createdAt,
     logSeq: record.logSeq,
+    ...(emailSummary(record) && {email:emailSummary(record)}),
   };
 
   if (kind === 'letter') {
@@ -119,12 +121,15 @@ export function registerCredentialRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerD
         parsed.error.flatten(),
       );
     }
+    if (parsed.data.recipientEmail) requireEmailRequest(c, deps);
+    requireEmailConfiguration(deps, parsed.data.recipientEmail);
     const session = c.get('session');
     const { credentialId } = await issueCredential(deps, parsed.data, {
       requestId: c.get('requestId'),
       actor: session?.sub ?? 'admin',
     });
-    return c.json({ credentialId }, 201);
+    const email = await emailAfterIssuance(deps, credentialId, parsed.data.recipientEmail, c.get('requestId'));
+    return c.json({ credentialId, ...(email && {email}) }, 201);
   });
 
   // Exact preview — the real Chromium PDF for the SAME content issuance renders,
@@ -132,7 +137,7 @@ export function registerCredentialRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerD
   // audit). Same body as issue minus `password`. Strictly: validate →
   // assembleContent(placeholder id) → renderer.render → return PDF bytes.
   api.post('/preview', async (c) => {
-    const previewSchema = issueCredentialObject.omit({ password: true, attestation: true });
+    const previewSchema = issueCredentialObject.omit({ password: true, attestation: true, recipientEmail: true });
     const parsed = previewSchema.safeParse(await readJson(c));
     if (!parsed.success) {
       throw new AppError(
@@ -169,6 +174,13 @@ export function registerCredentialRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerD
       items: page.items.map(toListItem),
       ...(page.nextCursor !== undefined && { nextCursor: page.nextCursor }),
     });
+  });
+
+  api.post('/:credentialId/email/retry', async (c) => {
+    requireEmailRequest(c, deps);
+    const id = credentialIdParamSchema.safeParse({credentialId:c.req.param('credentialId')});
+    if (!id.success) throw new AppError(ERROR_CODE.BAD_REQUEST, 'Malformed credential id', 400);
+    return c.json({email:await sendDocumentEmail(deps, id.data.credentialId, c.get('requestId'))});
   });
 
   // Revoke a credential.

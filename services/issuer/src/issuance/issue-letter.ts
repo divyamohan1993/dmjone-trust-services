@@ -132,6 +132,7 @@ export async function issueLetter(
     logSeq: append.logSeq,
     logLeafHash: append.logLeafHash,
     passwordHash,
+    ...(input.recipientEmail && { recipientEmailEnc: deps.secretSealer.sealString(input.recipientEmail) }),
     section63: s63meta,
     // WS2-B / attestation — top-level only, never canonical-signed or in
     // /evidence. Always present on new records; attestedAt === createdAt.

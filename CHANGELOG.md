@@ -6,6 +6,18 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Security page and document email workflow — 2026-09-12
+
+- Moved account security to `/admin/security` with authenticated navigation and
+  a sign-in return path. Document forms no longer include key-management controls.
+- Added optional recipient email to certificate/letter generation, encrypted
+  delivery metadata, provider acceptance status, and bounded retries of the same
+  message without regenerating the signed document. Passwords are never emailed.
+- Added Resend and service-identity Pactmail adapters plus a concrete Pactmail API
+  contract. Production sending remains disabled pending provider selection/setup.
+- Preserved Cloudflare inbound email routing; no DNS records were modified.
+
+
 ### Registered key management — 2026-09-12
 
 - Account security lists registered passkeys/security keys with editable names,

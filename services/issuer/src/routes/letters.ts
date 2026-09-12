@@ -1,3 +1,4 @@
+import { emailAfterIssuance, requireEmailRequest, requireEmailConfiguration } from '../email/delivery.js';
 /**
  * Authenticated letterhead-letter API (Mode 2): issue + exact preview.
  *
@@ -56,18 +57,21 @@ export function registerLetterRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps)
         parsed.error.flatten(),
       );
     }
+    if (parsed.data.recipientEmail) requireEmailRequest(c, deps);
+    requireEmailConfiguration(deps, parsed.data.recipientEmail);
     const session = c.get('session');
     const { documentId } = await issueLetter(deps, parsed.data, {
       requestId: c.get('requestId'),
       actor: session?.sub ?? 'admin',
     });
-    return c.json({ documentId }, 201);
+    const email = await emailAfterIssuance(deps, documentId, parsed.data.recipientEmail, c.get('requestId'));
+    return c.json({ documentId, ...(email && {email}) }, 201);
   });
 
   // Exact preview — the real Chromium PDF for the SAME content issuance renders,
   // with NO side effects. Same body as issue minus `password`.
   api.post('/preview', async (c) => {
-    const previewSchema = issueLetterObject.omit({ password: true, attestation: true });
+    const previewSchema = issueLetterObject.omit({ password: true, attestation: true, recipientEmail: true });
     const parsed = previewSchema.safeParse(await readJson(c));
     if (!parsed.success) {
       throw new AppError(

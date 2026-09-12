@@ -1,3 +1,4 @@
+import { buildEmailSender } from './email/config.js';
 /**
  * Issuer service composition root (orchestrator-owned).
  *
@@ -47,7 +48,9 @@ async function main(): Promise<void> {
   if (env.ANCHOR_GITHUB_REPO) anchorConfig.githubRepo = env.ANCHOR_GITHUB_REPO;
   if (env.ANCHOR_GITHUB_TOKEN) anchorConfig.githubToken = env.ANCHOR_GITHUB_TOKEN;
 
+  const emailSender = await buildEmailSender(env);
   const app = createIssuerApp({
+    ...(emailSender && { emailSender }),
     env,
     logger,
     credentialRepo: stores.credentials,

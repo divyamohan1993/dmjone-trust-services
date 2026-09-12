@@ -258,6 +258,21 @@ describe('security headers', () => {
   });
 });
 
+describe('private email metadata', () => {
+  it('never exposes delivery fields in public verification responses or pages', async () => {
+    const h = makeHarness({recipientEmailEnc:'private-address-ciphertext', emailDelivery:{
+      status:'accepted',provider:'resend',encryptedMessage:'private-email-ciphertext',createdAt:1,updatedAt:2,attempts:1,leaseId:'private-lease',leaseUntil:2,providerId:'private-provider-id',
+    }});
+    for (const path of [`/api/verify/${h.record.id}`, `/c/${h.record.id}`, `/api/credentials/${h.record.id}/evidence`]) {
+      const res = await h.app.request(path); expect(res.status).toBe(200);
+      const body = await res.text();
+      for (const field of ['recipientEmailEnc','emailDelivery','private-address-ciphertext','private-email-ciphertext','private-provider-id']) {
+        expect(body.includes(field)).toBe(false);
+      }
+    }
+  });
+});
+
 describe('GET /api/verify/:credentialId', () => {
   it('returns a valid VerificationResult with public fields for a good credential', async () => {
     const { app } = makeHarness();

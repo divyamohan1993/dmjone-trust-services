@@ -1,3 +1,4 @@
+import type { DocumentEmailDelivery } from './types.js';
 /**
  * Interfaces that define the seams between streams. Each stream implements the
  * interfaces it owns and consumes others' through these declarations only —
@@ -161,6 +162,8 @@ export interface PasswordHasher {
 // ─────────────────────────────── Data (Stream D) ───────────────────────────
 
 export interface CredentialRepository {
+  /** Atomic delivery lease/outcome update; erased records can never regain email data. */
+  compareAndSetEmailDelivery(id: string, expected: DocumentEmailDelivery | null, next: DocumentEmailDelivery): Promise<boolean>;
   create(record: CredentialRecord): Promise<void>;
   getById(id: string): Promise<CredentialRecord | null>;
   /**

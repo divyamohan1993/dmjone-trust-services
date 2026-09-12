@@ -38,6 +38,12 @@ export function adminScript(templatesJson: string = '[]'): string {
   const serializerSource = serializeBlock.toString() + '\n' + serializeBody.toString();
   return `(function(){
 "use strict";
+function redirectLegacySecurity(){
+  if(location.pathname === '/admin' && location.hash === '#account-security'){ location.replace('/admin/security'); return true; }
+  return false;
+}
+window.addEventListener('hashchange', redirectLegacySecurity);
+if(redirectLegacySecurity()) return;
 var DOC_TEMPLATES = ${templatesJson};
 ${serializerSource}
 var statusEl = document.getElementById('status');
@@ -345,7 +351,7 @@ function renderRows(items){
   while(tb.firstChild) tb.removeChild(tb.firstChild);
   if(!items.length){
     var tr0 = document.createElement('tr'); var td0 = document.createElement('td');
-    td0.colSpan = 5; td0.className = 'muted'; td0.textContent = 'No credentials yet.';
+    td0.colSpan = 6; td0.className = 'muted'; td0.textContent = 'No credentials yet.';
     tr0.appendChild(td0); tb.appendChild(tr0); return;
   }
   items.forEach(function(it){
@@ -357,6 +363,7 @@ function renderRows(items){
     tr.appendChild(cell(it.recipientName || it.label || ''));
     tr.appendChild(cell(it.type || it.kind || ''));
     tr.appendChild(cell(it.status, {badge:true}));
+    tr.appendChild(cell(it.email ? emailStatus(it.email.status) : 'Not requested'));
     var actions = document.createElement('td');
     if(it.status !== 'revoked'){
       var btn = document.createElement('button');
@@ -364,6 +371,15 @@ function renderRows(items){
       btn.setAttribute('aria-label', 'Revoke credential ' + it.credentialId);
       btn.setAttribute('data-revoke', it.credentialId);
       actions.appendChild(btn);
+    }
+    if(it.email && it.email.canRetry && it.status !== 'revoked'){
+      var retry = document.createElement('button'); retry.type = 'button'; retry.className = 'secondary';
+      retry.textContent = 'Retry email'; retry.addEventListener('click', function(){
+        retry.disabled = true;
+        api('/api/credentials/'+encodeURIComponent(it.credentialId)+'/email/retry', {}).then(function(j){
+          setStatus('Document '+it.credentialId+': '+emailStatus(j.email.status)); return refreshList();
+        }).catch(function(e){setStatus(e.message,true); retry.disabled=false;});
+      }); actions.appendChild(retry);
     }
     tr.appendChild(actions);
     tb.appendChild(tr);
@@ -389,17 +405,33 @@ function buildPayload(form, wantPassword){
   };
   // attestation rides ISSUE only (gated on wantPassword); the preview schema
   // omits both password and attestation, so preview must NOT send it.
-  if(wantPassword){ payload.password = data.get('password'); payload.attestation = true; }
+  if(wantPassword){ payload.password = data.get('password'); payload.attestation = true;
+    if(data.get('sendEmail')) payload.recipientEmail = String(data.get('recipientEmail')||'').trim();
+  }
   var closing = String(data.get('closingLine')||'').trim();
   if(closing) payload.closingLine = closing;
   return payload;
 }
+function emailStatus(status){
+  return {pending:'Not sent yet', sending:'Sending', accepted:'Accepted by mail provider', rejected:'Email not sent', uncertain:'Delivery unconfirmed — retry email', outcome_unknown:'Delivery unconfirmed — check with the mail provider', not_queued:'Email not queued'}[status] || status;
+}
+function syncEmailFields(form){
+  var toggle = form.querySelector('[name="sendEmail"]'), input = form.querySelector('[name="recipientEmail"]');
+  if(toggle && input){ input.disabled = !toggle.checked; input.required = toggle.checked; }
+}
+function setGenerating(form, busy){
+  form.dataset.generating = busy ? 'yes' : '';
+  var submit = form.querySelector('button[type="submit"]'); if(submit) submit.disabled = busy;
+}
+function generatedMessage(id, email){ return 'Generated '+id+'.'+(email ? ' '+emailStatus(email.status)+'.' : ''); }
 function issue(form){
+  if(form.dataset.generating) return;
   if(!attestChecked('f-attest')){ setStatus(ATTEST_MSG, true); return; }
-  setStatus('Issuing…');
+  setGenerating(form,true); setStatus('Generating and securing certificate…');
   return api('/api/credentials', buildPayload(form, true))
-    .then(function(j){ setStatus('Issued '+j.credentialId+'.'); resetEditor(); form.reset(); syncEcho(); return refreshList(); })
-    .catch(function(e){ setStatus('Issue failed: '+e.message, true); });
+    .then(function(j){ setStatus(generatedMessage(j.credentialId,j.email)); resetEditor(); form.reset(); syncEmailFields(form); syncEcho(); return refreshList(); })
+    .catch(function(e){ setStatus('Generation could not be confirmed: '+e.message+'. Check Issued credentials before generating again.', true); })
+    .finally(function(){setGenerating(form,false);});
 }
 // ---- Mode 2 (letterhead) payload + issue. Reuses the SHARED rich body editor
 // (collectBody scoped to the letter root) and the SHARED blobPreview helper.
@@ -427,18 +459,22 @@ function buildLetterPayload(form, wantPassword){
   if(scope) payload.scope = scope; // internship-group letters → employment-term guard
   // attestation rides ISSUE only (gated on wantPassword); the letter preview
   // schema omits both password and attestation, so preview must NOT send it.
-  if(wantPassword){ payload.password = data.get('password'); payload.attestation = true; }
+  if(wantPassword){ payload.password = data.get('password'); payload.attestation = true;
+    if(data.get('sendEmail')) payload.recipientEmail = String(data.get('recipientEmail')||'').trim();
+  }
   return payload;
 }
 function issueLetter(form){
+  if(form.dataset.generating) return;
   if(!attestChecked('lf-attest')){ setStatus(ATTEST_MSG, true); return; }
-  setStatus('Issuing letter…');
+  setGenerating(form,true); setStatus('Generating and securing letter…');
   return api('/api/letters', buildLetterPayload(form, true))
     .then(function(j){
-      setStatus('Issued letter '+j.documentId+'.');
-      resetEditor(letterRoot()); form.reset(); return refreshList();
+      setStatus(generatedMessage(j.documentId,j.email));
+      resetEditor(letterRoot()); form.reset(); syncEmailFields(form); return refreshList();
     })
-    .catch(function(e){ setStatus('Issue letter failed: '+e.message, true); });
+    .catch(function(e){ setStatus('Generation could not be confirmed: '+e.message+'. Check Issued credentials before generating again.', true); })
+    .finally(function(){setGenerating(form,false);});
 }
 function revoke(id){
   if(!id) return;
@@ -905,6 +941,11 @@ if(keyAddForm){
     form.addEventListener('submit', function(ev){ ev.preventDefault(); changePasskey(kind, form); });
   });
 }
+['issue-form','letter-form'].forEach(function(id){
+  var form = document.getElementById(id); if(!form) return;
+  var toggle = form.querySelector('[name="sendEmail"]');
+  if(toggle) toggle.addEventListener('change',function(){syncEmailFields(form);});
+});
 var issueForm = document.getElementById('issue-form');
 if(issueForm) issueForm.addEventListener('submit', function(ev){ ev.preventDefault(); issue(issueForm); });
 var letterForm = document.getElementById('letter-form');

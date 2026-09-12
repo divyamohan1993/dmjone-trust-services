@@ -127,6 +127,7 @@ export async function issueCredential(
     logSeq: append.logSeq,
     logLeafHash: append.logLeafHash,
     passwordHash,
+    ...(input.recipientEmail && { recipientEmailEnc: deps.secretSealer.sealString(input.recipientEmail) }),
     section63: s63meta,
     // WS2-B / attestation — top-level only, never in the canonical signed
     // payload or /evidence. The token is always present on new records (plain

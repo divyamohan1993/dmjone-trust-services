@@ -70,6 +70,34 @@ describe('GET /admin (server-rendered, no CDN)', () => {
   });
 });
 
+describe('separate account security section', () => {
+  it('keeps key controls out of the documents workspace', async () => {
+    const deps = buildDeps(); const app = createIssuerApp(deps);
+    const cookie = await mintSessionCookie(deps.env);
+    const body = await (await app.request('/admin', {headers:{cookie}})).text();
+    expect(body).toContain('href="/admin/security"');
+    expect(body).not.toContain('id="account-security"');
+    expect(body).not.toContain('id="passkey-add-form"');
+  });
+  it('renders only account controls on the authenticated security page', async () => {
+    const deps = buildDeps(); const app = createIssuerApp(deps);
+    const cookie = await mintSessionCookie(deps.env);
+    const body = await (await app.request('/admin/security', {headers:{cookie}})).text();
+    expect(body).toContain('id="account-security"');
+    expect(body).toContain('id="passkey-add-form"');
+    expect(body).not.toContain('id="issue-form"');
+    expect(body).not.toContain('id="cred-rows"');
+  });
+  it('requires sign-in and returns to security after authentication', async () => {
+    const deps = buildDeps(); const app = createIssuerApp(deps);
+    const res = await app.request('/admin/security');
+    expect(res.status).toBe(302); expect(res.headers.get('location')).toBe('/admin?section=security');
+    const cookie = await mintSessionCookie(deps.env);
+    const back = await app.request('/admin?section=security', {headers:{cookie}});
+    expect(back.headers.get('location')).toBe('/admin/security');
+  });
+});
+
 // ---------------------------------------------------------------------------
 // The live body editor markup (frozen contract §4): the textarea is replaced by
 // the "type-inside-the-render" composing surface — an editable body column with
@@ -370,7 +398,7 @@ describe('GET /admin — 3-mode console shell (§E)', () => {
     expect(body).toMatch(/<textarea[^>]*id="lf-recipient"/);
     // The letterhead panel reuses the SHARED rich body editor (distinct id).
     expect(body).toContain('id="letter-body-editor"');
-    expect(body).toMatch(/<button[^>]*type="submit"[^>]*>Issue letter<\/button>|>Issue letter<\/button>/);
+    expect(body).toMatch(/<button[^>]*type="submit"[^>]*>Generate letter<\/button>|>Generate letter<\/button>/);
   });
 
   it('renders NO inline style="" attribute anywhere in the admin HTML (CSP)', async () => {

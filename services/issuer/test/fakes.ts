@@ -1,3 +1,4 @@
+import type { DocumentEmailDelivery } from '@dmjone/shared';
 import { canonicalJson } from '@dmjone/shared';
 /**
  * In-line fakes of the `@dmjone/shared` interfaces the issuer consumes.
@@ -72,9 +73,16 @@ export class FakeCredentialRepo implements CredentialRepository {
     }
     if (Array.isArray(c['bodyParagraphs'])) c['bodyParagraphs'] = [];
     if (Array.isArray(c['recipientLines'])) c['recipientLines'] = [];
+    delete r.recipientEmailEnc; delete r.emailDelivery;
     r.canonicalPayload = '';
     r.erased = true;
     r.erasedAt = at;
+  }
+  async compareAndSetEmailDelivery(id: string, expected: DocumentEmailDelivery | null, next: DocumentEmailDelivery): Promise<boolean> {
+    const record = this.records.get(id);
+    if (!record || record.erased || (next.status === 'sending' && record.status !== 'valid')) return false;
+    if (canonicalJson(record.emailDelivery ?? null) !== canonicalJson(expected)) return false;
+    record.emailDelivery = structuredClone(next); return true;
   }
   async exists(id: string): Promise<boolean> {
     return this.records.has(id);

@@ -85,6 +85,14 @@ button.secondary:hover,.secondary:hover{background:#FBF7EF;color:var(--ink)}
 button.danger{background:var(--bad-soft);border-color:var(--bad);color:var(--bad)}
 button.danger:hover{background:#F1D4D1;color:var(--bad)}
 
+.issued-table-scroll{position:relative;max-width:100%;overflow-x:auto}
+.email-fields{border:1px solid var(--rule-outer);border-radius:10px;padding:16px;margin:18px 0}
+.email-toggle{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.email-toggle input{width:auto}
+.admin-nav{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid var(--rule-outer)}
+.admin-nav a{padding:10px 14px;border-radius:8px;color:var(--ink);text-decoration:none}
+.admin-nav a[aria-current="page"]{background:#FBF7EF;color:var(--gold-deep);font-weight:600}
+.admin-nav button{margin-left:auto}
 /* Registered security keys: wrapping rows and accessible native dialogs. */
 .passkey-list{list-style:none;margin:16px 0;padding:0;border:1px solid var(--rule-outer);border-radius:12px;overflow:hidden}
 .passkey-row{display:flex;gap:16px;align-items:flex-start;padding:20px;border-bottom:1px solid var(--rule-outer)}

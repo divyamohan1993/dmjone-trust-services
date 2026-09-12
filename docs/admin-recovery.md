@@ -15,7 +15,7 @@ After recovery, use **Account security → Add a passkey or security key**.
 
 ## Manage registered keys
 
-Once signed in, Account security lists each key by name, type inferred from its
+Once signed in, open [Account security](https://issue.dmj.one/admin/security) from the navigation. This separate page lists each key by name, type inferred from its
 reported transports, registration date, and last recorded sign-in. Give new keys
 recognisable names, and use **Rename** or **Remove** on the selected row. Removing
 a key only removes its registration here; the device/password-manager copy is

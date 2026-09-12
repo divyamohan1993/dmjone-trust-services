@@ -1,3 +1,4 @@
+import { canonicalJson, type DocumentEmailDelivery } from '@dmjone/shared';
 /**
  * In-line fakes of the @dmjone/shared interfaces the verify service consumes.
  *
@@ -189,6 +190,12 @@ export class FakeCredentialRepository implements CredentialRepository {
     return Promise.resolve(null);
   }
 
+  async compareAndSetEmailDelivery(id: string, expected: DocumentEmailDelivery | null, next: DocumentEmailDelivery): Promise<boolean> {
+    const r = this.byId.get(id);
+    if (!r || r.erased || (next.status === 'sending' && r.status !== 'valid')) return false;
+    if (canonicalJson(r.emailDelivery ?? null) !== canonicalJson(expected)) return false;
+    r.emailDelivery = structuredClone(next); return true;
+  }
   exists(id: string): Promise<boolean> {
     return Promise.resolve(this.byId.has(id));
   }
@@ -204,6 +211,7 @@ export class FakeCredentialRepository implements CredentialRepository {
   erase(id: string, at: string): Promise<void> {
     const r = this.byId.get(id);
     if (r) {
+      delete r.recipientEmailEnc; delete r.emailDelivery;
       const content = { ...(r.content as Record<string, unknown>) };
       for (const k of ['recipientName', 'intro', 'title', 'kicker', 'closingLine', 'subject', 'salutation', 'valediction', 'reference', 'originalFilename']) {
         if (k in content) content[k] = '';

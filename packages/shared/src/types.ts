@@ -195,7 +195,23 @@ export interface Section63Metadata {
  * {@link documentKind}), so records written before the generalization stay
  * valid unchanged.
  */
+/** Private email delivery state; never part of a signed/public document projection. */
+export interface DocumentEmailDelivery {
+  status: 'sending' | 'accepted' | 'rejected' | 'uncertain' | 'outcome_unknown';
+  provider: 'resend' | 'pactmail';
+  encryptedMessage: string;
+  createdAt: number;
+  updatedAt: number;
+  attempts: number;
+  leaseId: string;
+  leaseUntil: number;
+  providerId?: string;
+}
+
 export interface CredentialRecord {
+  /** Encrypted delivery address, kept out of content and public verification responses. */
+  recipientEmailEnc?: string;
+  emailDelivery?: DocumentEmailDelivery;
   id: string;
   /** Absent ⇒ `'certificate'`. */
   kind?: DocumentKind;

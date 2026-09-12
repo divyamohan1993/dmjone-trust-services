@@ -1,10 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { AppError } from '@dmjone/shared';
+import { AppError, type DocumentEmailDelivery } from '@dmjone/shared';
 import type { LetterContent, UploadAttestation } from '@dmjone/shared';
 import { createInMemoryCredentialRepository } from '../src/in-memory/credential-repository.js';
 import { makeLetterRecord, makeRecord, makeUploadRecord } from './fixtures.js';
 
 describe('in-memory CredentialRepository', () => {
+  it('serializes email claims and erases private delivery data', async () => {
+    const repo = createInMemoryCredentialRepository();
+    const record = {...makeRecord(), recipientEmailEnc:'encrypted-address'};
+    await repo.create(record);
+    const claim: DocumentEmailDelivery = {status:'sending',provider:'resend',encryptedMessage:'encrypted-message',createdAt:1,updatedAt:1,attempts:1,leaseId:'first',leaseUntil:60000};
+    expect(await Promise.all([
+      repo.compareAndSetEmailDelivery(record.id,null,claim),
+      repo.compareAndSetEmailDelivery(record.id,null,{...claim,leaseId:'second'}),
+    ])).toEqual([true,false]);
+    await repo.erase(record.id,'2026-09-12T00:00:00Z');
+    const erased = await repo.getById(record.id);
+    expect(erased?.recipientEmailEnc).toBeUndefined(); expect(erased?.emailDelivery).toBeUndefined();
+    expect(await repo.compareAndSetEmailDelivery(record.id,null,claim)).toBe(false);
+  });
+
   it('creates and reads back a record by id', async () => {
     const repo = createInMemoryCredentialRepository();
     const record = makeRecord();

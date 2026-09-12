@@ -8,6 +8,7 @@
  */
 
 import {
+  canonicalJson,
   AppError,
   ERROR_CODE,
   type CredentialRecord,
@@ -23,6 +24,17 @@ export function createFirestoreCredentialRepository(db: Firestore): CredentialRe
   const col = db.collection(COLLECTIONS.credentials);
 
   return {
+    async compareAndSetEmailDelivery(id, expected, next) {
+      const ref = col.doc(id);
+      return db.runTransaction(async tx => {
+        const snap = await tx.get(ref);
+        const record = snap.data() as CredentialRow | undefined;
+        if (!record || record.erased || (next.status === 'sending' && record.status !== 'valid')) return false;
+        if (canonicalJson(record.emailDelivery ?? null) !== canonicalJson(expected)) return false;
+        tx.update(ref, { emailDelivery: next });
+        return true;
+      });
+    },
     async create(record: CredentialRecord): Promise<void> {
       try {
         // create() fails if the doc already exists → map to CREDENTIAL_EXISTS.

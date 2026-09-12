@@ -70,6 +70,10 @@ Two Cloud Run services in `asia-east1`, scale-to-zero. See
 [`infra/DEPLOY.md`](infra/DEPLOY.md) for the runbook and the `ghs.googlehosted.com`
 CNAMEs, or run [`infra/autoconfig.sh`](infra/autoconfig.sh) for a one-command deploy.
 
+## Administrator recovery
+
+For lost passkeys or recovery codes, see [the recovery runbook](docs/admin-recovery.md).
+
 ## Status
 
 v1 complete — all packages green, full workspace builds clean, the end-to-end

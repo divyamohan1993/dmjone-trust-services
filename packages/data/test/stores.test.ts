@@ -80,6 +80,16 @@ describe('in-memory AdminRepository', () => {
     expect(await repo.get()).toBeNull();
   });
 
+  it('accepts one concurrent update and rejects a stale snapshot without losing fields', async () => {
+    const repo = createInMemoryAdminRepository();
+    const initial = { ...account(), recoveryCodeHashes: ['hash-a', 'hash-b'] };
+    expect(await repo.compareAndSave(null, initial)).toBe(true);
+    const next = { ...initial, recoveryCodeHashes: ['hash-b'] };
+    const outcomes = await Promise.all([repo.compareAndSave(initial, next), repo.compareAndSave(initial, next)]);
+    expect(outcomes).toEqual([true, false]);
+    expect((await repo.get())?.recoveryCodeHashes).toEqual(['hash-b']);
+  });
+
   it('upserts the single admin account, omitting absent optionals', async () => {
     const repo = createInMemoryAdminRepository();
     await repo.save(account());

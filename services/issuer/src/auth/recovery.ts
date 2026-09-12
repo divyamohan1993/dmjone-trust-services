@@ -13,12 +13,12 @@ import { randomBytes } from 'node:crypto';
 import { RECOVERY_CODE_COUNT } from '@dmjone/shared';
 import type { PasswordHasher } from '@dmjone/shared';
 
-/** Crockford-ish base32 alphabet (no 0/1/O/I to avoid transcription errors). */
-const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-const GROUP = 5;
-const GROUPS = 2; // 10 chars total per code → ~50 bits of entropy
+/** Exactly 32 symbols: byte modulo 32 is unbiased. */
+const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+const GROUP = 4;
+const GROUPS = 13; // 52 uniform base32 characters = 260 bits of entropy
 
-/** Generate one human-friendly code like `K7P2Q-9MR4T`. */
+/** Generate a grouped, copyable recovery secret with 260 random bits. */
 export function generateRecoveryCode(): string {
   const out: string[] = [];
   for (let g = 0; g < GROUPS; g += 1) {

@@ -99,6 +99,7 @@ function toGetOptions(o){
   return o;
 }
 function regResponseJSON(cred){
+  if(!cred) throw new Error('No credential returned. Please retry.');
   var r = cred.response;
   var out = {
     id: cred.id, rawId: bufToB64u(cred.rawId), type: cred.type,
@@ -113,6 +114,7 @@ function regResponseJSON(cred){
   return out;
 }
 function authResponseJSON(cred){
+  if(!cred) throw new Error('No credential returned. Please retry.');
   var r = cred.response;
   var out = {
     id: cred.id, rawId: bufToB64u(cred.rawId), type: cred.type,
@@ -131,8 +133,15 @@ function supported(){
   if(!window.PublicKeyCredential){ setStatus('This browser does not support passkeys.', true); return false; }
   return true;
 }
+var authBusy = false;
+function authError(e){
+  if(e.name === 'NotAllowedError') return 'The passkey prompt was cancelled, timed out, or could not find your key. Try another key or device, and use the browser profile where you saved it.';
+  if(e.name === 'SecurityError') return 'Open the issuer on its configured HTTPS domain to use your passkey.';
+  return e.message || 'The authenticator did not return a credential. Please retry.';
+}
 function register(label){
-  if(!supported()) return;
+  if(authBusy || !supported()) return;
+  authBusy = true;
   // Setup token only exists on the first-time bootstrap form; absent when adding
   // a passkey to a provisioned account (the session authorises that instead).
   var tokenEl = document.getElementById('setup-token');
@@ -143,30 +152,56 @@ function register(label){
     .then(function(opts){ return navigator.credentials.create({publicKey: toCreateOptions(opts)}); })
     .then(function(cred){ return api('/api/auth/register/verify', {response: regResponseJSON(cred), label: label}, hdr); })
     .then(function(){ setStatus('Passkey registered.'); location.reload(); })
-    .catch(function(e){ setStatus('Registration failed: '+e.message, true); });
+    .catch(function(e){ setStatus('Registration failed: '+authError(e), true); }).finally(function(){ authBusy = false; });
 }
-function login(){
-  if(!supported()) return;
+function login(allTransports){
+  if(authBusy || !supported()) return;
+  authBusy = true;
   setStatus('Requesting passkey…');
   return api('/api/auth/login/options', {})
-    .then(function(opts){ return navigator.credentials.get({publicKey: toGetOptions(opts)}); })
+     .then(function(opts){
+      // Retain the registered credential allowlist. Only relax routing hints;
+      // the server still verifies the signature, RP ID, origin and challenge.
+      if(allTransports && opts.allowCredentials) opts.allowCredentials.forEach(function(c){ delete c.transports; });
+      return navigator.credentials.get({publicKey: toGetOptions(opts)});
+    })
     .then(function(cred){ return api('/api/auth/login/verify', {response: authResponseJSON(cred)}); })
     .then(function(){ setStatus('Signed in.'); location.reload(); })
-    .catch(function(e){ setStatus('Sign-in failed: '+e.message, true); });
+    .catch(function(e){ setStatus('Sign-in failed: '+authError(e), true); }).finally(function(){ authBusy = false; });
 }
 function recover(){
+  if(authBusy) return;
+  authBusy = true;
   var code = (document.getElementById('rc-code')||{}).value || '';
   var token = (document.getElementById('rc-totp')||{}).value || '';
   setStatus('Verifying recovery…');
   return api('/api/auth/recovery/login', {recoveryCode: code, token: token})
-    .then(function(){ setStatus('Recovery accepted — registering a fresh passkey…'); return register('recovered'); })
-    .catch(function(e){ setStatus('Recovery failed: '+e.message, true); });
+    .then(function(){ location.reload(); })
+    .catch(function(e){ setStatus('Recovery failed: '+e.message, true); }).finally(function(){ authBusy = false; });
 }
 function out(obj){
   var el = document.getElementById('security-out'); if(!el) return;
   while(el.firstChild) el.removeChild(el.firstChild);
   var pre = document.createElement('pre'); pre.textContent = JSON.stringify(obj, null, 2);
   el.appendChild(pre);
+}
+function renderRecoveryCodes(data){
+  out(data);
+  var host = document.getElementById('security-out');
+  if(!host || !data.recoveryCodes) return;
+  var note = document.createElement('p');
+  note.textContent = 'Save these codes in your password manager or print them and keep them securely. Each code works once with your authenticator. Previous codes have been replaced.';
+  host.appendChild(note);
+  var btn = document.createElement('button'); btn.type = 'button';
+  btn.textContent = 'Download recovery codes';
+  btn.addEventListener('click', function(){
+    var contents = 'dmj.one Trust Services recovery codes\\nUse one code plus your authenticator code at the issuer.\\n\\n' + data.recoveryCodes.join('\\n');
+    var url = URL.createObjectURL(new Blob([contents], {type:'text/plain'}));
+    var link = document.createElement('a'); link.href = url; link.download = 'dmjone-recovery-codes.txt';
+    host.appendChild(link); link.click(); link.remove();
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+  });
+  host.appendChild(btn);
 }
 // TOTP enrollment panel: a scannable QR (PNG data-URI from the server), the
 // manual base32 key, and a 6-digit confirm box -> /api/auth/totp/verify. Built
@@ -765,7 +800,8 @@ document.addEventListener('click', function(ev){
   var actionEl = t.closest ? t.closest('[data-action]') : null;
   var action = actionEl ? actionEl.getAttribute('data-action') : null; if(!action) return;
   ev.preventDefault();
-  if(action==='login') login();
+  if(action==='login') login(false);
+  else if(action==='login-other') login(true);
   else if(action==='register') register((document.getElementById('pk-label')||{}).value||'primary');
   else if(action==='add-passkey') register('additional');
   else if(action==='recover') recover();
@@ -780,7 +816,7 @@ document.addEventListener('click', function(ev){
   else if(action==='upload-preview') previewUpload();
   else if(action==='logout') api('/api/auth/logout',{}).then(function(){location.reload();});
   else if(action==='totp-enroll') api('/api/auth/totp/enroll',{}).then(renderTotpEnroll).catch(function(e){setStatus(e.message,true);});
-  else if(action==='recovery-gen') api('/api/auth/recovery/generate',{}).then(out).catch(function(e){setStatus(e.message,true);});
+  else if(action==='recovery-gen') api('/api/auth/recovery/generate',{}).then(renderRecoveryCodes).catch(function(e){setStatus(e.message,true);});
 });
 var issueForm = document.getElementById('issue-form');
 if(issueForm) issueForm.addEventListener('submit', function(ev){ ev.preventDefault(); issue(issueForm); });

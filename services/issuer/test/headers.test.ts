@@ -8,11 +8,13 @@ describe('headers', () => {
     expect(ok.headers.get('content-security-policy')).toContain("nonce-");
     // The embedded exact-preview viewer frames a same-origin blob: PDF.
     expect(ok.headers.get('content-security-policy')).toContain("frame-src 'self' blob:");
+    expect(ok.headers.get('cache-control')).toBe('no-store');
     expect(ok.headers.get('x-frame-options')).toBe('DENY');
     expect(ok.headers.get('strict-transport-security')).toContain('max-age');
     expect(ok.headers.get('x-request-id')).toBeTruthy();
     const err = await app.request('/api/credentials', { method:'POST', headers:{'content-type':'application/json'}, body:'{}' });
     expect(err.status).toBe(401);
+    expect(err.headers.get('cache-control')).toBe('no-store');
     expect(err.headers.get('x-frame-options')).toBe('DENY');
     expect(err.headers.get('content-security-policy')).toContain('default-src');
     expect(err.headers.get('x-request-id')).toBeTruthy();

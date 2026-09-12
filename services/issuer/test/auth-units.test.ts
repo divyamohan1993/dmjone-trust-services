@@ -52,9 +52,11 @@ describe('lockout.evaluateLock (recovery+TOTP path)', () => {
     expect(evaluateLock(base, 10, Date.now())).toEqual({ locked: false });
   });
 
-  it('is permanently locked at or beyond MAX_AUTH_FAILURES', () => {
+  it('expires the threshold cooldown, including legacy permanent locks', () => {
+    const now = Date.parse(base.updatedAt);
     const locked = { ...base, failureCount: 10 };
-    expect(evaluateLock(locked, 10, Date.now())).toEqual({ locked: true, permanent: true });
+    expect(evaluateLock(locked, 10, now)).toEqual({ locked: true, permanent: false, retryAfterMs: MAX_BACKOFF_MS });
+    expect(evaluateLock(locked, 10, now + MAX_BACKOFF_MS)).toEqual({ locked: false });
   });
 
   it('is temporarily locked while lockedUntil is in the future', () => {
@@ -79,7 +81,7 @@ describe('lockout.evaluateLock (recovery+TOTP path)', () => {
 describe('recovery codes', () => {
   it('generates well-formed grouped codes', () => {
     const code = generateRecoveryCode();
-    expect(code).toMatch(/^[A-Z2-9]{5}-[A-Z2-9]{5}$/);
+    expect(code).toMatch(/^[0-9A-HJKMNP-TV-Z]{4}(?:-[0-9A-HJKMNP-TV-Z]{4}){12}$/);
   });
 
   it('normalises user formatting forgivingly', () => {

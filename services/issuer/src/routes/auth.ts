@@ -14,7 +14,7 @@
  *    door. The token closes the land-grab window that recurs whenever passkeys
  *    hit zero. See evaluateRegistration.
  *  - Brute-force: passkey failures back off only (never permanent); the
- *    guessable recovery+TOTP path backs off AND permanently locks after
+ *    guessable recovery+TOTP path backs off AND uses a one-hour cooldown after
  *    MAX_AUTH_FAILURES. The lock is checked BEFORE any Argon2 work.
  *  - Every auth event is written to the tamper-evident audit log. Secrets and
  *    recovery plaintext are returned to the client at most once and never logged.
@@ -77,6 +77,12 @@ async function audit(
   });
 }
 
+async function saveAdmin(deps: IssuerDeps, expected: AdminAccount | null, next: AdminAccount): Promise<void> {
+  if (!await deps.adminRepo.compareAndSave(expected, next)) {
+    throw new AppError(ERROR_CODE.AUTH_CHALLENGE_FAILED, 'Account changed during authentication; please retry', 409);
+  }
+}
+
 const SETUP_TOKEN_HEADER = 'x-setup-token';
 
 /** Map a denied {@link RegistrationGate} to its uniform AppError. */
@@ -110,6 +116,7 @@ export function registerAuthRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps): 
       passkeys: account?.webauthnCredentials.length ?? 0,
       totpEnrolled: !!account?.totpSecretEnc,
       authenticated: !!session,
+      ...(session && { remainingRecoveryCodes: account?.recoveryCodeHashes.length ?? 0 }),
     });
   });
 
@@ -167,7 +174,7 @@ export function registerAuthRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps): 
       webauthnCredentials: [...base.webauthnCredentials, credential],
       updatedAt: now,
     };
-    await deps.adminRepo.save(updated);
+    await saveAdmin(deps, account, updated);
     await audit(deps, c.get('requestId'), 'admin.passkey.register', {
       label: credential.label,
       bootstrap,
@@ -225,7 +232,7 @@ export function registerAuthRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps): 
           : cred,
       ),
     };
-    await deps.adminRepo.save(updated);
+    await saveAdmin(deps, account, updated);
     await issueSession(c, deps.env, { sub: updated.id, via: 'passkey' });
     await audit(deps, c.get('requestId'), 'admin.login.passkey.success', {
       credentialId: outcome.credentialId,
@@ -249,14 +256,12 @@ export function registerAuthRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps): 
     if (!account) throw new AppError(ERROR_CODE.NOT_FOUND, 'No admin account', 404);
 
     const enrollment = enrollTotp(deps.env, deps.secretSealer);
-    // AdminAccount.totpSecretEnc is the SINGLE source of truth for the sealed
-    // secret (no secretStore mirror — avoids drift). Persisted immediately so a
-    // page reload keeps the same secret. /totp/verify lets the admin confirm
-    // their authenticator scanned it correctly; the v1 AdminAccount model has no
-    // separate "confirmed" flag, so the secret is live from enrollment (the gate
-    // is the admin session here).
+    // Preserve the working authenticator until the replacement is confirmed.
     const now = new Date().toISOString();
-    await deps.adminRepo.save({ ...account, totpSecretEnc: enrollment.encryptedSecret, updatedAt: now });
+    await saveAdmin(deps, account, {
+      ...account, pendingTotpSecretEnc: enrollment.encryptedSecret,
+      pendingTotpExpiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(), updatedAt: now,
+    });
     await audit(deps, c.get('requestId'), 'admin.totp.enroll.begin');
 
     // Render the provisioning URI to a scannable QR PNG so the admin can scan it
@@ -273,14 +278,26 @@ export function registerAuthRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps): 
     const session = await readSession(c, deps.env);
     if (!session) throw new AppError(ERROR_CODE.UNAUTHENTICATED, 'Authentication required', 401);
     const account = await getAdmin(deps.adminRepo);
-    if (!account?.totpSecretEnc) {
+    if (!account || (!account.totpSecretEnc && !account.pendingTotpSecretEnc)) {
       throw new AppError(ERROR_CODE.BAD_REQUEST, 'TOTP is not enrolled', 400);
     }
     const body = (await readJson(c)) as { token?: string };
     const token = asString(body.token) ?? '';
-    const ok = verifyTotp(deps.env, deps.secretSealer, account.totpSecretEnc, token);
+    const pending = account.pendingTotpSecretEnc;
+    if (pending && !(Date.parse(account.pendingTotpExpiresAt ?? '') > Date.now())) {
+      throw new AppError(ERROR_CODE.AUTH_CHALLENGE_FAILED, 'Authenticator setup expired; start setup again', 401);
+    }
+    const secret = pending ?? account.totpSecretEnc!;
+    const ok = verifyTotp(deps.env, deps.secretSealer, secret, token);
     await audit(deps, c.get('requestId'), ok ? 'admin.totp.verify.success' : 'admin.totp.verify.fail');
     if (!ok) throw new AppError(ERROR_CODE.AUTH_CHALLENGE_FAILED, 'Invalid TOTP code', 401);
+    if (pending) {
+      const updated = { ...account, totpSecretEnc: pending, updatedAt: new Date().toISOString() };
+      delete updated.pendingTotpSecretEnc;
+      delete updated.pendingTotpExpiresAt;
+      await saveAdmin(deps, account, updated);
+      await audit(deps, c.get('requestId'), 'admin.totp.enroll.confirm');
+    }
     return c.json({ verified: true });
   });
 
@@ -294,7 +311,7 @@ export function registerAuthRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps): 
 
     const { plaintext, hashes } = await generateRecoveryCodes(deps.passwordHasher);
     const now = new Date().toISOString();
-    await deps.adminRepo.save({ ...account, recoveryCodeHashes: hashes, updatedAt: now });
+    await saveAdmin(deps, account, { ...account, recoveryCodeHashes: hashes, updatedAt: now });
     await audit(deps, c.get('requestId'), 'admin.recovery.generate', { count: hashes.length });
     // Plaintext shown exactly once; never persisted, never logged.
     return c.json({ recoveryCodes: plaintext });
@@ -311,20 +328,14 @@ export function registerAuthRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps): 
     }
 
     // Lock check FIRST — before any Argon2 work — so the endpoint can't be a
-    // CPU-burn amplifier, and so a permanent lock is enforced.
+    // CPU-burn amplifier, and so cooldowns are enforced.
     const now = Date.now();
     const lock = evaluateLock(account, deps.env.MAX_AUTH_FAILURES, now);
     if (lock.locked) {
       await audit(deps, c.get('requestId'), 'admin.recovery.locked', {
         permanent: lock.permanent,
       });
-      if (lock.permanent) {
-        throw new AppError(
-          ERROR_CODE.ACCOUNT_LOCKED,
-          'Account permanently locked after too many failed recovery attempts; reinstall required',
-          423,
-        );
-      }
+      c.header('Retry-After', String(Math.ceil(lock.retryAfterMs / 1000)));
       throw new AppError(
         ERROR_CODE.ACCOUNT_LOCKED,
         `Too many attempts; retry after ${Math.ceil(lock.retryAfterMs / 1000)}s`,
@@ -343,7 +354,7 @@ export function registerAuthRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps): 
 
     if (!totpOk || !consumed) {
       const failed = recordFailure(account, now);
-      await deps.adminRepo.save(failed);
+      await saveAdmin(deps, account, failed);
       await audit(deps, c.get('requestId'), 'admin.recovery.fail', {
         failureCount: failed.failureCount,
       });
@@ -352,7 +363,7 @@ export function registerAuthRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps): 
 
     // Success: burn the used code, clear the lock, mint a recovery session.
     const cleared = recordSuccess({ ...account, recoveryCodeHashes: consumed.remaining }, now);
-    await deps.adminRepo.save(cleared);
+    await saveAdmin(deps, account, cleared);
     await issueSession(c, deps.env, { sub: cleared.id, via: 'recovery' });
     await audit(deps, c.get('requestId'), 'admin.recovery.success', {
       remaining: consumed.remaining.length,

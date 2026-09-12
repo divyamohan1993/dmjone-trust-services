@@ -1,27 +1,6 @@
-/**
- * Brute-force defence for admin authentication.
- *
- * Resolves a real requirement tension (spec §6 "permanent lockout after 10
- * fails" vs §1/§11 "lockout-proof"): a *global permanent* counter would let an
- * unauthenticated attacker brick the sole admin with a handful of POSTs — the
- * opposite of lockout-proof. So only the *guessable* factor is locked:
- *
- *   - Recovery-code + TOTP failures → the only brute-forceable path; these back
- *     off AND permanently lock after `MAX_AUTH_FAILURES`, per the super-admin
- *     standard (unlock = reinstall). This module governs exactly that path; the
- *     recovery route checks {@link evaluateLock} before any Argon2 work and
- *     calls {@link recordFailure}/{@link recordSuccess}.
- *   - Passkey auth failures are DELIBERATELY NOT rate-limited at the app layer
- *     and are exempt from this lock: passkeys are unforgeable, so locking on
- *     them would be pure attacker-gifted DoS, and writing `adminRepo` on every
- *     unauthenticated passkey miss would itself be a write-amplification vector.
- *     The volumetric shield for `/login/*` is Cloudflare at the edge. A passkey
- *     holder therefore always bypasses this lock — which is what makes the
- *     system lockout-proof: a recovery-path attacker who trips the permanent
- *     lock can never brick the genuine passkey-holding admin.
- *
- * `failureCount` and `lockedUntil` live on the `AdminAccount`. "Permanent" is
- * encoded as `failureCount >= MAX_AUTH_FAILURES` (no sentinel field needed).
+/** Recovery guesses use exponential cooldowns, never an irreversible lock.
+ * At the configured threshold, each failure imposes at least one hour.
+ * Passkey authentication remains independent of this cooldown.
  */
 
 import type { AdminAccount } from '@dmjone/shared';
@@ -44,7 +23,6 @@ export function backoffMs(failureCount: number): number {
 
 export type LockState =
   | { locked: false }
-  | { locked: true; permanent: true }
   | { locked: true; permanent: false; retryAfterMs: number };
 
 /**
@@ -52,15 +30,14 @@ export type LockState =
  * @param now epoch ms (injectable for tests).
  */
 export function evaluateLock(account: AdminAccount, maxFailures: number, now: number): LockState {
-  if (account.failureCount >= maxFailures) {
-    return { locked: true, permanent: true };
-  }
-  if (account.lockedUntil) {
-    const until = Date.parse(account.lockedUntil);
-    if (Number.isFinite(until) && until > now) {
-      return { locked: true, permanent: false, retryAfterMs: until - now };
-    }
-  }
+  const explicitUntil = Date.parse(account.lockedUntil ?? '');
+  // Legacy permanently locked accounts become usable one hour after their last
+  // update; malformed timestamps fail closed for this request.
+  const thresholdUntil = account.failureCount >= maxFailures
+    ? Date.parse(account.updatedAt) + MAX_BACKOFF_MS : 0;
+  const until = Math.max(Number.isFinite(explicitUntil) ? explicitUntil : 0,
+    Number.isFinite(thresholdUntil) ? thresholdUntil : now + MAX_BACKOFF_MS);
+  if (until > now) return { locked: true, permanent: false, retryAfterMs: until - now };
   return { locked: false };
 }
 

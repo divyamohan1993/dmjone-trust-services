@@ -4,7 +4,7 @@
  * (totpSecretEnc) are opaque ciphertext to this layer.
  */
 
-import type { AdminAccount, AdminRepository } from '@dmjone/shared';
+import { canonicalJson, type AdminAccount, type AdminRepository } from '@dmjone/shared';
 import type { Firestore } from '@google-cloud/firestore';
 import { COLLECTIONS, DOC_IDS } from './paths.js';
 import { rowToAdmin, type AdminAccountRow } from './rows.js';
@@ -17,6 +17,17 @@ export function createFirestoreAdminRepository(db: Firestore): AdminRepository {
       const snap = await ref.get();
       const data = snap.data() as AdminAccountRow | undefined;
       return data ? rowToAdmin(data) : null;
+    },
+
+    async compareAndSave(expected, next) {
+      return db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        const data = snap.data() as AdminAccountRow | undefined;
+        const current = data ? rowToAdmin(data) : null;
+        if (canonicalJson(current) !== canonicalJson(expected)) return false;
+        tx.set(ref, { ...next });
+        return true;
+      });
     },
 
     async save(account: AdminAccount): Promise<void> {

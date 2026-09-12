@@ -2,7 +2,7 @@
   "name": "dmjone-trust-services",
   "version": "0.1.0",
   "private": true,
-  "description": "dmj.one Trust Services — quantum-verifiable certificate issuing & verification suite",
+  "description": "dmj.one Trust Services \u2014 quantum-verifiable certificate issuing & verification suite",
   "packageManager": "pnpm@10.30.1",
   "engines": {
     "node": ">=22"
@@ -18,22 +18,17 @@
     "dev:verify": "pnpm --filter @dmjone/verify dev"
   },
   "devDependencies": {
-    "@types/node": "^22.10.2",
-    "eslint": "^9.17.0",
-    "prettier": "^3.4.2",
-    "tsx": "^4.19.2",
-    "typescript": "^5.7.2",
-    "typescript-eslint": "^8.18.1",
-    "vitest": "^2.1.8"
+    "@types/node": "^22.20.2",
+    "eslint": "^9.39.5",
+    "prettier": "^3.9.6",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.70.0",
+    "vitest": "^4.1.11"
   },
   "pnpm": {
-    "auditConfig": {
-      "//": "Time-boxed, reviewed audit ignores (WS6 fail-closed override). ALL THREE are DEV/BUILD-ONLY toolchain advisories with NO runtime/production exposure; revisit + bump by 2026-09-01. (1) crypto-js (GHSA-xwcq-pm8m-c4vf): pulled only via @signpdf, whose ForgePadesSigner is dormant/test-only (production embeds no PAdES). (2) vitest (GHSA-5xrq-8626-4rwp): UI-server RCE, only when running `vitest --ui`; never run in CI/prod; fix = vitest 2->3 major bump (deferred, validate separately). (3) esbuild (GHSA-gv7w-rqvm-qjhr): via tsx/vite build tooling, build-time only. Do NOT add runtime advisories here.",
-      "ignoreGhsas": [
-        "GHSA-xwcq-pm8m-c4vf",
-        "GHSA-5xrq-8626-4rwp",
-        "GHSA-gv7w-rqvm-qjhr"
-      ]
+    "overrides": {
+      "crypto-js": "^4.2.0"
     }
   }
 }

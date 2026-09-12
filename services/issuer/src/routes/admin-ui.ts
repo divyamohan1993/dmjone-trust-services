@@ -22,7 +22,7 @@ import { html } from 'hono/html';
 
 import { getBrandImages } from '@dmjone/render';
 import { DOC_TEMPLATES } from '@dmjone/shared';
-import type { DocumentKind } from '@dmjone/shared';
+import type { AdminAccount, DocumentKind } from '@dmjone/shared';
 
 import type { IssuerDeps } from '../deps.js';
 import type { IssuerHonoEnv } from '../http/context.js';
@@ -190,7 +190,7 @@ export function registerAdminUiRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps
     const provisioned = isProvisioned(account);
 
     const body = session
-      ? dashboardBody()
+      ? dashboardBody(account)
       : signInBody(provisioned);
 
     return c.html(
@@ -223,19 +223,21 @@ ${provisioned
   <p>Use a registered passkey (Windows Hello, a phone, or a security key) to sign in.</p>
   <div class="actions">
     <button type="button" data-action="login">Sign in with passkey</button>
+    <button type="button" class="secondary" data-action="login-other">Try another key or device</button>
   </div>
 </div>
 <details class="panel">
   <summary>Lost your passkeys? Recover access</summary>
   <div class="inner">
   <p class="muted">Enter a one-time recovery code and your authenticator code, then register a fresh passkey.</p>
+  <p class="muted">Lost the recovery codes too? Your Google Cloud administrator can replace them through the authenticated recovery procedure. Your existing authenticator is still required.</p>
   <label for="rc-code">Recovery code</label>
   <input id="rc-code" name="recoveryCode" autocomplete="off" spellcheck="false" />
   <label for="rc-totp">Authenticator code</label>
   <input id="rc-totp" name="token" inputmode="numeric" autocomplete="one-time-code"
     pattern="[0-9]*" maxlength="6" />
   <div class="actions">
-    <button type="button" class="secondary" data-action="recover">Recover &amp; register passkey</button>
+    <button type="button" class="secondary" data-action="recover">Recover access</button>
   </div>
   </div>
 </details>`
@@ -438,7 +440,7 @@ function uploadPanel(): ReturnType<typeof html> {
 
 /** Authenticated dashboard: a 3-mode console (Certificate · Letterhead · Upload)
  * above the always-present issued-list + account-security cards. */
-function dashboardBody(): ReturnType<typeof html> {
+function dashboardBody(account: AdminAccount | null): ReturnType<typeof html> {
   return html`<h1>Issue a certificate</h1>
 <p class="lede">Compose a fresh credential. Each issuance is signed, logged, and sealed.</p>
 <p class="muted" id="status" role="status" aria-live="polite"></p>
@@ -484,6 +486,8 @@ function dashboardBody(): ReturnType<typeof html> {
 <div class="card">
   ${STUDS}
   <h2>Account security</h2>
+  <p>${account?.webauthnCredentials.length ?? 0} registered passkeys · ${account?.recoveryCodeHashes.length ?? 0} recovery codes remaining · Authenticator ${account?.totpSecretEnc ? 'active' : 'not confirmed'}</p>
+  <p>Keep at least two working passkeys on separate devices. After recovery, add a new passkey here and test it in a separate browser session before signing out. Save recovery codes somewhere you can reach if your phone is lost.</p>
   <div class="actions">
     <button type="button" class="secondary" data-action="add-passkey">Add another passkey</button>
     <button type="button" class="secondary" data-action="totp-enroll">Set up authenticator (TOTP)</button>

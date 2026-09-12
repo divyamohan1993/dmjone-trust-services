@@ -7,15 +7,15 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@dmjone/shared": "workspace:*",
     "@dmjone/crypto": "workspace:*",
     "@dmjone/data": "workspace:*",
     "@dmjone/render": "workspace:*",
+    "@dmjone/shared": "workspace:*",
     "@dmjone/verify": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^22.10.2",
-    "typescript": "^5.7.2",
-    "vitest": "^2.1.8"
+    "@types/node": "^22.20.2",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.11"
   }
 }

@@ -235,6 +235,8 @@ export interface AnchorRepository {
 export interface AdminRepository {
   get(): Promise<AdminAccount | null>;
   save(account: AdminAccount): Promise<void>;
+  /** Atomic compare-and-swap; rejects stale authentication state across instances. */
+  compareAndSave(expected: AdminAccount | null, next: AdminAccount): Promise<boolean>;
 }
 
 export interface AuditLog {

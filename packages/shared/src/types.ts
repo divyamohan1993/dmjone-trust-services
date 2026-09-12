@@ -358,6 +358,9 @@ export interface AdminAccount {
   webauthnCredentials: WebAuthnCredential[];
   /** Encrypted TOTP secret. */
   totpSecretEnc?: string;
+  /** Replacement is activated only after a successful confirmation, within 10 minutes. */
+  pendingTotpSecretEnc?: string;
+  pendingTotpExpiresAt?: string;
   /** Argon2id hashes of one-time recovery codes; consumed on use. */
   recoveryCodeHashes: string[];
   failureCount: number;

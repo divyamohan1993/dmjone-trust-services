@@ -24,17 +24,17 @@
     "@dmjone/data": "workspace:*",
     "@dmjone/render": "workspace:*",
     "@dmjone/shared": "workspace:*",
-    "@hono/node-server": "^2.0.4",
-    "@noble/hashes": "^2.2.0",
-    "@simplewebauthn/server": "^13.3.1",
-    "hono": "^4.12.23",
-    "otpauth": "^9.5.1",
+    "@hono/node-server": "^2.1.1",
+    "@noble/hashes": "^2.4.0",
+    "@simplewebauthn/server": "^13.3.3",
+    "hono": "^4.13.7",
+    "otpauth": "^9.5.2",
     "pino": "^10.3.1"
   },
   "devDependencies": {
-    "@types/node": "^22.10.2",
-    "tsx": "^4.19.2",
-    "typescript": "^5.7.2",
-    "vitest": "^2.1.8"
+    "@types/node": "^22.20.2",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.11"
   }
 }

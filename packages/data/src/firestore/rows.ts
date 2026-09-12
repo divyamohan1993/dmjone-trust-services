@@ -155,6 +155,8 @@ export function rowToAdmin(row: AdminAccountRow): AdminAccount {
     updatedAt: row.updatedAt,
   };
   if (row.totpSecretEnc !== undefined) out.totpSecretEnc = row.totpSecretEnc;
+  if (row.pendingTotpSecretEnc !== undefined) out.pendingTotpSecretEnc = row.pendingTotpSecretEnc;
+  if (row.pendingTotpExpiresAt !== undefined) out.pendingTotpExpiresAt = row.pendingTotpExpiresAt;
   if (row.lockedUntil !== undefined) out.lockedUntil = row.lockedUntil;
   return out;
 }

@@ -6,6 +6,23 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Security and access recovery — 2026-09-12
+
+- Added an IAM-authenticated recovery-code replacement procedure with an atomic
+  audit record, private output file, and no changes to existing TOTP or passkeys.
+- Recovery cooldowns now expire, including legacy permanent locks. Authentication
+  writes use atomic comparison to prevent stale updates and concurrent recovery
+  code consumption across Cloud Run instances.
+- New recovery codes contain 260 random bits and can be downloaded. The dashboard
+  reports backup-factor availability. Passkey sign-in offers a retry across device
+  transports and guards against overlapping browser ceremonies.
+- Authenticator replacements require confirmation within ten minutes before
+  replacing the working secret. Issuer responses prohibit caching.
+- Updated dependencies, including the test runner, and removed expired advisory
+  suppressions. Document signatures continue to use ML-DSA-87; no blanket claim
+  of post-quantum security for authentication or transport is made.
+
+
 ### Added
 
 - 2026-06-15: **Provable, signed revocation (court-admissibility hardening).** A

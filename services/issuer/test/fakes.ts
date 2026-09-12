@@ -1,3 +1,4 @@
+import { canonicalJson } from '@dmjone/shared';
 /**
  * In-line fakes of the `@dmjone/shared` interfaces the issuer consumes.
  *
@@ -172,6 +173,11 @@ export class FakeAdminRepo implements AdminRepository {
   account: AdminAccount | null = null;
   async get(): Promise<AdminAccount | null> {
     return this.account ? structuredClone(this.account) : null;
+  }
+  async compareAndSave(expected: AdminAccount | null, next: AdminAccount): Promise<boolean> {
+    if (canonicalJson(this.account) !== canonicalJson(expected)) return false;
+    this.account = structuredClone(next);
+    return true;
   }
   async save(account: AdminAccount): Promise<void> {
     this.account = structuredClone(account);

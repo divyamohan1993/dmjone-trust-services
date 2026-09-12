@@ -163,9 +163,10 @@ describe('TOTP + recovery setup require a session', () => {
     expect(res.status).toBe(401);
   });
 
-  it('enrolls TOTP with a session, sealing the secret at rest', async () => {
+  it('stages TOTP without replacing the working authenticator until confirmation', async () => {
     const deps = buildDeps();
-    deps.adminRepo.account = provisionedAccount();
+    const old = enrollTotp(deps.env, deps.secretSealer);
+    deps.adminRepo.account = provisionedAccount({ totpSecretEnc: old.encryptedSecret });
     const app = createIssuerApp(deps);
     const cookie = await mintSessionCookie(deps.env);
     const res = await post(app, '/api/auth/totp/enroll', {}, cookie);
@@ -176,12 +177,38 @@ describe('TOTP + recovery setup require a session', () => {
     // Secret persisted SEALED on the account as the SINGLE source of truth
     // (never the raw base32, and NOT mirrored to the secret store — drift-free).
     // The injected sealer must round-trip it back.
-    const sealed = deps.adminRepo.account?.totpSecretEnc;
+    expect(deps.adminRepo.account?.totpSecretEnc).toBe(old.encryptedSecret);
+    const sealed = deps.adminRepo.account?.pendingTotpSecretEnc;
     expect(sealed).toBeTruthy();
     expect(sealed).not.toContain(body.base32Secret);
     expect(deps.secretSealer.openString(sealed as string)).toBe(body.base32Secret);
     // No secret-store mirror (avoids drift; AdminAccount.totpSecretEnc is canonical).
     expect(deps.secretStore.secrets.has('admin_totp_secret')).toBe(false);
+    const { Secret, TOTP } = await import('otpauth');
+    const token = new TOTP({ algorithm: 'SHA1', digits: 6, period: 30, secret: Secret.fromBase32(body.base32Secret) }).generate();
+    const confirmed = await post(app, '/api/auth/totp/verify', { token }, cookie);
+    expect(confirmed.status).toBe(200);
+    expect(deps.adminRepo.account?.totpSecretEnc).toBe(sealed);
+    expect(deps.adminRepo.account?.pendingTotpSecretEnc).toBeUndefined();
+  });
+
+  it('rejects expired or incorrect replacement confirmation and preserves the active authenticator', async () => {
+    const deps = buildDeps();
+    const old = enrollTotp(deps.env, deps.secretSealer);
+    const replacement = enrollTotp(deps.env, deps.secretSealer);
+    deps.adminRepo.account = provisionedAccount({
+      totpSecretEnc: old.encryptedSecret, pendingTotpSecretEnc: replacement.encryptedSecret,
+      pendingTotpExpiresAt: new Date(Date.now() + 600000).toISOString(),
+    });
+    const app = createIssuerApp(deps);
+    const cookie = await mintSessionCookie(deps.env);
+    expect((await post(app, '/api/auth/totp/verify', { token: 'invalid' }, cookie)).status).toBe(401);
+    expect(deps.adminRepo.account?.totpSecretEnc).toBe(old.encryptedSecret);
+    deps.adminRepo.account!.pendingTotpExpiresAt = new Date(Date.now() - 1).toISOString();
+    const { Secret, TOTP } = await import('otpauth');
+    const token = new TOTP({ algorithm: 'SHA1', digits: 6, period: 30, secret: Secret.fromBase32(replacement.base32Secret) }).generate();
+    expect((await post(app, '/api/auth/totp/verify', { token }, cookie)).status).toBe(401);
+    expect(deps.adminRepo.account?.totpSecretEnc).toBe(old.encryptedSecret);
   });
 
   it('generates one-time recovery codes with a session', async () => {
@@ -251,13 +278,33 @@ describe('recovery login (recovery code + TOTP)', () => {
     expect(deps.adminRepo.account?.lockedUntil).toBeTruthy();
   });
 
-  it('permanently locks at MAX_AUTH_FAILURES and rejects before Argon2', async () => {
+  it('accepts only one of two simultaneous attempts with the same recovery code', async () => {
+    const { deps, app, codes, liveToken } = await enrolledDeps();
+    const body = { recoveryCode: codes[0], token: liveToken() };
+    const responses = await Promise.all([post(app, '/api/auth/recovery/login', body), post(app, '/api/auth/recovery/login', body)]);
+    expect(responses.filter(r => r.status === 200)).toHaveLength(1);
+    expect(responses.filter(r => r.headers.get('set-cookie')?.includes('__Host-dmj_admin='))).toHaveLength(1);
+    expect(deps.adminRepo.account?.recoveryCodeHashes).toHaveLength(2);
+  });
+
+  it('requires both recovery factors and accepts recovery after a legacy lock expires', async () => {
+    const { deps, app, codes, liveToken } = await enrolledDeps();
+    const res = await post(app, '/api/auth/recovery/login', { token: liveToken() });
+    expect(res.status).toBe(401);
+    deps.adminRepo.account!.failureCount = deps.env.MAX_AUTH_FAILURES;
+    deps.adminRepo.account!.updatedAt = new Date(Date.now() - 3600001).toISOString();
+    delete deps.adminRepo.account!.lockedUntil;
+    expect((await post(app, '/api/auth/recovery/login', { recoveryCode: codes[0], token: liveToken() })).status).toBe(200);
+  });
+
+  it('applies a one-hour cooldown at MAX_AUTH_FAILURES before Argon2', async () => {
     const { deps, app, codes, liveToken } = await enrolledDeps();
     // Pre-set the account to the permanent-lock threshold.
     deps.adminRepo.account = provisionedAccount({
       totpSecretEnc: deps.adminRepo.account?.totpSecretEnc as string,
       recoveryCodeHashes: deps.adminRepo.account?.recoveryCodeHashes ?? [],
       failureCount: deps.env.MAX_AUTH_FAILURES,
+      updatedAt: new Date().toISOString(),
     });
     const res = await post(app, '/api/auth/recovery/login', {
       recoveryCode: codes[0],

@@ -82,6 +82,7 @@ function applySecurityHeaders(c: Context<IssuerHonoEnv>, nonce: string | undefin
     "font-src 'self'",
   ].join('; ');
 
+  c.header('Cache-Control', 'no-store');
   c.header('Content-Security-Policy', csp);
   c.header('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
   c.header('X-Content-Type-Options', 'nosniff');

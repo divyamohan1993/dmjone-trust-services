@@ -154,7 +154,7 @@ export function errorHandler(deps: IssuerDeps): ErrorHandler<IssuerHonoEnv> {
  */
 export function requireAdmin(deps: IssuerDeps): MiddlewareHandler<IssuerHonoEnv> {
   return async (c: Context<IssuerHonoEnv>, next: Next) => {
-    const session = await readSession(c, deps.env);
+    const session = await readSession(c, deps.env, deps.adminRepo);
     if (!session) {
       throw new AppError(ERROR_CODE.UNAUTHENTICATED, 'Authentication required', 401);
     }

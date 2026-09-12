@@ -11,7 +11,28 @@ browser session before signing out of the working session. Save recovery codes
 in a password manager or securely offline; **Generate recovery codes** replaces
 the entire previous set, and **Download recovery codes** saves the new set.
 A recovery code always requires the currently enrolled TOTP authenticator.
-After recovery, use **Account security → Add another passkey**.
+After recovery, use **Account security → Add a passkey or security key**.
+
+## Manage registered keys
+
+Once signed in, Account security lists each key by name, type inferred from its
+reported transports, registration date, and last recorded sign-in. Give new keys
+recognisable names, and use **Rename** or **Remove** on the selected row. Removing
+a key only removes its registration here; the device/password-manager copy is
+unchanged. Rename and removal update the list without clearing document drafts.
+
+At least one key must remain registered. Concurrent removals cannot remove the
+last key. New passkey sessions record which key was used; the corresponding row
+shows **Used for this session**. Removing that key signs out the current session
+and causes other sessions associated with that key to lose access on their next
+request. Sessions created before this update have no key association and retain
+their existing expiry; recovery sessions are independent of individual keys.
+Historical last-use dates were not stored and are displayed as **Not recorded**
+until the next successful passkey sign-in.
+
+Key management is session-gated, uses same-origin JSON requests, performs atomic
+account updates, and writes rename/removal events to the audit log. The listing
+returns display metadata only, never credential public-key bytes or other factors.
 
 Authenticator replacement is staged for ten minutes. The existing authenticator
 continues working until a code from the replacement is confirmed. Recovery

@@ -27,7 +27,8 @@ describe('GET /admin (server-rendered, no CDN)', () => {
     expect(body).toContain('First-time setup');
     expect(body).toContain('data-action="register"');
     // No third-party origins: the only script is inline + nonce'd.
-    expect(body).not.toContain('http://');
+    // SVG's namespace is an identifier, not a fetched resource.
+    expect(body.replaceAll('http://www.w3.org/2000/svg', '').includes('http://')).toBe(false);
     expect(body).not.toMatch(/src=["']https?:\/\//);
     // Inline script carries the per-request CSP nonce.
     const csp = res.headers.get('content-security-policy') ?? '';

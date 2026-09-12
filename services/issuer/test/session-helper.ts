@@ -18,7 +18,7 @@ import { issueSession } from '../src/auth/session.js';
 
 export async function mintSessionCookie(
   env: AppEnv,
-  principal: { sub: string; via: 'passkey' | 'recovery' } = { sub: 'admin', via: 'passkey' },
+  principal: { sub: string; via: 'passkey' | 'recovery'; credentialId?: string } = { sub: 'admin', via: 'passkey' },
 ): Promise<string> {
   const app = new Hono();
   app.get('/__mint', async (c) => {

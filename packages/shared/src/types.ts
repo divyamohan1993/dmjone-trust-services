@@ -348,6 +348,8 @@ export interface WebAuthnCredential {
   publicKey: string;
   counter: number;
   transports?: string[];
+  /** Recorded after a successful passkey sign-in; absent for older registrations. */
+  lastUsedAt?: string;
   label: string;
   createdAt: string;
 }

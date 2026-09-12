@@ -85,6 +85,25 @@ button.secondary:hover,.secondary:hover{background:#FBF7EF;color:var(--ink)}
 button.danger{background:var(--bad-soft);border-color:var(--bad);color:var(--bad)}
 button.danger:hover{background:#F1D4D1;color:var(--bad)}
 
+/* Registered security keys: wrapping rows and accessible native dialogs. */
+.passkey-list{list-style:none;margin:16px 0;padding:0;border:1px solid var(--rule-outer);border-radius:12px;overflow:hidden}
+.passkey-row{display:flex;gap:16px;align-items:flex-start;padding:20px;border-bottom:1px solid var(--rule-outer)}
+.passkey-row:last-child{border-bottom:0}
+.passkey-icon{flex:0 0 40px;width:40px;height:40px;display:grid;place-items:center;border-radius:50%;background:#FBF7EF;color:#8A6814;font-size:24px}
+.passkey-info{flex:1;min-width:0}
+.passkey-title{display:flex;align-items:center;gap:10px;flex-wrap:wrap;overflow-wrap:anywhere}
+.passkey-title strong{font-size:18px}
+.passkey-meta{margin:6px 0 0;font-size:14px;overflow-wrap:anywhere}
+.passkey-actions{display:flex;gap:8px;flex-wrap:wrap}
+.passkey-add{padding:18px 0 24px;max-width:520px}
+.passkey-add input{margin:8px 0 12px}
+.key-dialog{box-sizing:border-box;border:1px solid var(--rule-outer);border-radius:16px;padding:28px;max-width:480px;width:calc(100% - 32px);background:var(--paper,#fff);color:var(--ink);box-shadow:0 16px 60px #0003}
+.key-dialog::backdrop{background:rgba(20,20,20,.45)}
+.key-dialog h3{margin-top:0}
+.key-dialog input{width:100%;box-sizing:border-box}
+button:disabled{opacity:.5;cursor:not-allowed}
+@media(max-width:640px){.passkey-row{flex-wrap:wrap;padding:16px;gap:12px}.passkey-actions{margin-left:52px;width:calc(100% - 52px)}}
+
 /* the live status badge the admin script builds: badge valid | badge revoked */
 .badge.valid{background:var(--ok-soft);color:var(--ok);border-color:#BFE0CC}
 .badge.revoked{background:var(--bad-soft);color:var(--bad);border-color:#E7C3C0}

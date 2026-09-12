@@ -6,6 +6,16 @@ All notable changes to this project are documented here. Format follows
 
 ## [Unreleased]
 
+### Registered key management — 2026-09-12
+
+- Account security lists registered passkeys/security keys with editable names,
+  registration dates, last-use metadata, and a current-session badge for new
+  passkey sign-ins. Keys can be added by name or removed with confirmation.
+- Atomic removal preserves at least one registration. New sessions are associated
+  with their signing key and rejected after that key is removed. Existing sessions
+  without a key association retain their original expiry.
+
+
 ### Security and access recovery — 2026-09-12
 
 - Added an IAM-authenticated recovery-code replacement procedure with an atomic

@@ -83,6 +83,14 @@ async function saveAdmin(deps: IssuerDeps, expected: AdminAccount | null, next: 
   }
 }
 
+function passkeyLabel(value: unknown): string {
+  const label = typeof value === 'string' ? value.trim() : '';
+  if (!label || label.length > 80 || /[\u0000-\u001f\u007f]/.test(label)) {
+    throw new AppError(ERROR_CODE.VALIDATION_FAILED, 'Use a key name between 1 and 80 characters', 400);
+  }
+  return label;
+}
+
 const SETUP_TOKEN_HEADER = 'x-setup-token';
 
 /** Map a denied {@link RegistrationGate} to its uniform AppError. */
@@ -106,11 +114,25 @@ function denyRegistration(gate: Extract<RegistrationGate, { allowed: false }>): 
 export function registerAuthRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps): void {
   const auth = new Hono<IssuerHonoEnv>();
 
+  auth.use('/passkeys/*', async (c, next) => {
+    if (c.req.method !== 'GET') {
+      const contentType = c.req.header('content-type')?.split(';')[0]?.trim().toLowerCase();
+      if (contentType !== 'application/json') {
+        throw new AppError(ERROR_CODE.BAD_REQUEST, 'Use application/json for key management', 415);
+      }
+      const origin = c.req.header('origin');
+      if (origin && origin !== deps.env.WEBAUTHN_ORIGIN) {
+        throw new AppError(ERROR_CODE.FORBIDDEN, 'Key management requires the issuer origin', 403);
+      }
+    }
+    await next();
+  });
+
   // ─────────────────────────── Status (public) ─────────────────────────────
   // Lets the UI decide between "first-time setup" and "login".
   auth.get('/status', async (c) => {
     const account = await getAdmin(deps.adminRepo);
-    const session = await readSession(c, deps.env);
+    const session = await readSession(c, deps.env, deps.adminRepo);
     return c.json({
       provisioned: isProvisioned(account),
       passkeys: account?.webauthnCredentials.length ?? 0,
@@ -127,7 +149,7 @@ export function registerAuthRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps): 
   // stays session-gated. See evaluateRegistration for the full decision table.
   auth.post('/register/options', async (c) => {
     const account = await getAdmin(deps.adminRepo);
-    const session = await readSession(c, deps.env);
+    const session = await readSession(c, deps.env, deps.adminRepo);
     const token = c.req.header(SETUP_TOKEN_HEADER);
     const gate = evaluateRegistration(deps.env, account, !!session, token);
     if (!gate.allowed) {
@@ -144,7 +166,7 @@ export function registerAuthRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps): 
 
   auth.post('/register/verify', async (c) => {
     const account = await getAdmin(deps.adminRepo);
-    const session = await readSession(c, deps.env);
+    const session = await readSession(c, deps.env, deps.adminRepo);
     const body = (await readJson(c)) as {
       response?: RegistrationResponseJSON;
       label?: string;
@@ -163,7 +185,7 @@ export function registerAuthRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps): 
     if (!body.response) {
       throw new AppError(ERROR_CODE.VALIDATION_FAILED, 'Missing registration response', 400);
     }
-    const label = asString(body.label) ?? 'passkey';
+    const label = passkeyLabel(body.label ?? 'passkey');
     const { credential } = await finishRegistration(c, deps.env, body.response, label);
 
     const now = new Date().toISOString();
@@ -184,7 +206,7 @@ export function registerAuthRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps): 
     // First passkey at bootstrap: hand the new admin an immediate session so the
     // rest of setup (TOTP, recovery) proceeds without a second ceremony.
     if (bootstrap) {
-      await issueSession(c, deps.env, { sub: updated.id, via: 'passkey' });
+      await issueSession(c, deps.env, { sub: updated.id, via: 'passkey', credentialId: credential.credentialId });
     }
     return c.json({ registered: true, bootstrap, passkeys: updated.webauthnCredentials.length });
   });
@@ -228,16 +250,73 @@ export function registerAuthRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps): 
       ...cleared,
       webauthnCredentials: cleared.webauthnCredentials.map((cred) =>
         cred.credentialId === outcome.credentialId
-          ? { ...cred, counter: outcome.newCounter }
+          ? { ...cred, counter: outcome.newCounter, lastUsedAt: new Date(now).toISOString() }
           : cred,
       ),
     };
     await saveAdmin(deps, account, updated);
-    await issueSession(c, deps.env, { sub: updated.id, via: 'passkey' });
+    await issueSession(c, deps.env, { sub: updated.id, via: 'passkey', credentialId: outcome.credentialId });
     await audit(deps, c.get('requestId'), 'admin.login.passkey.success', {
       credentialId: outcome.credentialId,
     });
     return c.json({ authenticated: true });
+  });
+
+  // Registered key management: return display metadata only, never public-key
+  // bytes, signature counters, or recovery/TOTP material.
+  auth.get('/passkeys', async (c) => {
+    const session = await readSession(c, deps.env, deps.adminRepo);
+    if (!session) throw new AppError(ERROR_CODE.UNAUTHENTICATED, 'Authentication required', 401);
+    const account = await getAdmin(deps.adminRepo);
+    if (!account || account.id !== session.sub) throw new AppError(ERROR_CODE.FORBIDDEN, 'Account not available', 403);
+    return c.json({
+      passkeys: account.webauthnCredentials.map(key => ({
+        credentialId: key.credentialId, label: key.label, createdAt: key.createdAt,
+        lastUsedAt: key.lastUsedAt ?? null, transports: key.transports ?? [],
+        current: key.credentialId === session.credentialId,
+      })),
+      via: session.via,
+      currentKeyKnown: !!session.credentialId,
+    });
+  });
+
+  auth.post('/passkeys/rename', async (c) => {
+    const session = await readSession(c, deps.env, deps.adminRepo);
+    if (!session) throw new AppError(ERROR_CODE.UNAUTHENTICATED, 'Authentication required', 401);
+    const account = await getAdmin(deps.adminRepo);
+    if (!account || account.id !== session.sub) throw new AppError(ERROR_CODE.FORBIDDEN, 'Account not available', 403);
+    const body = await readJson(c) as { credentialId?: unknown; label?: unknown } | null;
+    const id = asString(body?.credentialId);
+    const label = passkeyLabel(body?.label);
+    if (!id || !account.webauthnCredentials.some(key => key.credentialId === id)) {
+      throw new AppError(ERROR_CODE.NOT_FOUND, 'Registered key not found', 404);
+    }
+    await saveAdmin(deps, account, { ...account, updatedAt: new Date().toISOString(),
+      webauthnCredentials: account.webauthnCredentials.map(key => key.credentialId === id ? { ...key, label } : key),
+    });
+    await audit(deps, c.get('requestId'), 'admin.passkey.rename', { credentialId: id });
+    return c.json({ renamed: true });
+  });
+
+  auth.post('/passkeys/remove', async (c) => {
+    const session = await readSession(c, deps.env, deps.adminRepo);
+    if (!session) throw new AppError(ERROR_CODE.UNAUTHENTICATED, 'Authentication required', 401);
+    const account = await getAdmin(deps.adminRepo);
+    if (!account || account.id !== session.sub) throw new AppError(ERROR_CODE.FORBIDDEN, 'Account not available', 403);
+    const body = await readJson(c) as { credentialId?: unknown } | null;
+    const id = asString(body?.credentialId);
+    if (!id || !account.webauthnCredentials.some(key => key.credentialId === id)) {
+      throw new AppError(ERROR_CODE.NOT_FOUND, 'Registered key not found', 404);
+    }
+    const remaining = account.webauthnCredentials.filter(key => key.credentialId !== id);
+    if (remaining.length === 0) {
+      throw new AppError(ERROR_CODE.BAD_REQUEST, 'Add and test another key before removing your last registered key', 400);
+    }
+    await saveAdmin(deps, account, { ...account, webauthnCredentials: remaining, updatedAt: new Date().toISOString() });
+    await audit(deps, c.get('requestId'), 'admin.passkey.remove', { credentialId: id, remaining: remaining.length });
+    const signedOut = session.credentialId === id;
+    if (signedOut) clearSession(c, deps.env);
+    return c.json({ removed: true, signedOut, remaining: remaining.length });
   });
 
   // ─────────────────────────────── Logout ──────────────────────────────────
@@ -250,7 +329,7 @@ export function registerAuthRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps): 
   // ───────────────────────────── TOTP enroll ───────────────────────────────
   // Gated: must already hold a session (bootstrap passkey grants one).
   auth.post('/totp/enroll', async (c) => {
-    const session = await readSession(c, deps.env);
+    const session = await readSession(c, deps.env, deps.adminRepo);
     if (!session) throw new AppError(ERROR_CODE.UNAUTHENTICATED, 'Authentication required', 401);
     const account = await getAdmin(deps.adminRepo);
     if (!account) throw new AppError(ERROR_CODE.NOT_FOUND, 'No admin account', 404);
@@ -275,7 +354,7 @@ export function registerAuthRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps): 
   });
 
   auth.post('/totp/verify', async (c) => {
-    const session = await readSession(c, deps.env);
+    const session = await readSession(c, deps.env, deps.adminRepo);
     if (!session) throw new AppError(ERROR_CODE.UNAUTHENTICATED, 'Authentication required', 401);
     const account = await getAdmin(deps.adminRepo);
     if (!account || (!account.totpSecretEnc && !account.pendingTotpSecretEnc)) {
@@ -304,7 +383,7 @@ export function registerAuthRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps): 
   // ─────────────────────────── Recovery setup ──────────────────────────────
   // Gated: generates N one-time codes, returns plaintext ONCE, stores hashes.
   auth.post('/recovery/generate', async (c) => {
-    const session = await readSession(c, deps.env);
+    const session = await readSession(c, deps.env, deps.adminRepo);
     if (!session) throw new AppError(ERROR_CODE.UNAUTHENTICATED, 'Authentication required', 401);
     const account = await getAdmin(deps.adminRepo);
     if (!account) throw new AppError(ERROR_CODE.NOT_FOUND, 'No admin account', 404);

@@ -185,7 +185,7 @@ const DOC_TEMPLATES_JSON = JSON.stringify(DOC_TEMPLATES)
 export function registerAdminUiRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps): void {
   app.get('/admin', async (c) => {
     const nonce = c.get('cspNonce');
-    const session = await readSession(c, deps.env);
+    const session = await readSession(c, deps.env, deps.adminRepo);
     const account = await deps.adminRepo.get().catch(() => null);
     const provisioned = isProvisioned(account);
 
@@ -483,13 +483,40 @@ function dashboardBody(account: AdminAccount | null): ReturnType<typeof html> {
   </table>
 </div>
 
-<div class="card">
+<div class="card" id="account-security">
   ${STUDS}
   <h2>Account security</h2>
-  <p>${account?.webauthnCredentials.length ?? 0} registered passkeys · ${account?.recoveryCodeHashes.length ?? 0} recovery codes remaining · Authenticator ${account?.totpSecretEnc ? 'active' : 'not confirmed'}</p>
+  <p><span id="passkey-count">${account?.webauthnCredentials.length ?? 0} registered passkeys</span> · ${account?.recoveryCodeHashes.length ?? 0} recovery codes remaining · Authenticator ${account?.totpSecretEnc ? 'active' : 'not confirmed'}</p>
   <p>Keep at least two working passkeys on separate devices. After recovery, add a new passkey here and test it in a separate browser session before signing out. Save recovery codes somewhere you can reach if your phone is lost.</p>
+  <h3>Passkeys and security keys</h3>
+  <p id="passkey-status" class="muted" role="status" aria-live="polite">Loading your registered keys…</p>
+  <ul id="passkey-list" class="passkey-list" aria-label="Registered passkeys and security keys"></ul>
+  <p id="passkey-session-note" class="muted"></p>
+  <form id="passkey-add-form" class="passkey-add">
+    <label for="new-passkey-label">Name your new key</label>
+    <input id="new-passkey-label" name="label" maxlength="80" required placeholder="e.g. My phone or backup USB key" autocomplete="off" />
+    <button type="submit" data-action="add-passkey">Add a passkey or security key</button>
+  </form>
+  <dialog id="passkey-rename-dialog" class="key-dialog" aria-labelledby="passkey-rename-title">
+    <form id="passkey-rename-form">
+      <h3 id="passkey-rename-title">Rename key</h3>
+      <label for="passkey-rename-label">Key name</label>
+      <input id="passkey-rename-label" maxlength="80" required autocomplete="off" />
+      <p id="passkey-rename-error" class="muted" role="alert"></p>
+      <div class="actions"><button type="button" class="secondary" data-action="key-dialog-cancel">Cancel</button><button type="submit">Save name</button></div>
+    </form>
+  </dialog>
+  <dialog id="passkey-remove-dialog" class="key-dialog" aria-labelledby="passkey-remove-title">
+    <form id="passkey-remove-form">
+      <h3 id="passkey-remove-title">Remove key?</h3>
+      <p id="passkey-remove-description"></p>
+      <p>This removes the key from your dmj.one account. It does not delete the saved passkey from your device or password manager.</p>
+      <p id="passkey-remove-error" class="muted" role="alert"></p>
+      <div class="actions"><button type="button" class="secondary" data-action="key-dialog-cancel">Cancel</button><button type="submit" class="danger">Remove key</button></div>
+    </form>
+  </dialog>
+  <h3>Authenticator and recovery</h3>
   <div class="actions">
-    <button type="button" class="secondary" data-action="add-passkey">Add another passkey</button>
     <button type="button" class="secondary" data-action="totp-enroll">Set up authenticator (TOTP)</button>
     <button type="button" class="secondary" data-action="recovery-gen">Generate recovery codes</button>
   </div>

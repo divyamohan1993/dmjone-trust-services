@@ -154,6 +154,83 @@ function register(label){
     .then(function(){ setStatus('Passkey registered.'); location.reload(); })
     .catch(function(e){ setStatus('Registration failed: '+authError(e), true); }).finally(function(){ authBusy = false; });
 }
+function addPasskey(){
+  var input = document.getElementById('new-passkey-label');
+  if(!input) return;
+  input.value = input.value.trim();
+  if(!input.reportValidity()) return;
+  register(input.value);
+}
+function keyDate(value){
+  if(!value || !Number.isFinite(Date.parse(value))) return 'Not recorded';
+  return new Intl.DateTimeFormat(undefined, {dateStyle:'medium', timeStyle:'short'}).format(new Date(value));
+}
+function keyKind(transports){
+  if(transports.indexOf('usb') >= 0 || transports.indexOf('nfc') >= 0) return 'Security key';
+  if(transports.indexOf('internal') >= 0) return 'Device passkey';
+  return 'Passkey or security key';
+}
+var selectedKey = null;
+function openKeyDialog(kind, key){
+  selectedKey = key;
+  var dialog = document.getElementById('passkey-'+kind+'-dialog');
+  document.getElementById('passkey-'+kind+'-error').textContent = '';
+  if(kind === 'rename') document.getElementById('passkey-rename-label').value = key.label;
+  else document.getElementById('passkey-remove-description').textContent = 'Remove “'+key.label+'”? You will no longer be able to sign in with this key.' + (key.current ? ' This key was used for your current session, so you will be signed out. Make sure another registered key works.' : ' Make sure you can sign in with another registered key.');
+  dialog.showModal();
+}
+function renderPasskeys(data){
+  var host = document.getElementById('passkey-list'); if(!host) return;
+  host.replaceChildren();
+  data.passkeys.forEach(function(key){
+    var row = document.createElement('li'); row.className = 'passkey-row';
+    var icon = document.createElement('span'); icon.className = 'passkey-icon'; icon.setAttribute('aria-hidden','true'); var svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
+    svg.setAttribute('viewBox','0 0 24 24'); svg.setAttribute('width','24'); svg.setAttribute('height','24');
+    svg.setAttribute('fill','none'); svg.setAttribute('stroke','currentColor'); svg.setAttribute('stroke-width','1.7');
+    var ring = document.createElementNS('http://www.w3.org/2000/svg','circle'); ring.setAttribute('cx','15'); ring.setAttribute('cy','7'); ring.setAttribute('r','5');
+    var stem = document.createElementNS('http://www.w3.org/2000/svg','path'); stem.setAttribute('d','M11.5 10.5 3 19v2h4v-4h4v-3');
+    svg.append(ring, stem); icon.appendChild(svg);
+    var info = document.createElement('div'); info.className = 'passkey-info';
+    var title = document.createElement('div'); title.className = 'passkey-title';
+    var label = document.createElement('strong'); label.textContent = key.label; title.appendChild(label);
+    if(key.current){ var badge = document.createElement('span'); badge.className = 'badge valid'; badge.textContent = 'Used for this session'; title.appendChild(badge); }
+    info.appendChild(title);
+    var type = document.createElement('p'); type.className = 'muted passkey-meta';
+    type.textContent = keyKind(key.transports)+' · ID '+key.credentialId.slice(-12); info.appendChild(type);
+    var dates = document.createElement('p'); dates.className = 'muted passkey-meta';
+    dates.textContent = 'Added '+keyDate(key.createdAt)+' · Last used: '+keyDate(key.lastUsedAt); info.appendChild(dates);
+    var actions = document.createElement('div'); actions.className = 'passkey-actions';
+    var rename = document.createElement('button'); rename.type = 'button'; rename.className = 'secondary'; rename.textContent = 'Rename';
+    rename.setAttribute('aria-label', 'Rename '+key.label); rename.addEventListener('click', function(){ openKeyDialog('rename', key); });
+    var remove = document.createElement('button'); remove.type = 'button'; remove.className = 'secondary'; remove.textContent = 'Remove';
+    remove.setAttribute('aria-label', 'Remove '+key.label); remove.disabled = data.passkeys.length <= 1;
+    if(remove.disabled) remove.title = 'Add and test another key before removing your last registered key';
+    remove.addEventListener('click', function(){ openKeyDialog('remove', key); });
+    actions.append(rename, remove); row.append(icon, info, actions); host.appendChild(row);
+  });
+  document.getElementById('passkey-count').textContent = data.passkeys.length+' registered '+(data.passkeys.length === 1 ? 'passkey' : 'passkeys');
+  document.getElementById('passkey-status').textContent = data.passkeys.length <= 1 ? 'Add and test another key before removing your last registered key.' : 'Choose a key to rename or remove. Give each key a name you recognise.';
+  document.getElementById('passkey-session-note').textContent = data.via === 'recovery' ? 'You signed in using recovery.' : (data.currentKeyKnown ? '' : 'Sign in again with a passkey to see which key is used for this session.');
+}
+function refreshPasskeys(){
+  return fetch('/api/auth/passkeys', {credentials:'same-origin'}).then(function(res){
+    if(!res.ok) throw new Error('Could not load registered keys. Please refresh or sign in again.');
+    return res.json();
+  }).then(renderPasskeys).catch(function(e){ document.getElementById('passkey-status').textContent = e.message; });
+}
+function changePasskey(kind, form){
+  if(!selectedKey) return;
+  var btn = form.querySelector('button[type="submit"]'); if(btn.disabled) return;
+  var body = {credentialId:selectedKey.credentialId};
+  if(kind === 'rename') body.label = document.getElementById('passkey-rename-label').value.trim();
+  btn.disabled = true;
+  return api('/api/auth/passkeys/'+kind, body).then(function(data){
+    document.getElementById('passkey-'+kind+'-dialog').close(); selectedKey = null;
+    if(data.signedOut){ location.reload(); return; }
+    return refreshPasskeys();
+  }).catch(function(e){ document.getElementById('passkey-'+kind+'-error').textContent = e.message; })
+    .finally(function(){ btn.disabled = false; });
+}
 function login(allTransports){
   if(authBusy || !supported()) return;
   authBusy = true;
@@ -803,7 +880,8 @@ document.addEventListener('click', function(ev){
   if(action==='login') login(false);
   else if(action==='login-other') login(true);
   else if(action==='register') register((document.getElementById('pk-label')||{}).value||'primary');
-  else if(action==='add-passkey') register('additional');
+  else if(action==='add-passkey') addPasskey();
+  else if(action==='key-dialog-cancel') actionEl.closest('dialog').close();
   else if(action==='recover') recover();
   else if(action==='refresh-list') refreshList();
   // add-para / preview are shared by both composers — resolve which editor/form
@@ -818,6 +896,15 @@ document.addEventListener('click', function(ev){
   else if(action==='totp-enroll') api('/api/auth/totp/enroll',{}).then(renderTotpEnroll).catch(function(e){setStatus(e.message,true);});
   else if(action==='recovery-gen') api('/api/auth/recovery/generate',{}).then(renderRecoveryCodes).catch(function(e){setStatus(e.message,true);});
 });
+var keyAddForm = document.getElementById('passkey-add-form');
+if(keyAddForm){
+  keyAddForm.addEventListener('submit', function(ev){ ev.preventDefault(); addPasskey(); });
+  refreshPasskeys();
+  ['rename', 'remove'].forEach(function(kind){
+    var form = document.getElementById('passkey-'+kind+'-form');
+    form.addEventListener('submit', function(ev){ ev.preventDefault(); changePasskey(kind, form); });
+  });
+}
 var issueForm = document.getElementById('issue-form');
 if(issueForm) issueForm.addEventListener('submit', function(ev){ ev.preventDefault(); issue(issueForm); });
 var letterForm = document.getElementById('letter-form');

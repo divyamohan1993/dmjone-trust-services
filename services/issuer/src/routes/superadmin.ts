@@ -48,7 +48,7 @@ async function readJson(c: { req: { json(): Promise<unknown> } }): Promise<unkno
 }
 
 async function requireSession(c: Context<IssuerHonoEnv>, deps: IssuerDeps): Promise<string> {
-  const session = await readSession(c, deps.env);
+  const session = await readSession(c, deps.env, deps.adminRepo);
   if (!session) throw new AppError(ERROR_CODE.UNAUTHENTICATED, 'Authentication required', 401);
   return session.sub;
 }
@@ -93,7 +93,7 @@ export function registerSuperAdminRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerD
 
   // ── Panel (GET, HTML, ZERO JS) ───────────────────────────────────────────
   sa.get('/', async (c) => {
-    const session = await readSession(c, deps.env);
+    const session = await readSession(c, deps.env, deps.adminRepo);
     const nonce = c.get('cspNonce');
     if (!session) {
       const body = html`<h1>Super-admin</h1>

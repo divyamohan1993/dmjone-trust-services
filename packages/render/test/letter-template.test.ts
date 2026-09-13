@@ -55,7 +55,7 @@ describe('buildLetterHtml', () => {
     expect(html).not.toContain('class="corner');
     expect(html).not.toContain('position:absolute');
     // The signature block must stay whole across a page boundary.
-    expect(html).toContain('.sigblock{ margin-top:9mm; break-inside:avoid; }');
+    expect(html).toMatch(/\.sigblock\{[^}]*break-inside:avoid/);
   });
 
   it('injects every letter field per §B.1', () => {

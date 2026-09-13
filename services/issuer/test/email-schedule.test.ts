@@ -12,7 +12,7 @@ import { createInMemoryEmailQuotaRepository } from '@dmjone/data';
 let now: number;
 beforeEach(()=>{now=Date.parse('2026-09-13T12:00:00+05:30');vi.spyOn(Date,'now').mockImplementation(()=>now);});
 afterEach(()=>vi.restoreAllMocks());
-const input = {issueDate:'2026-09-13',recipientLines:['Nitin Test'],subject:'Internship offer',
+const input = {issueDate:'2026-09-13',recipientLines:['Nitin Test'],subject:'Learning invitation',
   bodyParagraphs:['An educational internship offer.'],attestation:true as const,password:'inert-test-password',recipientEmail:'inert@example.test'};
 async function fixture(sendAt?: string){
   const deps=buildDeps(); const sent: string[]=[];

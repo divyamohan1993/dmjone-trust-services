@@ -1,3 +1,4 @@
+import {OFFER_SIGNING_INSTRUCTIONS} from '@dmjone/shared';
 import {PAPER_STYLE,PAPER_DECORATION} from './paper-style.js';
 /**
  * Pure HTML builder for the dmj.one **letterhead letter** (Mode 2).
@@ -114,9 +115,13 @@ const LETTER_CSS = `
   .body p.pa-justify{ text-align:justify; text-justify:inter-word; }
 
   .closing-group{break-inside:avoid;}
+  .applicant-acceptance{margin-top:4mm;padding:3mm;border:.5pt solid var(--gold-soft);break-inside:avoid;font-size:10pt;}
+  .applicant-acceptance p{margin-top:2mm;}
+  .applicant-acceptance a{color:var(--gold-deep);text-decoration-color:var(--gold-soft);text-underline-offset:2px;}
+  .body p.enclosure-note{text-align:left;font-size:8pt;color:var(--ink-soft);overflow-wrap:anywhere;}
   .body p{orphans:3;widows:3;}
   /* ===== valediction + signature block (kept whole across page breaks) ===== */
-  .sigblock{ margin-top:9mm; break-inside:avoid; }
+  .sigblock{ margin-top:5mm; break-inside:avoid; }
   .sigblock .valediction{ font-family:var(--serif); font-size:11pt; color:var(--ink);
     margin-bottom:1mm; }
   .sigblock .forline{ font-family:var(--label); font-size:9pt; letter-spacing:.24em;
@@ -128,7 +133,7 @@ const LETTER_CSS = `
   .sigblock .phone{ font-family:var(--label); font-size:9pt; letter-spacing:.06em; color:var(--ink-soft); margin-top:.6mm; }
 
   /* ===== footer: verify line + QR card (kept together) ===== */
-  .foot{ margin-top:10mm; padding-top:4mm; border-top:.6pt solid var(--gold-soft); }
+  .foot{ margin-top:5mm; padding-top:3mm; border-top:.6pt solid var(--gold-soft); }
   .verifycard{ display:flex; align-items:center; gap:5mm; break-inside:avoid; padding:3mm 4mm; border:.5pt solid var(--gold-soft); border-radius:2mm; background:rgba(255,253,251,.8); }
   .verifycard .qr{ width:20mm; height:20mm; padding:1.6mm; background:#fff;
     border:.8pt solid var(--gold-soft); border-radius:1.2mm; flex:0 0 auto;
@@ -153,6 +158,7 @@ const LETTER_CSS = `
  */
 export function buildLetterHtml(input: LetterTemplateInput): string {
   const { content, qrDataUri } = input;
+  const applicantSignatures=/\boffer\b|non-disclosure agreement/i.test(content.subject??'') || content.bodyParagraphs.includes(OFFER_SIGNING_INSTRUCTIONS);
   const images = getBrandImages();
   const fontCss = getFontFaceCss();
 
@@ -189,7 +195,7 @@ export function buildLetterHtml(input: LetterTemplateInput): string {
   const bodyBlocks = content.bodyParagraphs
     .map((p) => {
       const { html, alignClass } = compileParagraph(p);
-      return `<p class="${alignClass}">${html}</p>`;
+      return `<p class="${alignClass}${p.startsWith('Enclosure: Non-disclosure agreement DMJ-')?' enclosure-note':''}">${html}</p>`;
     });
   const bodyParas = bodyBlocks.slice(0, -2).join('');
   const closingParas = bodyBlocks.slice(-2).join('');
@@ -202,13 +208,13 @@ export function buildLetterHtml(input: LetterTemplateInput): string {
       : '';
 
   return `<!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8">
+<html lang="en"><head><meta charset="utf-8"><title>${escapeHtml(content.subject??'dmj.one letter')}</title><meta name="dmj-document-id" content="${documentId}">
 <style>
 ${fontCss}
 ${LETTER_CSS}
 ${PAPER_STYLE}
 </style></head>
-<body>
+<body${applicantSignatures?' data-applicant-signatures="true"':''}>
   ${PAPER_DECORATION}
   <div class="page">
 
@@ -239,6 +245,7 @@ ${PAPER_STYLE}
 
     <div class="closing-group">
     <div class="body">${closingParas}</div>
+    ${applicantSignatures?'<div class="applicant-acceptance"><strong>Applicant acceptance</strong><p>I have read this document and the referenced terms and accept the obligations stated here.</p><p>Full legal name: ........................................................................</p><p>Sign and date every page in the footer, then email the signed copies to contact@dmj.one.</p><p><a href="https://dmj.one/tos">Terms &amp; Conditions</a> &middot; <a href="https://dmj.one/privacy">Privacy Policy</a></p></div>':''}
     <!-- ===== VALEDICTION + SIGNATURE ===== -->
     <div class="sigblock">
       ${valedictionHtml}

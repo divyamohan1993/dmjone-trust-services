@@ -1,3 +1,4 @@
+import {DEFAULT_NDA_PARAGRAPHS,isOfferLetter} from '@dmjone/shared';
 import {randomUUID,randomBytes} from 'node:crypto';
 import {AppError,ERROR_CODE,issueCredentialSchema,issueCredentialObject,issueLetterSchema,issueLetterObject,signUploadSchema} from '@dmjone/shared';
 import type {DocumentDraft,DocumentKind,IssueCredentialInput,IssueLetterInput,SignUploadInput} from '@dmjone/shared';
@@ -28,6 +29,9 @@ function parseInput(kind:DocumentKind,raw:unknown,schedule:boolean):DraftInput{
   const schema=kind==='certificate'?(schedule?issueCredentialSchema:issueCredentialObject):kind==='letter'?(schedule?issueLetterSchema:issueLetterObject):signUploadSchema;
   const parsed=schema.safeParse({...input,attestation:true,password:input.password||randomBytes(32).toString('base64url')});
   if(!parsed.success)throw new AppError(ERROR_CODE.VALIDATION_FAILED,'Complete the required document fields before saving',400,parsed.error.flatten());
+  if(kind==='letter' && isOfferLetter(parsed.data as IssueLetterInput)){
+    const offer=parsed.data as IssueLetterInput;return {...offer,offerLetter:true,ndaBodyParagraphs:offer.ndaBodyParagraphs??[...DEFAULT_NDA_PARAGRAPHS]};
+  }
   return parsed.data;
 }
 export async function getDraftInput(deps:IssuerDeps,draft:DocumentDraft){
@@ -112,6 +116,13 @@ export async function dispatchDueDrafts(deps:IssuerDeps,requestId:string):Promis
     if(!await deps.draftRepo.compareAndSet(draft.id,draft.revision,claim))continue;
     try{
       const full=await getDraftInput(deps,claim);
+      if(claim.kind==='letter' && isOfferLetter(full as IssueLetterInput) && !(full as IssueLetterInput).ndaBodyParagraphs){
+        // Never add previously unreviewed legal terms to a legacy queued draft.
+        const {nextAttemptAt:_,scheduledFor:__,...held}=claim;
+        await deps.draftRepo.compareAndSet(claim.id,claim.revision,{...held,state:'draft',revision:claim.revision+1,updatedAt:Date.now()});
+        await deps.auditLog.append({actor:'system',action:'document.draft.nda_review_required',subject:claim.id,requestId});
+        continue;
+      }
       const input=parseInput(claim.kind,full,true);
       requireEmailConfiguration(deps,input.recipientEmail);
       const ctx={actor:'scheduled-draft',requestId,draftId:claim.id};

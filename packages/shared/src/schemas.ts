@@ -119,6 +119,8 @@ export type IssueCredentialInput = z.infer<typeof issueCredentialSchema>;
  *  the certificate body markup grammar. `scope: 'internship'` marks an internship
  *  offer letter / LOR so employment/salary language is blocked. */
 export const issueLetterObject = z.object({
+  offerLetter: z.boolean().optional(),
+  ndaBodyParagraphs: z.array(z.string().trim().min(1).max(1200)).min(1).max(20).optional(),
   issueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'expected YYYY-MM-DD'),
   reference: z.string().trim().max(120).optional(),
   recipientLines: z.array(z.string().trim().max(120)).max(8).default([]),
@@ -145,10 +147,12 @@ export function applyLetterGuard(
     reference?: string | undefined; recipientLines: string[]; subject?: string | undefined;
     salutation?: string | undefined; bodyParagraphs: string[]; valediction?: string | undefined;
     scope?: 'internship' | undefined;
+    ndaBodyParagraphs?: string[] | undefined;
   },
   ctx: z.RefinementCtx,
 ): void {
   const internship = v.scope === 'internship';
+  guardFields(ctx,false,(v.ndaBodyParagraphs??[]).map((p,i):GuardField=>[['ndaBodyParagraphs',i],p,true]));
   guardFields(ctx, internship, [
     [['reference'], v.reference, true],
     [['subject'], v.subject, true],

@@ -18,7 +18,7 @@ shows its status and time. **Review / edit** atomically pauses a scheduled draft
 before opening the editor; save or schedule it again when ready. Stale browser
 tabs cannot overwrite a newer revision. Once delivery starts, editing is locked.
 The existing signing and verification pipelines issue the latest reviewed version
-at the scheduled working time. Uploaded PDFs keep their original content and
+at the scheduled working time. Offer letters also issue and attach the reviewed NDA; see [offer packets](offer-nda.md). Uploaded PDFs keep their original content and
 signature-placement behavior. Generate-without-email paths remain available.
 
 New drafts are separate from already issued, immutable documents. The existing

@@ -7,7 +7,7 @@ resources. The application deliberately reserves fewer submission attempts:
 - **90 per rolling 24-hour window**;
 - **2,700 per UTC calendar month**;
 - one recipient per message, secure download links only, no PDF attachments and
-  no download passwords in email.
+  no download passwords in email. Offer emails additionally attach their reviewed NDA PDF, capped at 400 KiB; see [offer packets](offer-nda.md).
 
 Reservations include failed submissions and races, so the guard is conservative.
 The counters live in Firestore (`email_quotas/oci-trust`) and survive Cloud Run

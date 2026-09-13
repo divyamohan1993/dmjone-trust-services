@@ -81,6 +81,15 @@ describe.skipIf(!EMULATOR)('Firestore stores (emulator) — parity with in-memor
     expect((await credentials.getByDraftId(id))?.id).toBe(record.id);
   });
 
+  it('refuses a mail claim after its associated NDA is revoked',async()=>{
+    const repo=createFirestoreCredentialRepository(client);
+    const nda=makeRecord({id:`DMJ-LTR-20260914-${rnd()}`}),offer=makeRecord({id:`DMJ-LTR-20260914-${rnd()}`});
+    await repo.create(nda);await repo.create({...offer,nda:{documentId:nda.id,pdfSha256:nda.pdfSha256}});
+    expect((await repo.getById(offer.id))?.nda?.documentId).toBe(nda.id);
+    await repo.setStatus(nda.id,'revoked','2026-09-14T00:00:00Z');
+    expect(await repo.compareAndSetEmailDelivery(offer.id,null,{status:'sending',provider:'oci',encryptedMessage:'sealed',createdAt:1,updatedAt:1,attempts:1,leaseId:'inert',leaseUntil:60000})).toBe(false);
+  });
+
   it('credential CRUD + revokedAt invariant', async () => {
     const repo = createFirestoreCredentialRepository(client);
     const id = `DMJ-IC-20260604-${rnd()}`;

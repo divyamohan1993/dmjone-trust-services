@@ -1,3 +1,4 @@
+import {isOfferLetter,buildNdaInput,OFFER_SIGNING_INSTRUCTIONS,OFFER_POLICY_NOTICE,ndaEnclosureLine} from '@dmjone/shared';
 import { validateEmailSchedule } from '../email/schedule.js';
 import { emailAfterIssuance, requireEmailRequest, requireEmailConfiguration } from '../email/delivery.js';
 /**
@@ -86,7 +87,13 @@ export function registerLetterRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps)
 
     // assembleLetterContent takes the letter fields WITHOUT `password` (a password
     // is not letter content), so the password-less preview payload feeds it directly.
-    const content = assembleLetterContent(parsed.data, PREVIEW_LETTER_ID);
+    const previewInput={...parsed.data};
+    if(isOfferLetter(previewInput)){
+      previewInput.bodyParagraphs=[...previewInput.bodyParagraphs];
+      for(const text of [OFFER_POLICY_NOTICE,OFFER_SIGNING_INSTRUCTIONS])if(!previewInput.bodyParagraphs.includes(text))previewInput.bodyParagraphs.push(text);
+      previewInput.bodyParagraphs.push(ndaEnclosureLine(PREVIEW_LETTER_ID,'0'.repeat(64)));
+    }
+    const content = assembleLetterContent(previewInput, PREVIEW_LETTER_ID);
     const qrUrl = `${deps.env.VERIFY_PUBLIC_URL}/c/${PREVIEW_LETTER_ID}`;
     const pdfBytes = await deps.renderer.renderLetter(content, { qrUrl });
 
@@ -97,6 +104,15 @@ export function registerLetterRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps)
     c.header('Content-Length', String(pdfBytes.byteLength));
     c.header('Cache-Control', 'no-store');
     return c.body(buf);
+  });
+
+  api.post('/nda/preview',async c=>{
+    const parsed=issueLetterObject.omit({password:true,attestation:true,recipientEmail:true,emailSendAt:true}).safeParse(await readJson(c));
+    if(!parsed.success)throw new AppError(ERROR_CODE.VALIDATION_FAILED,'Complete the offer details before previewing its NDA',400,parsed.error.flatten());
+    const nda=buildNdaInput(parsed.data);
+    const bytes=await deps.renderer.renderLetter(assembleLetterContent(nda,PREVIEW_LETTER_ID),{qrUrl:deps.env.VERIFY_PUBLIC_URL+'/c/'+PREVIEW_LETTER_ID});
+    c.header('Content-Type','application/pdf');c.header('Content-Disposition','inline; filename="nda-preview.pdf"');c.header('Cache-Control','no-store');
+    return c.body(bytes.slice().buffer);
   });
 
   app.route('/api/letters', api);

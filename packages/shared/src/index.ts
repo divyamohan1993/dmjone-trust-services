@@ -15,3 +15,5 @@ export * from './schemas.js';
 export * from './content-guards.js';
 export * from './doc-templates.js';
 export * from './env.js';
+
+export * from './offer-nda.js';

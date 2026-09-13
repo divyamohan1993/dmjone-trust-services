@@ -288,6 +288,10 @@ export function registerCredentialRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerD
     }
 
     const erasedAt = new Date().toISOString();
+    if(existing.nda){
+      const nda=await deps.credentialRepo.getById(existing.nda.documentId);
+      if(nda){await deps.credentialRepo.erase(nda.id,erasedAt);await deps.blobStore.delete(nda.id,'certificate');await deps.blobStore.delete(nda.id,'section63');}
+    }
     await deps.credentialRepo.erase(credentialId, erasedAt);
     // Purge the rendered blobs (the record redaction does not touch storage).
     await deps.blobStore.delete(credentialId, 'certificate');

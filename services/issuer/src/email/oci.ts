@@ -25,14 +25,14 @@ type TransportFactory = (options: SMTPTransport.Options) => SmtpTransport;
 export function createOciEmailSender(credentials: OciSmtpCredentials, factory: TransportFactory = options => nodemailer.createTransport(options)): DocumentEmailSender {
   return {provider:'oci', prepare(message) {
     return JSON.stringify({from:MAIL_FROM,to:[message.to],replyTo:'contact@dmj.one',
-      subject:`Your dmj.one ${message.kind} is ready`,text:messageText(message),
+      subject:message.subject?.replace(/[\r\n]+/g,' ') ?? `Your dmj.one ${message.kind} is ready`,text:messageText(message),
       messageId:`<dmj-trust-v1.${message.documentId}@dmj.one>`,date:new Date().toUTCString()});
-  }, async send(body) {
+  }, async send(body, _idempotencyKey, attachments) {
     const transport = factory(ociSmtpOptions(credentials));
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       const message = JSON.parse(body) as SendMailOptions;
-      const info = await Promise.race([transport.sendMail({...message,disableFileAccess:true,disableUrlAccess:true}), new Promise<never>((_,reject) => {
+      const info = await Promise.race([transport.sendMail({...message,...(attachments?.length&&{attachments:attachments.map(a=>({filename:a.filename,content:a.contentBase64,encoding:'base64',contentType:'application/pdf'}))}),disableFileAccess:true,disableUrlAccess:true}), new Promise<never>((_,reject) => {
         timer=setTimeout(() => {transport.close();reject(new Error('SMTP outcome unconfirmed'));},30000);
       })]) as SMTPTransport.SentMessageInfo;
       // A Message-ID identifies the submission; SMTP does NOT deduplicate it.

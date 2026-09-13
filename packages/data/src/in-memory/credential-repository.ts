@@ -32,6 +32,7 @@ export function createInMemoryCredentialRepository(): CredentialRepository {
       const record = records.get(id);
       if (!record || record.erased || ((next.status === 'sending' || next.status === 'queued') && record.status !== 'valid')) return false;
       if (canonicalJson(record.emailDelivery ?? null) !== canonicalJson(expected)) return false;
+      if(next.status==='sending' && record.nda){const nda=records.get(record.nda.documentId);if(!nda||nda.erased||nda.status!=='valid'||nda.pdfSha256!==record.nda.pdfSha256)return false;}
       record.emailDelivery = structuredClone(next);
       return true;
     },

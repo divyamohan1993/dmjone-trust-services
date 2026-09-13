@@ -1,3 +1,4 @@
+import {DEFAULT_NDA_PARAGRAPHS} from '@dmjone/shared';
 /**
  * The single inline, nonce'd, dependency-free admin script.
  *
@@ -45,6 +46,7 @@ function redirectLegacySecurity(){
 window.addEventListener('hashchange', redirectLegacySecurity);
 if(redirectLegacySecurity()) return;
 var DOC_TEMPLATES = ${templatesJson};
+var DEFAULT_NDA_PARAGRAPHS = ${JSON.stringify(DEFAULT_NDA_PARAGRAPHS)};
 ${serializerSource}
 var statusEl = document.getElementById('status');
 function setStatus(msg, isError){
@@ -424,7 +426,7 @@ function saveDraftForm(form,kind,schedule){
       if(schedule){
         setStatus('Scheduled for '+formatEmailTime(j.draft.scheduledFor)+'. Use Review / edit to pause delivery and change this draft.');
         form.reset();delete form.dataset.draftId;delete form.dataset.draftRevision;
-        if(kind==='letter'){resetEditor(letterRoot());letterRoot().setAttribute('data-scope','');}
+        if(kind==='letter'){resetEditor(letterRoot());letterRoot().setAttribute('data-scope','');syncOfferFields();}
         else if(kind==='certificate'){resetEditor();syncEcho();}
         else{uploadPdfBase64=null;uploadPages=[];uploadFilename='';sigBoxes={};uEl('upload-meta').textContent='No file selected.';syncUploadPlacement();}
         syncEmailFields(form);
@@ -441,6 +443,8 @@ function fillDraftForm(d){
   form.reset();form.dataset.draftId=d.id;form.dataset.draftRevision=String(d.revision);
   if(kind==='letter'){
     applyLetterTemplate({id:input.scope?'internship-draft':'custom-draft',letter:input});setVal('lf-date',input.issueDate);
+    document.getElementById('lf-offer').checked=!!input.offerLetter;
+    setVal('lf-nda',(input.ndaBodyParagraphs||DEFAULT_NDA_PARAGRAPHS).join('\\n\\n'));syncOfferFields();
   }else if(kind==='certificate'){
     applyCertTemplate({cert:input});setVal('f-recipient',input.recipientName);setVal('f-date',input.issueDate);
   }
@@ -557,6 +561,16 @@ function issue(form){
 // recipientLines = the textarea split on newlines, trimmed, empties dropped.
 // 'wantPassword' adds the candidate password for issuance, omits it for preview
 // (the preview schema is issue minus password — mirrors the cert preview).
+function isOfferForm(){
+  var box=document.getElementById('lf-offer'),subject=document.getElementById('lf-subject');
+  return !!(box && (box.checked || /\\boffer\\b/i.test(subject?subject.value:'')));
+}
+function syncOfferFields(){
+  var box=document.getElementById('lf-offer'),panel=document.getElementById('lf-nda-panel'),terms=document.getElementById('lf-nda');
+  if(!box||!panel||!terms)return;
+  var on=isOfferForm();if(on)box.checked=true;panel.hidden=!on;
+  if(on && !terms.value)terms.value=DEFAULT_NDA_PARAGRAPHS.join('\\n\\n');
+}
 function letterRoot(){ return document.getElementById('letter-body-editor'); }
 function splitLines(value){
   var lines = String(value||'').split('\\n'); var out = [];
@@ -574,6 +588,7 @@ function buildLetterPayload(form, wantPassword){
   var subject = String(data.get('subject')||'').trim(); if(subject) payload.subject = subject;
   var salutation = String(data.get('salutation')||'').trim(); if(salutation) payload.salutation = salutation;
   var valediction = String(data.get('valediction')||'').trim(); if(valediction) payload.valediction = valediction;
+  if(isOfferForm()){payload.offerLetter=true;payload.ndaBodyParagraphs=String(data.get('ndaBodyParagraphs')||'').split(/\\n\\s*\\n/).map(function(p){return p.trim();}).filter(Boolean);}
   var lr = letterRoot(); var scope = lr ? lr.getAttribute('data-scope') : '';
   if(scope) payload.scope = scope; // internship-group letters → employment-term guard
   // attestation rides ISSUE only (gated on wantPassword); the letter preview
@@ -875,6 +890,7 @@ function applyLetterTemplate(t){
   // language (certs auto-derive this from type==='internship'; letters need scope).
   var lr = letterRoot();
   if(lr){ lr.setAttribute('data-scope', (t.id || '').indexOf('internship-') === 0 ? 'internship' : ''); }
+  var offer=document.getElementById('lf-offer');if(offer)offer.checked=t.id==='internship-offer-letter';syncOfferFields();
 }
 // One change handler for both pickers. 'rootGetter' resolves the body editor to
 // guard (cert vs letter); 'apply' fills the form. Confirm-if-nonempty THEN fill;
@@ -1050,6 +1066,7 @@ document.addEventListener('click', function(ev){
     if(actionEl.closest && actionEl.closest('#letter-form')) previewLetter(); else preview();
   }
   else if(action==='upload-preview') previewUpload();
+  else if(action==='preview-nda') blobPreview('/api/letters/nda/preview',buildLetterPayload(document.getElementById('letter-form'),false),document.getElementById('nda-preview-host'),'NDA preview');
   else if(action==='logout') api('/api/auth/logout',{}).then(function(){location.reload();});
   else if(action==='totp-enroll') api('/api/auth/totp/enroll',{}).then(renderTotpEnroll).catch(function(e){setStatus(e.message,true);});
   else if(action==='recovery-gen') api('/api/auth/recovery/generate',{}).then(renderRecoveryCodes).catch(function(e){setStatus(e.message,true);});
@@ -1556,6 +1573,10 @@ function uploadBoxKeydown(ev){
 
 // Initial list load on the dashboard.
 if(document.getElementById('cred-rows')) refreshList();
+var offerBox=document.getElementById('lf-offer'),offerSubject=document.getElementById('lf-subject');
+if(offerBox)offerBox.addEventListener('change',syncOfferFields);
+if(offerSubject)offerSubject.addEventListener('input',syncOfferFields);
+syncOfferFields();
 refreshDrafts();
 })();`;
 }

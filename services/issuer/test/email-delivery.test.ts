@@ -8,7 +8,7 @@ import { createResendEmailSender, createPactmailEmailSender, type DocumentEmailO
 const recipient = 'recipient@example.test';
 const cert = {type:'internship', recipientName:'Asha Rao', kicker:'Certificate of', title:'INTERNSHIP', intro:'This is to certify that',
   bodyParagraphs:['completed an educational internship.'], issueDate:'2026-09-12', attestation:true, password:'local-test-password', recipientEmail:recipient};
-const letter = {recipientLines:['Asha Rao'], subject:'Offer letter', bodyParagraphs:['We are pleased to offer you a position.'],
+const letter = {recipientLines:['Asha Rao'], subject:'Project letter', bodyParagraphs:['We are pleased to offer you a position.'],
   issueDate:'2026-09-12', attestation:true, password:'local-test-password', recipientEmail:recipient};
 beforeEach(()=>{vi.spyOn(Date,'now').mockReturnValue(Date.parse('2026-09-14T04:30:00Z'));});
 afterEach(() => {vi.restoreAllMocks(); vi.useRealTimers();});

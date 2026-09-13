@@ -213,6 +213,8 @@ export interface DocumentEmailDelivery {
 }
 
 export interface CredentialRecord {
+  /** Independently signed NDA; its id and hash are also bound in the offer body. */
+  nda?: {documentId:string;pdfSha256:string};
   sourceDraftId?: string;
   /** Encrypted delivery address, kept out of content and public verification responses. */
   recipientEmailEnc?: string;

@@ -88,6 +88,7 @@ export class FakeCredentialRepo implements CredentialRepository {
     const record = this.records.get(id);
     if (!record || record.erased || ((next.status === 'sending' || next.status === 'queued') && record.status !== 'valid')) return false;
     if (canonicalJson(record.emailDelivery ?? null) !== canonicalJson(expected)) return false;
+    if(next.status==='sending' && record.nda){const nda=this.records.get(record.nda.documentId);if(!nda||nda.erased||nda.status!=='valid'||nda.pdfSha256!==record.nda.pdfSha256)return false;}
     record.emailDelivery = structuredClone(next); return true;
   }
   async exists(id: string): Promise<boolean> {

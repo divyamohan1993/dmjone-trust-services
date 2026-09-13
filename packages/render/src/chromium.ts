@@ -97,6 +97,14 @@ export function createChromiumRenderer(opts: ChromiumRendererOptions = {}): Html
         await page.evaluate(
           () => (globalThis as unknown as { document: { fonts: { ready: Promise<unknown> } } }).document.fonts.ready,
         );
+        if(html.includes('data-applicant-signatures="true"')){
+          // Per-page acceptance fields are printed in a reserved margin; the
+          // existing certificate renderer and PDF bytes for other modes are unaffected.
+          await page.addStyleTag({content:'@page{margin-bottom:28mm;}'});
+          const documentId=html.match(/<meta name="dmj-document-id" content="([A-Za-z0-9-]+)"/)?.[1]??'';
+          return await page.pdf({...PDF_OPTIONS,displayHeaderFooter:true,headerTemplate:'<div></div>',margin:{top:'18mm',right:'20mm',bottom:'28mm',left:'20mm'},
+            footerTemplate:'<div style="font-family:Arial,sans-serif;font-size:10px;color:#514a3c;width:100%;margin:0 20mm;border-top:0.5px solid #b0892f;padding-top:5px"><div>Applicant signature: ____________________________________ &nbsp; Date: __________________</div><div style="margin-top:5px">'+documentId+' &nbsp; · &nbsp; Page <span class="pageNumber"></span> of <span class="totalPages"></span></div></div>'});
+        }
         return await page.pdf(PDF_OPTIONS);
       } finally {
         await page.close();

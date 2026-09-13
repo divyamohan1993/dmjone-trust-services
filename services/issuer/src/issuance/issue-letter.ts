@@ -1,3 +1,4 @@
+import {isOfferLetter,buildNdaInput,ndaEnclosureLine,OFFER_SIGNING_INSTRUCTIONS,OFFER_POLICY_NOTICE,AppError,ERROR_CODE} from '@dmjone/shared';
 import { initialEmailDelivery } from '../email/schedule.js';
 /**
  * The letterhead-letter issuance pipeline (Mode 2, spec §B.3).
@@ -55,6 +56,23 @@ export async function issueLetter(
   input: IssueLetterInput,
   ctx: { requestId: string; actor: string; draftId?: string },
 ): Promise<IssueLetterOutcome> {
+  let nda: CredentialRecord['nda'];
+  if(isOfferLetter(input)) {
+    const childDraftId=ctx.draftId?ctx.draftId+':nda':undefined;
+    let child=childDraftId?await deps.credentialRepo.getByDraftId(childDraftId):null;
+    if(!child){
+      const result=await issueLetter(deps,buildNdaInput(input),{requestId:ctx.requestId,actor:ctx.actor,...(childDraftId&&{draftId:childDraftId})});
+      child=await deps.credentialRepo.getById(result.documentId);
+    }
+    const childPdf=child?await deps.blobStore.get(child.id,'certificate'):null;
+    if(!child || child.erased || child.status!=='valid' || !childPdf || !await deps.blobStore.get(child.id,'section63'))throw new AppError(ERROR_CODE.BAD_REQUEST,'The NDA could not be completed; the offer was not issued',409);
+    if(childPdf.length>400*1024)throw new AppError(ERROR_CODE.BAD_REQUEST,'The NDA exceeds the attachment limit; shorten its content before issuing',413);
+    nda={documentId:child.id,pdfSha256:child.pdfSha256};
+    const paragraphs=[...input.bodyParagraphs];
+    for(const text of [OFFER_POLICY_NOTICE,OFFER_SIGNING_INSTRUCTIONS])if(!paragraphs.includes(text))paragraphs.push(text);
+    paragraphs.push(ndaEnclosureLine(child.id,child.pdfSha256));
+    input={...input,bodyParagraphs:paragraphs};
+  }
   const now = new Date().toISOString();
 
   // 1. Allocate a unique DMJ-LTR id for the issue date (shares the per-day
@@ -115,6 +133,7 @@ export async function issueLetter(
   // 8. Assemble + persist the canonical record (kind:'letter').
   const emailDelivery = initialEmailDelivery(deps, input.recipientEmail, input.emailSendAt);
   const record: CredentialRecord = {
+    ...(nda&&{nda}),
     ...(ctx.draftId && {sourceDraftId:ctx.draftId}),
     ...(emailDelivery && { emailDelivery }),
     id: documentId,

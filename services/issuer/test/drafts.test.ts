@@ -7,7 +7,7 @@ import {dispatchDueEmails} from '../src/email/delivery.js';
 let now:number;
 beforeEach(()=>{now=Date.parse('2026-09-13T12:00:00+05:30');vi.spyOn(Date,'now').mockImplementation(()=>now);});
 afterEach(()=>vi.restoreAllMocks());
-const input={issueDate:'2026-09-13',recipientLines:['Asha Test'],subject:'Internship offer',salutation:'Dear Asha,',bodyParagraphs:['A two-month learning internship.'],password:'inert-private-password',recipientEmail:'inert@example.test',emailSendAt:'2026-09-14T09:15:00+05:30',attestation:true as const};
+const input={issueDate:'2026-09-13',recipientLines:['Asha Test'],subject:'Learning plan',salutation:'Dear Asha,',bodyParagraphs:['A two-month learning internship.'],password:'inert-private-password',recipientEmail:'inert@example.test',emailSendAt:'2026-09-14T09:15:00+05:30',attestation:true as const};
 function fixture(){const deps=buildDeps();const sent:string[]=[];deps.emailQuota={reserve:async()=>true};deps.emailSender={provider:'oci',prepare:JSON.stringify,send:async body=>{sent.push(body);return {status:'accepted',providerId:'inert-id'};}};return {deps,sent};}
 describe('reviewable scheduled drafts',()=>{
  it('saves privately without issuing or scheduling; reopening preserves editable fields',async()=>{

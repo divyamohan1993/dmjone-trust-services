@@ -1,8 +1,8 @@
-import { randomUUID } from 'node:crypto';
-import { AppError, ERROR_CODE, documentKind } from '@dmjone/shared';
-import type { CredentialRecord, DocumentEmailDelivery } from '@dmjone/shared';
+import { randomUUID, createHash } from 'node:crypto';
+import { AppError, ERROR_CODE, documentKind, ndaEnclosureLine, isOfferLetter } from '@dmjone/shared';
+import type { CredentialRecord, DocumentEmailDelivery, LetterContent } from '@dmjone/shared';
 import type { IssuerDeps } from '../deps.js';
-import type { DocumentEmailMessage } from './provider.js';
+import type { DocumentEmailMessage, DocumentEmailAttachment } from './provider.js';
 import { initialEmailDelivery, nextWorkingTime } from './schedule.js';
 
 const RETRY_WINDOW = 23 * 60 * 60 * 1000; // shorter than Resend's 24-hour idempotency retention
@@ -84,6 +84,24 @@ export async function sendDocumentEmail(deps: IssuerDeps, documentId: string, re
   if (!pdf || !section63) throw new AppError(ERROR_CODE.BAD_REQUEST, 'Document generation is incomplete; email was not sent', 409);
   const kind = documentKind(record);
   const message: DocumentEmailMessage = {documentId, kind, to:deps.secretSealer.openString(record.recipientEmailEnc), downloadUrl:`${deps.env.VERIFY_PUBLIC_URL}/v/${record.verifyToken}`};
+  if(kind==='letter' && isOfferLetter(record.content as LetterContent) && !record.nda){
+    const base=previous??initialEmailDelivery(deps,'already-encrypted')!;
+    await deps.credentialRepo.compareAndSetEmailDelivery(documentId,previous,terminal(base,'cancelled'));
+    throw new AppError(ERROR_CODE.BAD_REQUEST,'This older offer has no NDA; create a reviewed offer with its NDA before emailing',409);
+  }
+  const attachments:DocumentEmailAttachment[]=[];
+  if(record.nda){
+    const nda=await deps.credentialRepo.getById(record.nda.documentId);
+    const bytes=nda?await deps.blobStore.get(nda.id,'certificate'):null;
+    if(!nda || nda.erased || nda.status!=='valid' || !nda.verifyToken || !bytes || bytes.length>400*1024 ||
+      nda.pdfSha256!==record.nda.pdfSha256 || createHash('sha256').update(bytes).digest('hex')!==record.nda.pdfSha256 ||
+      !(record.content as LetterContent).bodyParagraphs.includes(ndaEnclosureLine(nda.id,nda.pdfSha256))) {
+      throw new AppError(ERROR_CODE.BAD_REQUEST,'The required NDA is unavailable or does not match the offer; email was not sent',409);
+    }
+    message.nda={documentId:nda.id,downloadUrl:deps.env.VERIFY_PUBLIC_URL+'/v/'+nda.verifyToken};
+    const subject=(record.content as LetterContent).subject;if(subject)message.subject=subject;
+    attachments.push({filename:'dmj-one-NDA-'+nda.id+'.pdf',contentBase64:Buffer.from(bytes).toString('base64')});
+  }
   const body = previous?.attempts ? deps.secretSealer.openString(previous.encryptedMessage) : sender.prepare(message);
   const claim: DocumentEmailDelivery = {
     status:'sending', provider:sender.provider,
@@ -117,7 +135,7 @@ export async function sendDocumentEmail(deps: IssuerDeps, documentId: string, re
   let result: Awaited<ReturnType<typeof sender.send>>;
   if (Date.now() + (sender.provider === 'oci' ? 35000 : 20000) >= claim.leaseUntil || (sender.provider !== 'oci' && Date.now() >= claim.createdAt + RETRY_WINDOW)) result = {status:'uncertain'};
   else {
-    try { result = await sender.send(body, `dmj-trust-v1/${documentId}`); }
+    try { result = await sender.send(body, `dmj-trust-v1/${documentId}`, attachments); }
     catch { result = {status:'uncertain'}; }
   }
   const done: DocumentEmailDelivery = {...terminal(claim,sender.provider === 'oci' && result.status === 'uncertain' ? 'outcome_unknown' : result.status),

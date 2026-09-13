@@ -38,6 +38,10 @@ export function createFirestoreCredentialRepository(db: Firestore): CredentialRe
         const record = snap.data() as CredentialRow | undefined;
         if (!record || record.erased || ((next.status === 'sending' || next.status === 'queued') && record.status !== 'valid')) return false;
         if (canonicalJson(record.emailDelivery ?? null) !== canonicalJson(expected)) return false;
+        if(next.status==='sending' && record.nda){
+          const nda=(await tx.get(col.doc(record.nda.documentId))).data() as CredentialRow | undefined;
+          if(!nda || nda.erased || nda.status!=='valid' || nda.pdfSha256!==record.nda.pdfSha256)return false;
+        }
         tx.update(ref, { emailDelivery: next });
         return true;
       });

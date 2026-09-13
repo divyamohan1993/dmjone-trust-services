@@ -405,6 +405,18 @@ function letterheadPanel(emailEnabled: boolean): ReturnType<typeof html> {
         <input id="lf-pw" name="password" type="password" minlength="8" maxlength="128" required />
       </div>
     </div>
+    <fieldset class="email-fields">
+      <legend>Offer and NDA</legend>
+      <label><input type="checkbox" id="lf-offer" name="offerLetter" /> This is an offer letter — include an NDA</label>
+      <div id="lf-nda-panel" hidden>
+        <p class="muted">Every offer includes an independently signed NDA PDF attached to its email. The applicant must sign every page of both documents, email them to contact@dmj.one, then enroll at timesheet.dmj.one.</p>
+        <label for="lf-nda">NDA terms — one paragraph per blank line</label>
+        <textarea id="lf-nda" name="ndaBodyParagraphs" rows="16" maxlength="24500"></textarea>
+        <p class="muted">Review the confidentiality period and the <a href="https://dmj.one/tos" target="_blank" rel="noopener">Terms &amp; Conditions</a> and <a href="https://dmj.one/privacy" target="_blank" rel="noopener">Privacy Policy</a>. Existing policy wording on submissions and arbitration needs alignment with the engagement. A template does not establish legal compliance.</p>
+        <button type="button" class="secondary" data-action="preview-nda">Preview NDA</button>
+        <div id="nda-preview-host" aria-live="polite"></div>
+      </div>
+    </fieldset>
     ${emailFields('lf', emailEnabled)}
     ${attestationRow('lf-attest')}
     <div class="actions">

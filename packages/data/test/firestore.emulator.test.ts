@@ -1,3 +1,4 @@
+import {createFirestoreEmailQuotaRepository} from '../src/email-quota.js';
 import {createFirestoreDocumentDraftRepository} from '../src/document-drafts.js';
 /**
  * Emulator-gated parity tests for the Firestore-backed stores.
@@ -49,6 +50,16 @@ describe.skipIf(!EMULATOR)('Firestore stores (emulator) — parity with in-memor
     await client.terminate();
   });
 
+  it('stores and erases the private download password and reserves both delivery recipients',async()=>{
+    const repo=createFirestoreCredentialRepository(client),record=makeRecord({id:`DMJ-IC-20260914-${rnd()}`});
+    await repo.create({...record,recipientEmailEnc:'sealed-email',recipientPasswordEnc:'sealed-password'});
+    expect((await repo.getById(record.id))?.recipientPasswordEnc).toBe('sealed-password');
+    await repo.erase(record.id,new Date().toISOString());
+    expect((await repo.getById(record.id))?.recipientPasswordEnc).toBeUndefined();
+    const quota=createFirestoreEmailQuotaRepository(client),now=Date.now();
+    for(let i=0;i<45;i++)expect(await quota.reserve(now,2)).toBe(true);
+    expect(await quota.reserve(now,2)).toBe(false);
+  });
   it('persists the email outbox and atomically removes a terminal cursor',async()=>{
     const repo=createFirestoreCredentialRepository(client);
     const record=makeRecord({id:`DMJ-IC-20260913-${rnd()}`});

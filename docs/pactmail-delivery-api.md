@@ -16,8 +16,7 @@ Certificates and letters can specify `recipientEmail` at generation time. The
 address is encrypted at rest and excluded from signed content, public responses,
 and email/audit logs. Sending starts only after the signed document and its
 supporting artifact are stored. Email contains a verification/download link;
-share the existing download password separately. No plaintext PDF attachment or
-password is sent. An email failure returns the generated document ID and a
+include the existing download password in the email and CC records@dmj.one. The offer NDA is attached to that same message. An email failure returns the generated document ID and a
 separate email status, so retrying delivery does not regenerate the document.
 
 Email delivery leases and outcomes are persisted on the private document record.
@@ -26,7 +25,7 @@ same idempotency key on retries. A maximum of three attempts is allowed within
 23 hours; accepted mail is never resent. Unknown outcomes outside the deduplication
 window need provider reconciliation. Provider acceptance does not prove inbox
 placement or delivery. Revoked, erased, and incomplete documents cannot be mailed;
-erasure purges both the address and encrypted request body. A network failure of
+erasure purges the encrypted address, download password and request body. A network failure of
 the generation request itself requires checking the issued-document list before
 trying generation again; generation POST requests are not automatically retried.
 
@@ -57,6 +56,10 @@ Request:
   "documentId": "DMJ-LTR-20260912-01",
   "kind": "letter",
   "to": "recipient@example.com",
+  "cc": ["records@dmj.one"],
+  "downloadPassword": "INERT_EXAMPLE_PASSWORD",
+  "text": "Rendered plain-text document email",
+  "html": "Rendered HTML document email",
   "downloadUrl": "https://verify.dmj.one/v/UNGUESSABLE_DOCUMENT_TOKEN"
 }
 ```

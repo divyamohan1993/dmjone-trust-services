@@ -3,6 +3,7 @@ import { AppError, ERROR_CODE, documentKind, ndaEnclosureLine, isOfferLetter } f
 import type { CredentialRecord, DocumentEmailDelivery, LetterContent } from '@dmjone/shared';
 import type { IssuerDeps } from '../deps.js';
 import type { DocumentEmailMessage, DocumentEmailAttachment } from './provider.js';
+import { recordsCc } from './template.js';
 import { initialEmailDelivery, nextWorkingTime } from './schedule.js';
 
 const RETRY_WINDOW = 23 * 60 * 60 * 1000; // shorter than Resend's 24-hour idempotency retention
@@ -83,7 +84,13 @@ export async function sendDocumentEmail(deps: IssuerDeps, documentId: string, re
   ]);
   if (!pdf || !section63) throw new AppError(ERROR_CODE.BAD_REQUEST, 'Document generation is incomplete; email was not sent', 409);
   const kind = documentKind(record);
-  const message: DocumentEmailMessage = {documentId, kind, to:deps.secretSealer.openString(record.recipientEmailEnc), downloadUrl:`${deps.env.VERIFY_PUBLIC_URL}/v/${record.verifyToken}`};
+  if(!record.recipientPasswordEnc){
+    const base=previous??initialEmailDelivery(deps,'already-encrypted')!;
+    await deps.credentialRepo.compareAndSetEmailDelivery(documentId,previous,terminal(base,'cancelled'));
+    throw new AppError(ERROR_CODE.BAD_REQUEST,'This older document has no recoverable download password. Prepare a new reviewed copy before emailing.',409);
+  }
+  const recipientName='recipientName' in record.content?record.content.recipientName:'recipientLines' in record.content?record.content.recipientLines[0]:undefined;
+  const message: DocumentEmailMessage = {documentId, kind, downloadPassword:deps.secretSealer.openString(record.recipientPasswordEnc),...(recipientName&&{recipientName}), to:deps.secretSealer.openString(record.recipientEmailEnc), downloadUrl:`${deps.env.VERIFY_PUBLIC_URL}/v/${record.verifyToken}`};
   if(kind==='letter' && isOfferLetter(record.content as LetterContent) && !record.nda){
     const base=previous??initialEmailDelivery(deps,'already-encrypted')!;
     await deps.credentialRepo.compareAndSetEmailDelivery(documentId,previous,terminal(base,'cancelled'));
@@ -112,7 +119,7 @@ export async function sendDocumentEmail(deps: IssuerDeps, documentId: string, re
   };
   if (sender.provider === 'oci') {
     if (!deps.emailQuota) throw new AppError(ERROR_CODE.INTERNAL,'OCI email quota is not configured',503);
-    if (!await deps.emailQuota.reserve(now)) {
+    if (!await deps.emailQuota.reserve(now,1+recordsCc(message.to).length)) {
       const summary = await defer(deps,record,previous,now+15*60_000);
       return {...summary,status:'quota_limited'};
     }

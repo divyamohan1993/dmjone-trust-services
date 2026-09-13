@@ -14,7 +14,7 @@
  * Pure: no I/O, no allocation, no signing, no persistence.
  */
 
-import { DEFAULT_SIGNATORY } from '@dmjone/shared';
+import { DEFAULT_SIGNATORY, normalizeLetterPunctuation } from '@dmjone/shared';
 import type { IssueLetterInput, LetterContent } from '@dmjone/shared';
 
 /**
@@ -27,6 +27,7 @@ export function assembleLetterContent(
   input: Omit<IssueLetterInput, 'password' | 'attestation' | 'scope'>,
   documentId: string,
 ): LetterContent {
+  input=normalizeLetterPunctuation(input);
   return {
     documentId,
     issueDate: input.issueDate,

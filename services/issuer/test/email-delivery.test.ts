@@ -36,7 +36,9 @@ describe('generate, secure, and email documents', () => {
     const record = await deps.credentialRepo.getById(data[idField]);
     const message = JSON.parse(calls[0]!.body);
     expect(message.to).toBe(recipient); expect(message.downloadUrl).toBe(`https://verify.example.test/v/${record!.verifyToken}`);
-    expect(calls[0]!.body).not.toContain(input.password);
+    expect(calls[0]!.body).toContain(input.password);
+    expect(record!.recipientPasswordEnc).not.toContain(input.password);
+    expect(record!.canonicalPayload).not.toContain(input.password);
     expect(JSON.stringify(record!.content)).not.toContain(recipient);
     expect(record!.canonicalPayload).not.toContain(recipient);
     expect(record!.recipientEmailEnc).not.toContain(recipient);
@@ -84,8 +86,18 @@ describe('generate, secure, and email documents', () => {
     expect(listed.items[0].email.status).toBe('uncertain');
     expect(JSON.stringify(listed)).not.toContain(recipient);
     expect(JSON.stringify(listed)).not.toContain('encryptedMessage');
+    expect(JSON.stringify(listed)).not.toContain('recipientPasswordEnc');
+    expect(JSON.stringify(listed)).not.toContain(cert.password);
   });
 
+  it('holds legacy documents with no recoverable password instead of sending an incomplete email',async()=>{
+    const {deps,post,calls}=await fixture();
+    const created=await (await post('/api/credentials',{...cert,emailSendAt:'2026-09-14T06:00:00Z'})).json();
+    const record=deps.credentialRepo.records.get(created.credentialId)!;delete record.recipientPasswordEnc;
+    vi.spyOn(Date,'now').mockReturnValue(Date.parse('2026-09-14T06:00:00Z'));
+    await expect(sendDocumentEmail(deps,record.id,'legacy')).rejects.toThrow('no recoverable download password');
+    expect(record.emailDelivery?.status).toBe('cancelled');expect(calls).toHaveLength(0);
+  });
   it('never resends accepted email', async () => {
     const {post,calls} = await fixture(); const created = await (await post('/api/credentials',cert)).json();
     await post(`/api/credentials/${created.credentialId}/email/retry`);
@@ -120,21 +132,21 @@ describe('generate, secure, and email documents', () => {
     record.status = 'valid'; await deps.blobStore.delete(record.id,'section63');
     await expect(sendDocumentEmail(deps,record.id,'incomplete')).rejects.toThrow();
     await deps.credentialRepo.erase(record.id,new Date().toISOString());
-    expect(record.recipientEmailEnc).toBeUndefined(); expect(record.emailDelivery).toBeUndefined();
+    expect(record.recipientEmailEnc).toBeUndefined(); expect(record.recipientPasswordEnc).toBeUndefined(); expect(record.emailDelivery).toBeUndefined();
     await expect(sendDocumentEmail(deps,record.id,'erased')).rejects.toThrow();
     expect(calls).toHaveLength(1);
   });
 });
 
 describe('outbound provider boundaries', () => {
-  const message = {documentId:'DMJ-LTR-20260912-01',kind:'letter' as const,to:recipient,downloadUrl:'https://verify.dmj.one/v/inert-example-token'};
-  it('uses contact@dmj.one, includes the secure link, omits the password and follows no redirects', async () => {
+  const message = {documentId:'DMJ-LTR-20260912-01',kind:'letter' as const,downloadPassword:'local-test-password',to:recipient,downloadUrl:'https://verify.dmj.one/v/inert-example-token'};
+  it('uses contact@dmj.one, includes the secure link, includes the password and records CC and follows no redirects', async () => {
     const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       expect(init?.redirect).toBe('error');
       expect(new Headers(init?.headers).get('Idempotency-Key')).toBe('inert-key');
       const body = JSON.parse(init?.body as string);
       expect(body.from).toBe('dmj.one <contact@dmj.one>'); expect(body.to).toEqual([recipient]);
-      expect(body.text).toContain(message.downloadUrl); expect(body.text).toContain('shared separately'); expect(body.attachments).toBeUndefined();
+      expect(body.text).toContain(message.downloadUrl); expect(body.text).toContain(message.downloadPassword); expect(body.html).toContain(message.downloadPassword); expect(body.cc).toEqual(['records@dmj.one']); expect(body.attachments).toBeUndefined();
       return Response.json({id:'inert-provider-id'});
     });
     const sender = createResendEmailSender('re_inert_fixture_not_a_real_key',fetcher);
@@ -160,7 +172,7 @@ describe('outbound provider boundaries', () => {
   it('uses the Pactmail service identity contract without a provider key', async () => {
     const sender = createPactmailEmailSender('https://pactmail.example.test/api/send',async () => 'inert-id-token',async (_url,init) => {
       expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer inert-id-token');
-      expect(JSON.parse(init?.body as string)).toEqual(message);
+      expect(JSON.parse(init?.body as string)).toMatchObject({...message,cc:['records@dmj.one']});
       return Response.json({status:'accepted',providerId:'inert-provider-id'});
     });
     expect(await sender.send(sender.prepare(message),'inert-key')).toMatchObject({status:'accepted'});

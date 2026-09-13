@@ -523,7 +523,7 @@ it('queues an uploaded PDF and sends its private link at the chosen IST time', a
     expect(record!.canonicalPayload).not.toContain('inert@example.test');
     now=Date.parse('2026-09-14T09:15:00+05:30');await dispatchDueEmails(deps,'scheduled-upload');
     expect(bodies).toHaveLength(1);expect(JSON.parse(bodies[0]!)).toMatchObject({kind:'upload',to:'inert@example.test'});
-    expect(bodies[0]).not.toContain('inert-download-password');
+    expect(bodies[0]).toContain('inert-download-password');
   } finally {clock.mockRestore();}
 });
 

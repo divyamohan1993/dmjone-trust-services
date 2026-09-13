@@ -26,3 +26,11 @@ export function buildNdaInput(offer:Omit<IssueLetterInput,'attestation'|'passwor
   salutation:'Please read and sign this agreement.',bodyParagraphs:terms,
   password:offer.password??'preview-only-not-a-download-password',attestation:true};
 }
+
+/** House typography for newly prepared correspondence. Historical signed records remain unchanged. */
+export function normalizeLetterPunctuation<T>(value:T):T{
+ if(typeof value==='string')return value.replace(/\s*—\s*/g,' - ') as T;
+ if(Array.isArray(value))return value.map(v=>normalizeLetterPunctuation(v)) as T;
+ if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).map(([key,v])=>[key,['password','recipientEmail','emailSendAt'].includes(key)?v:normalizeLetterPunctuation(v)])) as T;
+ return value;
+}

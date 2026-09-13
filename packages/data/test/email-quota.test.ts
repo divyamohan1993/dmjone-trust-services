@@ -10,6 +10,12 @@ describe('OCI free-allowance guard', () => {
     expect(await repo.reserve(now+24*60*60*1000-1)).toBe(false);
     expect(await repo.reserve(now+24*60*60*1000)).toBe(true);
   });
+  it('atomically reserves both recipient and records copy', async () => {
+    const repo=createInMemoryEmailQuotaRepository();
+    const results=await Promise.all(Array.from({length:50},()=>repo.reserve(now,2)));
+    expect(results.filter(Boolean)).toHaveLength(45);
+    expect(reserveEmailQuota({month:'2026-09',count:2699,recent:[],lastAt:now},now,2)).toBeNull();
+  });
   it('stops at 2700 in a UTC calendar month, below the documented free allowance', () => {
     const last = reserveEmailQuota({month:'2026-09',count:2699,recent:[],lastAt:now-1},now);
     expect(last?.count).toBe(2700);

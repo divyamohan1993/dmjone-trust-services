@@ -277,7 +277,7 @@ export interface Section63Generator {
 
 /** Conservative OCI email submission budget, persisted across instances/restarts. */
 export interface EmailQuotaRepository {
-  reserve(now: number): Promise<boolean>;
+  reserve(now: number, recipients?: number): Promise<boolean>;
 }
 
 export interface DocumentDraftRepository {

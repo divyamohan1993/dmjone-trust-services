@@ -76,6 +76,7 @@ export function applyErasure(record: CredentialRecord, at: string): CredentialRe
 
   // The plaintext canonical payload contains the recipient name, so purge it too.
   delete record.recipientEmailEnc;
+  delete record.recipientPasswordEnc;
   delete record.emailDelivery;
   record.canonicalPayload = '';
   record.erased = true;

@@ -33,7 +33,7 @@ describe('offer and NDA packet',()=>{
   expect(sent).toHaveLength(1);expect(sent[0]!.attachments).toHaveLength(1);
   expect(Buffer.from(sent[0]!.attachments[0]!.contentBase64,'base64')).toEqual(Buffer.from((await deps.blobStore.get(nda.id,'certificate'))!));
   expect(JSON.parse(sent[0]!.body).nda.downloadUrl).toContain(nda.verifyToken);
-  expect(sent[0]!.body).not.toContain(input.password);
+  expect(sent[0]!.body).toContain(input.password);
   const stored=(await deps.credentialRepo.getById(documentId))!;
   expect(deps.secretSealer.openString(stored.emailDelivery!.encryptedMessage)).not.toContain(sent[0]!.attachments[0]!.contentBase64);
  });
@@ -88,15 +88,15 @@ describe('offer and NDA packet',()=>{
  });
 });
 describe('NDA attachment transport and onboarding instructions',()=>{
- const message={documentId:'DMJ-LTR-20260914-02',kind:'letter' as const,to:input.recipientEmail,downloadUrl:'https://verify.example.test/v/inert-offer',subject:input.subject,nda:{documentId:'DMJ-LTR-20260914-01',downloadUrl:'https://verify.example.test/v/inert-nda'}};
+ const message={documentId:'DMJ-LTR-20260914-02',kind:'letter' as const,downloadPassword:'local-test-password',to:input.recipientEmail,downloadUrl:'https://verify.example.test/v/inert-offer',subject:input.subject,nda:{documentId:'DMJ-LTR-20260914-01',downloadUrl:'https://verify.example.test/v/inert-nda'}};
  const attachments=[{filename:'nda.pdf',contentBase64:Buffer.from('%PDF-inert-nda').toString('base64')}];
  it('instructs signing every page, returning both documents, then enrolling; links the governing policies',()=>{
-  const text=messageText(message);expect(text).toContain('EVERY PAGE');expect(text).toContain('contact@dmj.one');expect(text).toContain('https://timesheet.dmj.one');expect(text).toContain('https://dmj.one/tos');expect(text).toContain('https://dmj.one/privacy');expect(text).not.toContain(input.password);
+  const text=messageText(message);expect(text).toContain('EVERY PAGE');expect(text).toContain('contact@dmj.one');expect(text).toContain('https://timesheet.dmj.one');expect(text).toContain('https://dmj.one/tos');expect(text).toContain('https://dmj.one/privacy');expect(text).toContain(message.downloadPassword);
  });
  it('uses inline PDF bytes in OCI without enabling file or URL access',async()=>{
   const sender=createOciEmailSender({username:'inert',password:'inert'},()=>({close:()=>{},sendMail:async(options:any)=>{
    expect(options.subject).toBe(input.subject);expect(options.attachments).toEqual([{filename:'nda.pdf',content:attachments[0]!.contentBase64,encoding:'base64',contentType:'application/pdf'}]);
-   expect(options.disableFileAccess).toBe(true);expect(options.disableUrlAccess).toBe(true);return {accepted:[input.recipientEmail],messageId:'inert-id'};
+   expect(options.disableFileAccess).toBe(true);expect(options.disableUrlAccess).toBe(true);return {accepted:[input.recipientEmail,'records@dmj.one'],messageId:'inert-id'};
   }}) as any);
   expect(await sender.send(sender.prepare(message),'inert-key',attachments)).toMatchObject({status:'accepted'});
  });

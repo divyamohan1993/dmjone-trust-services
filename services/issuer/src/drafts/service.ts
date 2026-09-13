@@ -1,4 +1,4 @@
-import {DEFAULT_NDA_PARAGRAPHS,isOfferLetter} from '@dmjone/shared';
+import {DEFAULT_NDA_PARAGRAPHS,isOfferLetter,normalizeLetterPunctuation} from '@dmjone/shared';
 import {randomUUID,randomBytes} from 'node:crypto';
 import {AppError,ERROR_CODE,issueCredentialSchema,issueCredentialObject,issueLetterSchema,issueLetterObject,signUploadSchema} from '@dmjone/shared';
 import type {DocumentDraft,DocumentKind,IssueCredentialInput,IssueLetterInput,SignUploadInput} from '@dmjone/shared';
@@ -24,7 +24,7 @@ export function draftSummary(deps:IssuerDeps,draft:DocumentDraft){
 }
 function parseInput(kind:DocumentKind,raw:unknown,schedule:boolean):DraftInput{
   if(!raw || typeof raw!=='object' || Array.isArray(raw))throw bad('Invalid draft input');
-  const input=raw as Record<string,unknown>;
+  const input=(kind==='letter'?normalizeLetterPunctuation(raw):raw) as Record<string,unknown>;
   if(schedule && input.attestation!==true)throw bad('Confirm the issuer attestation before scheduling');
   const schema=kind==='certificate'?(schedule?issueCredentialSchema:issueCredentialObject):kind==='letter'?(schedule?issueLetterSchema:issueLetterObject):signUploadSchema;
   const parsed=schema.safeParse({...input,attestation:true,password:input.password||randomBytes(32).toString('base64url')});

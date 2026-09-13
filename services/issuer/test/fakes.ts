@@ -79,7 +79,7 @@ export class FakeCredentialRepo implements CredentialRepository {
     }
     if (Array.isArray(c['bodyParagraphs'])) c['bodyParagraphs'] = [];
     if (Array.isArray(c['recipientLines'])) c['recipientLines'] = [];
-    delete r.recipientEmailEnc; delete r.emailDelivery;
+    delete r.recipientEmailEnc; delete r.recipientPasswordEnc; delete r.emailDelivery;
     r.canonicalPayload = '';
     r.erased = true;
     r.erasedAt = at;

@@ -297,7 +297,7 @@ function emailFields(prefix: string, enabled: boolean): ReturnType<typeof html> 
         <input id="${prefix}-send-at" type="datetime-local" name="emailSendAt" step="60" disabled />
       </div>
       <p class="muted">Monday–Friday, 9 AM–5 PM IST. Before 9 AM: 9 AM that day. Evenings and weekends: 9 AM the next weekday. Times are always IST, wherever you are.</p>
-      <p class="muted">Sent from contact@dmj.one with a secure download link. Share the download password separately.</p>`
+      <p class="muted">Sent from contact@dmj.one with the download link and password. A copy, including any attachments, is sent to records@dmj.one.</p>`
     : html`<p class="muted">Email delivery is awaiting mail service configuration. You can still generate and secure documents.</p>`}
   </fieldset>`;
 }
@@ -355,6 +355,7 @@ function certificatePanel(emailEnabled: boolean): ReturnType<typeof html> {
       <div class="field-half">
         <label for="f-pw">Candidate download password</label>
         <input id="f-pw" name="password" type="password" minlength="8" maxlength="128" required />
+        <button type="button" class="secondary" data-action="copy-document-password" data-password-id="f-pw">Copy password</button>
       </div>
     </div>
     ${emailFields('f', emailEnabled)}
@@ -403,6 +404,7 @@ function letterheadPanel(emailEnabled: boolean): ReturnType<typeof html> {
       <div class="field-half">
         <label for="lf-pw">Candidate download password</label>
         <input id="lf-pw" name="password" type="password" minlength="8" maxlength="128" required />
+        <button type="button" class="secondary" data-action="copy-document-password" data-password-id="lf-pw">Copy password</button>
       </div>
     </div>
     <fieldset class="email-fields">
@@ -503,7 +505,7 @@ function uploadPanel(emailEnabled: boolean): ReturnType<typeof html> {
 function dashboardBody(emailEnabled: boolean, ociBudget: boolean): ReturnType<typeof html> {
   return html`<h1>Create a document</h1>
 <p class="lede">Compose a fresh credential. Each issuance is signed, logged, and sealed.</p>
-${ociBudget ? html`<p class="muted">Email sending is capped at ${OCI_EMAIL_DAILY_LIMIT} submissions per rolling 24 hours and ${OCI_EMAIL_MONTHLY_LIMIT.toLocaleString('en-US')} per UTC calendar month. Document generation continues when the email limit is reached.</p>` : ''}
+${ociBudget ? html`<p class="muted">Email sending is capped at ${OCI_EMAIL_DAILY_LIMIT} recipient deliveries per rolling 24 hours and ${OCI_EMAIL_MONTHLY_LIMIT.toLocaleString('en-US')} per UTC calendar month. The records CC counts toward these limits. Document generation continues when the email limit is reached.</p>` : ''}
 <p class="muted" id="status" role="status" aria-live="polite"></p>
 
 <div class="mode-tabs" role="tablist" aria-label="Document mode">
@@ -534,7 +536,7 @@ ${ociBudget ? html`<p class="muted">Email sending is capped at ${OCI_EMAIL_DAILY
 <div class="card">
   ${STUDS}
   <h2>Drafts &amp; scheduled delivery</h2>
-  <p class="muted">Save a draft, preview it and make your changes. Choose Schedule send after review. Review / edit pauses a scheduled delivery while you work. The final version is signed when delivery starts.</p>
+  <p class="muted">Save a draft, preview it and make your changes. Choose Schedule send after review. Review / edit pauses a scheduled delivery while you work. The final version is signed when delivery starts. Use for another candidate creates an unscheduled copy with new identity fields and a fresh password.</p>
   <div class="actions"><button type="button" class="secondary" data-action="refresh-drafts">Refresh drafts</button></div>
   <div class="issued-table-scroll" role="region" aria-label="Drafts and scheduled documents" tabindex="0">
     <table><thead><tr><th>Document</th><th>Recipient email</th><th>Status</th><th>Send time (IST)</th><th>Actions</th></tr></thead>

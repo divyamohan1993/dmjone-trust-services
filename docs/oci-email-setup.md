@@ -2,12 +2,17 @@
 
 The selected provider is OCI Email Delivery in **us-phoenix-1**, the tenancy's
 confirmed home region. Oracle documents 3,000 emails/month in the Always Free
-resources. The application deliberately reserves fewer submission attempts:
+resources. The application deliberately reserves fewer recipient delivery attempts:
 
-- **90 per rolling 24-hour window**;
-- **2,700 per UTC calendar month**;
-- one recipient per message, secure download links only, no PDF attachments and
-  no download passwords in email. Offer emails additionally attach their reviewed NDA PDF, capped at 400 KiB; see [offer packets](offer-nda.md).
+- **90 recipient deliveries per rolling 24-hour window**;
+- **2,700 recipient deliveries per UTC calendar month**;
+- one primary recipient plus records@dmj.one in CC, with the secure download link
+  and password in the same message. Offer emails attach their reviewed NDA PDF,
+  capped at 400 KiB; see [offer packets](offer-nda.md).
+
+Each To/Cc recipient consumes one reservation. A normal message therefore uses two
+units, allowing at most 45 messages per rolling day and 1,350 per month. If records
+is the primary recipient, it receives a single copy.
 
 Reservations include failed submissions and races, so the guard is conservative.
 The counters live in Firestore (`email_quotas/oci-trust`) and survive Cloud Run

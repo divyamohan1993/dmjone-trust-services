@@ -53,7 +53,7 @@ describe('IST weekday scheduling',()=>{
     expect((await app.request('/api/internal/email/dispatch',{method:'POST'})).status).toBe(403);
     const results=await Promise.all([1,2].map(()=>app.request('/api/internal/email/dispatch',{method:'POST',headers:{authorization:'Bearer inert-trusted-token'}})));
     expect(results.map(r=>r.status)).toEqual([200,200]);expect(sent).toHaveLength(1);
-    expect(sent[0]).not.toContain(input.password);
+    expect(sent[0]).toContain(input.password);
     expect(await deps.credentialRepo.listDueEmails(now+120_000,10)).toHaveLength(0);
   });
   it('respects 9:15 AM even through retry calls and does not expire a long-future schedule',async()=>{

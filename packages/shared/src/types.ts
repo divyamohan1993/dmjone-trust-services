@@ -218,6 +218,8 @@ export interface CredentialRecord {
   sourceDraftId?: string;
   /** Encrypted delivery address, kept out of content and public verification responses. */
   recipientEmailEnc?: string;
+  /** Private PDF password for the authorised delivery email, encrypted at rest. */
+  recipientPasswordEnc?: string;
   emailDelivery?: DocumentEmailDelivery;
   id: string;
   /** Absent ⇒ `'certificate'`. */

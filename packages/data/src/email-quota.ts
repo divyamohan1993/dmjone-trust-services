@@ -6,8 +6,9 @@ import type { Firestore } from '@google-cloud/firestore';
 // deployment environment typo cannot silently raise the application's budget.
 const DAY = 24 * 60 * 60 * 1000;
 export interface EmailQuotaState { month: string; count: number; recent: number[]; lastAt: number }
-export function reserveEmailQuota(previous: EmailQuotaState | null, now: number): EmailQuotaState | null {
+export function reserveEmailQuota(previous: EmailQuotaState | null, now: number, recipients=1): EmailQuotaState | null {
   if (!Number.isSafeInteger(now) || now < 0) throw new Error('Email quota clock is invalid');
+  if(!Number.isInteger(recipients)||recipients<1||recipients>2)throw new Error('Invalid email recipient count');
   const month = new Date(now).toISOString().slice(0,7);
   if (previous) {
     if (!/^\d{4}-\d{2}$/.test(previous.month) || !Number.isSafeInteger(previous.count) || previous.count < 0 ||
@@ -17,22 +18,22 @@ export function reserveEmailQuota(previous: EmailQuotaState | null, now: number)
   }
   const recent = previous?.recent.filter(t => t > now - DAY) ?? [];
   const count = previous?.month === month ? previous.count : 0;
-  if (recent.length >= OCI_EMAIL_DAILY_LIMIT || count >= OCI_EMAIL_MONTHLY_LIMIT) return null;
-  return {month, count:count+1, recent:[...recent,now], lastAt:now};
+  if (recent.length+recipients > OCI_EMAIL_DAILY_LIMIT || count+recipients > OCI_EMAIL_MONTHLY_LIMIT) return null;
+  return {month, count:count+recipients, recent:[...recent,...Array<number>(recipients).fill(now)], lastAt:now};
 }
 export function createInMemoryEmailQuotaRepository(): EmailQuotaRepository {
   let state: EmailQuotaState | null = null;
-  return {async reserve(now) {
-    const next = reserveEmailQuota(state,now); if (!next) return false;
+  return {async reserve(now,recipients=1) {
+    const next = reserveEmailQuota(state,now,recipients); if (!next) return false;
     state = next; return true;
   }};
 }
 export function createFirestoreEmailQuotaRepository(db: Firestore): EmailQuotaRepository {
   const ref = db.collection('email_quotas').doc('oci-trust');
-  return {async reserve(now) {
+  return {async reserve(now,recipients=1) {
     return db.runTransaction(async tx => {
       const snapshot = await tx.get(ref);
-      const next = reserveEmailQuota((snapshot.data() as EmailQuotaState | undefined) ?? null, now);
+      const next = reserveEmailQuota((snapshot.data() as EmailQuotaState | undefined) ?? null, now, recipients);
       if (!next) return false;
       tx.set(ref,next); return true;
     });

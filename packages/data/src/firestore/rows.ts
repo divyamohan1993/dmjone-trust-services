@@ -57,6 +57,7 @@ export function rowToCredential(row: CredentialRow): CredentialRecord {
   if (row.kind !== undefined) out.kind = row.kind;
   if (row.nda !== undefined) out.nda = row.nda;
   if (row.sourceDraftId !== undefined) out.sourceDraftId = row.sourceDraftId;
+  if (row.recipientPasswordEnc !== undefined) out.recipientPasswordEnc = row.recipientPasswordEnc;
   if (row.recipientEmailEnc !== undefined) out.recipientEmailEnc = row.recipientEmailEnc;
   if (row.emailDelivery !== undefined) out.emailDelivery = row.emailDelivery;
   if (row.revokedAt !== undefined) out.revokedAt = row.revokedAt;

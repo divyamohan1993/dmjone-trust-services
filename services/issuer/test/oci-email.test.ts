@@ -6,13 +6,13 @@ import { buildDeps } from './fakes.js';
 import { issueCredential } from '../src/issuance/issue.js';
 
 const credentials = {username:'inert-smtp-user',password:'inert-smtp-password'};
-const message = {documentId:'DMJ-IC-20260912-01',kind:'certificate' as const,to:'recipient@example.test',downloadUrl:'https://verify.example.test/v/inert-token'};
+const message = {documentId:'DMJ-IC-20260912-01',kind:'certificate' as const,downloadPassword:'local-test-password',to:'recipient@example.test',downloadUrl:'https://verify.example.test/v/inert-token'};
 beforeEach(()=>{vi.spyOn(Date,'now').mockReturnValue(Date.parse('2026-09-14T04:30:00Z'));});
 afterEach(()=>{vi.useRealTimers();vi.restoreAllMocks();});
 
 describe('OCI SMTP adapter',()=>{
   it('requires TLS, pins Phoenix, disables logging and sends one secure-link message',async()=>{
-    const close = vi.fn(); const sendMail = vi.fn(async (body:any)=>({accepted:body.to,messageId:body.messageId}));
+    const close = vi.fn(); const sendMail = vi.fn(async (body:any)=>({accepted:[...body.to,...body.cc],messageId:body.messageId}));
     const sender = createOciEmailSender(credentials, options=>{
       expect(options.host).toBe(OCI_SMTP_HOST); expect(options.port).toBe(587); expect(options.requireTLS).toBe(true);
       expect(options.tls).toMatchObject({rejectUnauthorized:true,minVersion:'TLSv1.2',servername:OCI_SMTP_HOST});

@@ -25,8 +25,7 @@ New drafts are separate from already issued, immutable documents. The existing
 direct issuance APIs still secure a document immediately; their email outbox
 supports cancellation, but an issued document is not edited in place. Revoking
 or erasing prevents subsequent queued delivery. Mail already submitted cannot be
-recalled. The recipient gets a secure link from contact@dmj.one; share the
-password separately.
+recalled. The recipient gets a secure link from contact@dmj.one; the email includes the download password and CCs records@dmj.one.
 
 The chosen time is the earliest submission time, not a guaranteed inbox arrival
 instant. A one-minute trigger, cold starts, queue backlog, provider/network
@@ -103,3 +102,21 @@ separate. OCI's existing free-allowance submission guards still apply.
 References: [Scheduler pricing](https://cloud.google.com/scheduler/pricing),
 [OIDC authentication](https://docs.cloud.google.com/scheduler/docs/http-target-auth),
 [timezones and cron](https://docs.cloud.google.com/scheduler/docs/configuring/cron-job-schedules).
+
+## Reusing documents and keeping records
+
+Use **Use for another candidate** on a draft or issued certificate/letter. This
+creates an unscheduled draft with a fresh password and cleared recipient/schedule.
+Review every paragraph, fill the candidate placeholders, and preview before
+scheduling. Uploaded PDFs must be prepared again because their recipient content
+is already embedded in the file.
+
+Delivery includes HTML and plain text with the secure link and exact download
+password. Every document message CCs records@dmj.one, including the same NDA
+attachment. When records is itself the primary recipient, it receives one copy.
+Passwords are encrypted at rest, excluded from public records, and purged on
+erasure. Older issued records without recoverable passwords require a new reviewed
+copy before email delivery. Partial SMTP acceptance requires operator attention
+and never triggers automatic retransmission. OCI counts each recipient, so a
+normal message plus records copy consumes two quota units: at most 45 messages
+per rolling day and 1,350 per month under the application's guards.

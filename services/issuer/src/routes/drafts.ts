@@ -1,3 +1,4 @@
+import {reuseDraft} from '../drafts/reuse.js';
 import {Hono} from 'hono';
 import {AppError,ERROR_CODE} from '@dmjone/shared';
 import type {DocumentKind} from '@dmjone/shared';
@@ -13,7 +14,7 @@ export function registerDraftRoutes(app:Hono<IssuerHonoEnv>,deps:IssuerDeps):voi
     const record=d.documentId?await deps.credentialRepo.getById(d.documentId):null;
     const content=record?.content;
     const label=content?('recipientName' in content?content.recipientName:'subject' in content?content.subject:'originalFilename' in content?content.originalFilename:summary.label):summary.label;
-    return {...summary,...(record&&!record.erased&&{label:label||record.id,
+    return {...summary,canReuse:d.kind!=='upload'&&['draft','scheduled','issued'].includes(d.state)&&(!d.documentId||!!record&&!record.erased),...(record&&!record.erased&&{label:label||record.id,
       recipientEmail:record.recipientEmailEnc?deps.secretSealer.openString(record.recipientEmailEnc):undefined}),
       ...(record?.verifyToken&&!record.erased&&{verifyUrl:deps.env.VERIFY_PUBLIC_URL+'/v/'+record.verifyToken})};
   }))}));
@@ -35,6 +36,11 @@ export function registerDraftRoutes(app:Hono<IssuerHonoEnv>,deps:IssuerDeps):voi
     requireEmailRequest(c,deps);let body:{revision?:unknown};try{body=await c.req.json();}catch{throw new AppError(ERROR_CODE.BAD_REQUEST,'Invalid JSON',400);}
     if(!body || !Number.isInteger(body.revision))throw new AppError(ERROR_CODE.BAD_REQUEST,'A draft revision is required',400);
     return c.json(await pauseDraft(deps,c.req.param('id'),Number(body.revision),c.get('requestId')));
+  });
+  api.post('/:id/reuse',async c=>{
+    requireEmailRequest(c,deps);let body:{revision?:unknown};try{body=await c.req.json();}catch{throw new AppError(ERROR_CODE.BAD_REQUEST,'Invalid JSON',400);}
+    if(!body||!Number.isInteger(body.revision))throw new AppError(ERROR_CODE.BAD_REQUEST,'A source revision is required',400);
+    return c.json(await reuseDraft(deps,c.req.param('id'),Number(body.revision),c.get('requestId')),201);
   });
   app.route('/api/drafts',api);
 }

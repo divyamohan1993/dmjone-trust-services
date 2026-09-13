@@ -155,7 +155,7 @@ export async function attestUpload(
     ...(emailDelivery && { emailDelivery }),
     id: documentId,
     kind: 'upload',
-    ...(input.recipientEmail && {recipientEmailEnc:deps.secretSealer.sealString(input.recipientEmail)}),
+    ...(input.recipientEmail && {recipientEmailEnc:deps.secretSealer.sealString(input.recipientEmail),recipientPasswordEnc:deps.secretSealer.sealString(input.password)}),
     content: attestation,
     status: 'valid',
     createdAt: now,

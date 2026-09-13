@@ -1,3 +1,4 @@
+import {addFullPagePaper,FULL_PAGE_PAPER_HTML} from './full-page-paper.js';
 /**
  * The single Chromium → PDF step, shared by the certificate renderer and the
  * §63 generator. Isolating it here means:
@@ -87,6 +88,13 @@ export function createChromiumRenderer(opts: ChromiumRendererOptions = {}): Html
       browser = await puppeteer.launch(launchOptions);
       const page = await browser.newPage();
       try {
+        let paper:Uint8Array|undefined;
+        if(html.includes('class="paper-wash"')){
+          await page.setContent(FULL_PAGE_PAPER_HTML,{waitUntil:'load'});
+          paper=await page.pdf({...PDF_OPTIONS,displayHeaderFooter:false});
+          html=html.replace(/—/g,'-').replace('</head>','<style>html,body,.page{background:transparent!important}.paper-wash{display:none!important}</style></head>');
+        }
+        const finish=(bytes:Uint8Array)=>paper?addFullPagePaper(bytes,paper):Promise.resolve(bytes);
         // All assets are inline data-URIs, so `load` fires once the document has
         // parsed; the explicit fonts.ready wait below then guards against
         // printing before the base64 @font-face faces have decoded — otherwise
@@ -102,10 +110,10 @@ export function createChromiumRenderer(opts: ChromiumRendererOptions = {}): Html
           // existing certificate renderer and PDF bytes for other modes are unaffected.
           await page.addStyleTag({content:'@page{margin-bottom:28mm;}'});
           const documentId=html.match(/<meta name="dmj-document-id" content="([A-Za-z0-9-]+)"/)?.[1]??'';
-          return await page.pdf({...PDF_OPTIONS,displayHeaderFooter:true,headerTemplate:'<div></div>',margin:{top:'18mm',right:'20mm',bottom:'28mm',left:'20mm'},
-            footerTemplate:'<div style="font-family:Arial,sans-serif;font-size:10px;color:#514a3c;width:100%;margin:0 20mm;border-top:0.5px solid #b0892f;padding-top:5px"><div>Applicant signature: ____________________________________ &nbsp; Date: __________________</div><div style="margin-top:5px">'+documentId+' &nbsp; · &nbsp; Page <span class="pageNumber"></span> of <span class="totalPages"></span></div></div>'});
+          return await finish(await page.pdf({...PDF_OPTIONS,displayHeaderFooter:true,headerTemplate:'<div></div>',margin:{top:'18mm',right:'20mm',bottom:'28mm',left:'20mm'},
+            footerTemplate:'<div style="font-family:Arial,sans-serif;font-size:10px;color:#514a3c;width:100%;margin:0 20mm;border-top:0.5px solid #b0892f;padding-top:5px"><div>Applicant signature: ____________________________________ &nbsp; Date: __________________</div><div style="margin-top:5px">'+documentId+' &nbsp; · &nbsp; Page <span class="pageNumber"></span> of <span class="totalPages"></span></div></div>'}));
         }
-        return await page.pdf(PDF_OPTIONS);
+        return await finish(await page.pdf(PDF_OPTIONS));
       } finally {
         await page.close();
       }

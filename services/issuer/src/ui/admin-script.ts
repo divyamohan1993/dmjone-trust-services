@@ -417,6 +417,7 @@ function saveDraftForm(form,kind,schedule){
   if(schedule && !attestChecked(attestationId)){setStatus(ATTEST_MSG,true);return;}
   var payload;
   try{payload=kind==='letter'?buildLetterPayload(form,true):kind==='certificate'?buildPayload(form,true):draftUploadPayload(form);}catch(e){setStatus(e.message,true);return;}
+  if(!schedule && !payload.recipientEmail)delete payload.recipientEmail;
   if(!payload.password || payload.password.length<8){setStatus('Choose a download password of at least 8 characters before saving.',true);return;}
   if(!form.dataset.draftId){form.dataset.draftId=crypto.randomUUID();form.dataset.draftRevision='0';}
   setGenerating(form,true);setStatus(schedule?'Scheduling the reviewed draft…':'Saving draft — no email will be sent…');
@@ -449,7 +450,7 @@ function fillDraftForm(d){
     applyCertTemplate({cert:input});setVal('f-recipient',input.recipientName);setVal('f-date',input.issueDate);
   }
   setVal(prefix+'-pw',input.password||'');setVal(prefix+'-email',input.recipientEmail||'');
-  var toggle=form.querySelector('[name="sendEmail"]');if(toggle)toggle.checked=!!input.recipientEmail;
+  var toggle=form.querySelector('[name="sendEmail"]');if(toggle)toggle.checked=!!input.recipientEmail||!!d.newCandidate;
   var mode=form.querySelector('[name="emailDeliveryMode"]'),at=form.querySelector('[name="emailSendAt"]');
   if(mode && at){
     mode.value=input.emailSendAt?'scheduled':'automatic';
@@ -464,7 +465,7 @@ function fillDraftForm(d){
     uEl('upload-place').checked=!!input.placeHandwrittenSignature;
     ready=api('/api/uploads/inspect',{pdfBase64:uploadPdfBase64}).then(function(j){uploadPages=j.pages;fillUploadPages();syncUploadPlacement();uEl('upload-meta').textContent=uploadFilename+' — '+j.pageCount+' pages';});
   }
-  return ready.then(function(){form.scrollIntoView({behavior:'smooth',block:'start'});setStatus('Draft opened for review. Delivery is paused. Preview, edit and save, then choose Schedule send when ready.');});
+  return ready.then(function(){form.scrollIntoView({behavior:'smooth',block:'start'});setStatus(d.newCandidate?'New candidate draft created. Fill the name and email, review all copied statements, and choose a delivery time. The source was not changed.':'Draft opened for review. Delivery is paused. Preview, edit and save, then choose Schedule send when ready.');});
 }
 function refreshDrafts(){
   var rows=document.getElementById('draft-rows');if(!rows)return Promise.resolve();
@@ -480,6 +481,11 @@ function refreshDrafts(){
         var edit=document.createElement('button');edit.type='button';edit.className='secondary';edit.textContent=d.state==='scheduled'?'Review / edit (pauses send)':'Review / edit';
         edit.addEventListener('click',function(){edit.disabled=true;api('/api/drafts/'+encodeURIComponent(d.id)+'/pause',{revision:d.revision})
           .then(fillDraftForm).then(refreshDrafts).catch(function(e){setStatus(e.message,true);edit.disabled=false;});});actions.appendChild(edit);
+      }
+      if(d.canReuse){
+        var reuse=document.createElement('button');reuse.type='button';reuse.className='secondary';reuse.textContent='Use for another candidate';
+        reuse.addEventListener('click',function(){reuse.disabled=true;api('/api/drafts/'+encodeURIComponent(d.id)+'/reuse',{revision:d.revision})
+          .then(fillDraftForm).then(refreshDrafts).catch(function(e){setStatus(e.message,true);reuse.disabled=false;});});actions.appendChild(reuse);
       }
       if(d.verifyUrl){var link=document.createElement('a');link.href=d.verifyUrl;link.target='_blank';link.rel='noopener';link.textContent='View issued document';actions.appendChild(link);}
       tr.appendChild(actions);rows.appendChild(tr);
@@ -1066,6 +1072,7 @@ document.addEventListener('click', function(ev){
     if(actionEl.closest && actionEl.closest('#letter-form')) previewLetter(); else preview();
   }
   else if(action==='upload-preview') previewUpload();
+  else if(action==='copy-document-password'){var passwordField=document.getElementById(actionEl.getAttribute('data-password-id'));if(passwordField&&passwordField.value)navigator.clipboard.writeText(passwordField.value).then(function(){setStatus('Password copied. It will also be included in the delivery email.');}).catch(function(){setStatus('Clipboard unavailable. Select the password field to copy it.',true);});}
   else if(action==='preview-nda') blobPreview('/api/letters/nda/preview',buildLetterPayload(document.getElementById('letter-form'),false),document.getElementById('nda-preview-host'),'NDA preview');
   else if(action==='logout') api('/api/auth/logout',{}).then(function(){location.reload();});
   else if(action==='totp-enroll') api('/api/auth/totp/enroll',{}).then(renderTotpEnroll).catch(function(e){setStatus(e.message,true);});

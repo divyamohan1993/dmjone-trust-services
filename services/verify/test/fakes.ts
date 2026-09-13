@@ -214,7 +214,7 @@ export class FakeCredentialRepository implements CredentialRepository {
   erase(id: string, at: string): Promise<void> {
     const r = this.byId.get(id);
     if (r) {
-      delete r.recipientEmailEnc; delete r.emailDelivery;
+      delete r.recipientEmailEnc; delete r.recipientPasswordEnc; delete r.emailDelivery;
       const content = { ...(r.content as Record<string, unknown>) };
       for (const k of ['recipientName', 'intro', 'title', 'kicker', 'closingLine', 'subject', 'salutation', 'valediction', 'reference', 'originalFilename']) {
         if (k in content) content[k] = '';

@@ -14,7 +14,7 @@ PDF remains an uploaded document; use Letterhead for this automatic offer packet
 
 The single offer email contains the password-protected offer download link and
 an actual NDA PDF attachment. The NDA also has its own verification link. The
-password is never emailed automatically. The transport attaches only stored bytes
+password is included in the same email, with records@dmj.one in CC. The transport attaches only stored bytes
 matching the NDA hash bound in the offer, at most 400 KiB. Attachment bytes are
 supplied to the adapter at send time and are not copied into the frozen encrypted
 mail payload. The transactional mail claim also checks that the linked NDA remains valid. Retries check the same bytes; SMTP uncertainty still cannot trigger
@@ -72,3 +72,9 @@ work, without unsupported affiliation, employment or qualification claims.
 Sources: [dmj.one terms](https://dmj.one/tos), [privacy policy](https://dmj.one/privacy),
 [Code on Wages, sections 5 and 60](https://www.indiacode.nic.in/bitstream/123456789/15793/1/A2019-29.pdf),
 [Indian Contract Act](https://www.indiacode.nic.in/bitstream/123456789/2187/2/A187209.pdf).
+
+New letter and section 63 PDFs place their paper background across the full A4
+page before signing, preserving text margins, links and per-page signatures.
+Physical edge-to-edge printing requires a printer supporting borderless A4.
+Letter punctuation uses a plain hyphen in place of an em dash; credentials such
+as passwords are preserved exactly. Certificate rendering remains unchanged.

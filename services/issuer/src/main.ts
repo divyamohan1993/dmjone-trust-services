@@ -1,3 +1,4 @@
+import { buildEmailSchedulerVerifier } from './email/scheduler-auth.js';
 import { buildEmailSender } from './email/config.js';
 /**
  * Issuer service composition root (orchestrator-owned).
@@ -49,7 +50,9 @@ async function main(): Promise<void> {
   if (env.ANCHOR_GITHUB_TOKEN) anchorConfig.githubToken = env.ANCHOR_GITHUB_TOKEN;
 
   const emailSender = await buildEmailSender(env);
+  const verifyEmailScheduler = buildEmailSchedulerVerifier(env);
   const app = createIssuerApp({
+    ...(verifyEmailScheduler && { verifyEmailScheduler }),
     ...(emailSender && { emailSender }),
     emailQuota: stores.emailQuota,
     env,

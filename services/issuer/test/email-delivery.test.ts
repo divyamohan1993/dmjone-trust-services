@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { createIssuerApp } from '../src/app.js';
 import { buildDeps } from './fakes.js';
 import { mintSessionCookie } from './session-helper.js';
@@ -10,6 +10,7 @@ const cert = {type:'internship', recipientName:'Asha Rao', kicker:'Certificate o
   bodyParagraphs:['completed an educational internship.'], issueDate:'2026-09-12', attestation:true, password:'local-test-password', recipientEmail:recipient};
 const letter = {recipientLines:['Asha Rao'], subject:'Offer letter', bodyParagraphs:['We are pleased to offer you a position.'],
   issueDate:'2026-09-12', attestation:true, password:'local-test-password', recipientEmail:recipient};
+beforeEach(()=>{vi.spyOn(Date,'now').mockReturnValue(Date.parse('2026-09-14T04:30:00Z'));});
 afterEach(() => {vi.restoreAllMocks(); vi.useRealTimers();});
 async function fixture(result: DocumentEmailOutcome = {status:'accepted',providerId:'inert-mail-id'}) {
   const deps = buildDeps(); const calls: {body:string; key:string}[] = [];

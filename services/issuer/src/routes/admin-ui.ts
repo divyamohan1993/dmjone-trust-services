@@ -284,9 +284,19 @@ ${provisioned
 function emailFields(prefix: string, enabled: boolean): ReturnType<typeof html> {
   return html`<fieldset class="email-fields">
     <legend>Email delivery</legend>
-    ${enabled ? html`<label class="email-toggle"><input type="checkbox" id="${prefix}-send-email" name="sendEmail" checked /> Automatically email the recipient after generation</label>
+    ${enabled ? html`<label class="email-toggle"><input type="checkbox" id="${prefix}-send-email" name="sendEmail" checked /> Automatically email the recipient during working hours</label>
       <label for="${prefix}-email">Recipient email</label>
       <input id="${prefix}-email" type="email" name="recipientEmail" maxlength="254" autocomplete="off" required />
+      <label for="${prefix}-delivery-mode">Delivery time</label>
+      <select id="${prefix}-delivery-mode" name="emailDeliveryMode">
+        <option value="automatic">Automatic — next working time</option>
+        <option value="scheduled">Choose a date and time (IST)</option>
+      </select>
+      <div data-email-schedule hidden>
+        <label for="${prefix}-send-at">Send date and time — IST (Asia/Kolkata)</label>
+        <input id="${prefix}-send-at" type="datetime-local" name="emailSendAt" step="60" disabled />
+      </div>
+      <p class="muted">Monday–Friday, 9 AM–5 PM IST. Before 9 AM: 9 AM that day. Evenings and weekends: 9 AM the next weekday. Times are always IST, wherever you are.</p>
       <p class="muted">Sent from contact@dmj.one with a secure download link. Share the download password separately.</p>`
     : html`<p class="muted">Email delivery is awaiting mail service configuration. You can still generate and secure documents.</p>`}
   </fieldset>`;
@@ -414,7 +424,7 @@ function letterheadPanel(emailEnabled: boolean): ReturnType<typeof html> {
  * geometry → `SignaturePlacement` fractions (TOP-LEFT origin) in the script.
  * Box/stage SIZE + POSITION are set at runtime via the CSSOM (`element.style.…`,
  * permitted by CSP); no `style=""` attribute is emitted here. */
-function uploadPanel(): ReturnType<typeof html> {
+function uploadPanel(emailEnabled: boolean): ReturnType<typeof html> {
   // The exact brand signature image (same mark the stamp embeds), inlined as a
   // data-URI so it loads same-origin with NO network (img-src 'self' data:). The
   // box predicts the stamp by reading this image's natural aspect at runtime.
@@ -463,6 +473,7 @@ function uploadPanel(): ReturnType<typeof html> {
     <label for="upload-pw">Candidate download password</label>
     <input id="upload-pw" name="password" type="password" minlength="8" maxlength="128"
       autocomplete="off" />
+    ${emailFields('upload', emailEnabled)}
     ${attestationRow('upload-attest')}
     <div class="actions">
       <button type="button" class="secondary" data-action="upload-preview">Preview exact PDF</button>
@@ -502,7 +513,7 @@ ${ociBudget ? html`<p class="muted">Email sending is capped at ${OCI_EMAIL_DAILY
 </div>
 <div id="panel-upload" class="mode-panel" role="tabpanel" tabindex="0"
   aria-labelledby="tab-upload" hidden>
-  ${uploadPanel()}
+  ${uploadPanel(emailEnabled)}
 </div>
 
 <div class="card">

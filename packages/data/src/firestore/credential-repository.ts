@@ -24,12 +24,18 @@ export function createFirestoreCredentialRepository(db: Firestore): CredentialRe
   const col = db.collection(COLLECTIONS.credentials);
 
   return {
+    async listDueEmails(now, limit) {
+      // A single-field range uses Firestore's automatic index, no composite index.
+      const snap = await col.where('emailDelivery.nextAttemptAt', '<=', now)
+        .orderBy('emailDelivery.nextAttemptAt').limit(limit).get();
+      return snap.docs.map(d => rowToCredential(d.data() as CredentialRow));
+    },
     async compareAndSetEmailDelivery(id, expected, next) {
       const ref = col.doc(id);
       return db.runTransaction(async tx => {
         const snap = await tx.get(ref);
         const record = snap.data() as CredentialRow | undefined;
-        if (!record || record.erased || (next.status === 'sending' && record.status !== 'valid')) return false;
+        if (!record || record.erased || ((next.status === 'sending' || next.status === 'queued') && record.status !== 'valid')) return false;
         if (canonicalJson(record.emailDelivery ?? null) !== canonicalJson(expected)) return false;
         tx.update(ref, { emailDelivery: next });
         return true;

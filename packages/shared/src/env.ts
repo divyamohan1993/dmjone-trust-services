@@ -54,6 +54,8 @@ const baseEnvSchema = z.object({
 
 /** Issuer-only variables (WebAuthn relying party, Chromium). */
 const issuerEnvSchema = z.object({
+  EMAIL_SCHEDULER_ACCOUNT: z.string().email().optional(),
+  EMAIL_SCHEDULER_AUDIENCE: z.string().url().optional(),
   MAIL_PROVIDER: z.enum(['disabled', 'resend', 'pactmail', 'oci']).default('disabled'),
   /** Mounted from Secret Manager only for the explicitly selected direct Resend integration. */
   MAIL_API_KEY: z.string().optional(),

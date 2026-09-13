@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { createInMemoryEmailQuotaRepository } from '@dmjone/data';
 import { createOciEmailSender, parseOciSmtpCredentials, OCI_SMTP_HOST } from '../src/email/oci.js';
 import { sendDocumentEmail, emailAfterIssuance, emailSummary } from '../src/email/delivery.js';
@@ -7,6 +7,7 @@ import { issueCredential } from '../src/issuance/issue.js';
 
 const credentials = {username:'inert-smtp-user',password:'inert-smtp-password'};
 const message = {documentId:'DMJ-IC-20260912-01',kind:'certificate' as const,to:'recipient@example.test',downloadUrl:'https://verify.example.test/v/inert-token'};
+beforeEach(()=>{vi.spyOn(Date,'now').mockReturnValue(Date.parse('2026-09-14T04:30:00Z'));});
 afterEach(()=>{vi.useRealTimers();vi.restoreAllMocks();});
 
 describe('OCI SMTP adapter',()=>{
@@ -73,7 +74,7 @@ describe('OCI dispatch policy',()=>{
   it('preserves the signed document when the free allowance is exhausted',async()=>{
     const {deps,send,id}=await issued(); const now=Date.now();
     for(let i=0;i<90;i++)expect(await deps.emailQuota!.reserve(now)).toBe(true);
-    expect(await emailAfterIssuance(deps,id,'recipient@example.test','limited')).toEqual({status:'quota_limited',canRetry:false});
+    expect(await emailAfterIssuance(deps,id,'recipient@example.test','limited')).toMatchObject({status:'quota_limited',canRetry:false});
     expect(send).not.toHaveBeenCalled(); expect(await deps.credentialRepo.getById(id)).toBeTruthy();
     expect(await deps.blobStore.get(id,'certificate')).toBeTruthy();
   });

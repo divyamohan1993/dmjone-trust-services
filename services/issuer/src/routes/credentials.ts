@@ -1,3 +1,4 @@
+import { validateEmailSchedule } from '../email/schedule.js';
 import { emailAfterIssuance, requireEmailRequest, requireEmailConfiguration, emailSummary, sendDocumentEmail } from '../email/delivery.js';
 /**
  * Authenticated credential API: issue, revoke, list.
@@ -121,6 +122,7 @@ export function registerCredentialRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerD
         parsed.error.flatten(),
       );
     }
+    validateEmailSchedule(parsed.data.recipientEmail, parsed.data.emailSendAt);
     if (parsed.data.recipientEmail) requireEmailRequest(c, deps);
     requireEmailConfiguration(deps, parsed.data.recipientEmail);
     const session = c.get('session');
@@ -137,7 +139,7 @@ export function registerCredentialRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerD
   // audit). Same body as issue minus `password`. Strictly: validate →
   // assembleContent(placeholder id) → renderer.render → return PDF bytes.
   api.post('/preview', async (c) => {
-    const previewSchema = issueCredentialObject.omit({ password: true, attestation: true, recipientEmail: true });
+    const previewSchema = issueCredentialObject.omit({ password: true, attestation: true, recipientEmail: true, emailSendAt: true });
     const parsed = previewSchema.safeParse(await readJson(c));
     if (!parsed.success) {
       throw new AppError(
@@ -174,6 +176,21 @@ export function registerCredentialRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerD
       items: page.items.map(toListItem),
       ...(page.nextCursor !== undefined && { nextCursor: page.nextCursor }),
     });
+  });
+
+  api.post('/:credentialId/email/cancel', async (c) => {
+    requireEmailRequest(c, deps);
+    const id = credentialIdParamSchema.safeParse({credentialId:c.req.param('credentialId')});
+    if (!id.success) throw new AppError(ERROR_CODE.BAD_REQUEST,'Malformed credential id',400);
+    const record = await deps.credentialRepo.getById(id.data.credentialId);
+    if (!record || record.emailDelivery?.status !== 'queued') throw new AppError(ERROR_CODE.BAD_REQUEST,'Only queued emails can be cancelled',409);
+    const {nextAttemptAt:_, ...previous} = record.emailDelivery;
+    const next = {...previous,status:'cancelled' as const,updatedAt:Date.now()};
+    if (!await deps.credentialRepo.compareAndSetEmailDelivery(record.id,record.emailDelivery,next)) {
+      throw new AppError(ERROR_CODE.BAD_REQUEST,'Delivery changed; refresh its status',409);
+    }
+    await deps.auditLog.append({actor:'admin',action:'document.email.cancelled',subject:record.id,requestId:c.get('requestId')});
+    return c.json({email:emailSummary({...record,emailDelivery:next})});
   });
 
   api.post('/:credentialId/email/retry', async (c) => {

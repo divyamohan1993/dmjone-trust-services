@@ -1,3 +1,5 @@
+import { validateEmailSchedule } from '../email/schedule.js';
+import { emailAfterIssuance, requireEmailRequest, requireEmailConfiguration } from '../email/delivery.js';
 /**
  * Authenticated upload-&-attest API (Mode 3): inspect + preview + sign.
  *
@@ -251,6 +253,9 @@ export function registerUploadRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps)
       );
     }
     const meta: SignUploadInput = parsed.data;
+    validateEmailSchedule(meta.recipientEmail, meta.emailSendAt);
+    if (meta.recipientEmail) requireEmailRequest(c, deps);
+    requireEmailConfiguration(deps, meta.recipientEmail);
     const bytes = decodePdf(pdfBase64);
 
     // Validate it parses as a PDF (uniform 400) before the side-effecting pipeline.
@@ -269,6 +274,8 @@ export function registerUploadRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerDeps)
       actor: session?.sub ?? 'admin',
     });
 
+    const email = await emailAfterIssuance(deps, documentId, meta.recipientEmail, c.get('requestId'));
+    if (email) c.header('X-Email-Delivery', JSON.stringify(email));
     c.header('X-Document-Id', documentId);
     return pdfResponse(c, signedPdf, `attachment; filename="${documentId}.pdf"`);
   });

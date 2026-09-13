@@ -162,6 +162,8 @@ export interface PasswordHasher {
 // ─────────────────────────────── Data (Stream D) ───────────────────────────
 
 export interface CredentialRepository {
+  /** Durable outbox scan; includes expired sending leases for crash recovery. */
+  listDueEmails(now: number, limit: number): Promise<CredentialRecord[]>;
   /** Atomic delivery lease/outcome update; erased records can never regain email data. */
   compareAndSetEmailDelivery(id: string, expected: DocumentEmailDelivery | null, next: DocumentEmailDelivery): Promise<boolean>;
   create(record: CredentialRecord): Promise<void>;

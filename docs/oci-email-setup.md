@@ -66,7 +66,7 @@ OCI DKIM resource to report **ACTIVE**, not just a publicly visible CNAME.
 ## Delivery semantics
 
 Generation signs and stores both the primary PDF and its supporting artifact
-before attempting email. The recipient and frozen message are encrypted at rest
+before attempting email. The durable outbox is created with the record, and delivery follows [the weekday IST schedule](email-scheduling.md). The recipient and frozen message are encrypted at rest
 and excluded from public verification responses. Email failures never require
 regenerating the signed document.
 

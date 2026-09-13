@@ -89,6 +89,8 @@ export const issueCredentialObject = z.object({
   /** The candidate's private download password (gates the signed PDF). */
   password: z.string().min(8).max(128),
   recipientEmail: z.string().trim().email().max(254).optional(),
+  /** Explicit instant with timezone; absent means the next permitted working time. */
+  emailSendAt: z.string().datetime({ offset: true }).optional(),
 });
 
 /** Content guard for a certificate; internship type also blocks employment language. */
@@ -132,6 +134,8 @@ export const issueLetterObject = z.object({
   /** The recipient's private download password (gates the signed PDF). */
   password: z.string().min(8).max(128),
   recipientEmail: z.string().trim().email().max(254).optional(),
+  /** Explicit instant with timezone; absent means the next permitted working time. */
+  emailSendAt: z.string().datetime({ offset: true }).optional(),
 });
 
 /** Content guard for a letter; recipient address lines are NOT denylist-scanned
@@ -166,6 +170,8 @@ export type IssueLetterInput = z.infer<typeof issueLetterSchema>;
  * own position and size).
  */
 export const signUploadSchema = z.object({
+  recipientEmail: z.string().trim().email().max(254).optional(),
+  emailSendAt: z.string().datetime({ offset: true }).optional(),
   originalFilename: z.string().min(1).max(200),
   placeHandwrittenSignature: z.boolean().default(false),
   signaturePlacements: z

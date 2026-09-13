@@ -1,7 +1,7 @@
 /** Sending adapters. Provider acceptance is not a delivery confirmation. */
 export interface DocumentEmailMessage {
   documentId: string;
-  kind: 'certificate' | 'letter';
+  kind: 'certificate' | 'letter' | 'upload';
   to: string;
   downloadUrl: string;
 }
@@ -15,7 +15,7 @@ export interface DocumentEmailSender {
 }
 export const MAIL_FROM = 'dmj.one <contact@dmj.one>';
 export function messageText(message: DocumentEmailMessage): string {
-  return `Your dmj.one ${message.kind === 'letter' ? 'letter' : 'certificate'} is ready.\n\nDocument ID: ${message.documentId}\n\nVerify and download your signed document:\n${message.downloadUrl}\n\nThe PDF download requires the password shared separately by the issuer. This email does not contain that password.\n\nFor assistance, reply to contact@dmj.one.\n\ndmj.one Trust Services`;
+  return `Your dmj.one ${message.kind === 'upload' ? 'document' : message.kind} is ready.\n\nDocument ID: ${message.documentId}\n\nVerify and download your signed document:\n${message.downloadUrl}\n\nThe PDF download requires the password shared separately by the issuer. This email does not contain that password.\n\nFor assistance, reply to contact@dmj.one.\n\ndmj.one Trust Services`;
 }
 async function outcome(response: Response, pactmail = false): Promise<DocumentEmailOutcome> {
   if (!response.ok) {

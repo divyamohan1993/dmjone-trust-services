@@ -15,6 +15,7 @@
  *   - oversize / non-PDF inputs are rejected with a uniform 400/413.
  */
 
+import { dispatchDueEmails } from '../src/email/delivery.js';
 import { createHash } from 'node:crypto';
 
 import { ERROR_CODE } from '@dmjone/shared';
@@ -498,4 +499,29 @@ describe('POST /api/uploads — the attest pipeline', () => {
     expect(res.status).toBe(401);
     expect(deps.credentialRepo.createCount).toBe(0);
   });
+});
+
+it('queues an uploaded PDF and sends its private link at the chosen IST time', async () => {
+  let now=Date.parse('2026-09-13T12:00:00+05:30');
+  const clock=vi.spyOn(Date,'now').mockImplementation(()=>now);
+  try {
+    const deps=buildDeps(); const bodies:string[]=[];
+    deps.emailSender={provider:'resend',prepare:JSON.stringify,send:async body=>{bodies.push(body);return {status:'accepted',providerId:'inert-id'};}};
+    const cookie=await mintSessionCookie(deps.env);const app=createIssuerApp(deps);
+    const response=await app.request(SIGN_PATH,{method:'POST',headers:{cookie,'content-type':'application/json'},body:JSON.stringify({
+      pdfBase64:ONE_PAGE_PDF_B64,originalFilename:'internship.pdf',password:'inert-download-password',attestation:true,
+      recipientEmail:'inert@example.test',emailSendAt:'2026-09-14T09:15:00+05:30',
+    })});
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('application/pdf');
+    expect(JSON.parse(response.headers.get('X-Email-Delivery')!)).toMatchObject({status:'queued',scheduledFor:'2026-09-14T03:45:00.000Z'});
+    expect(bodies).toHaveLength(0);
+    const id=response.headers.get('X-Document-Id')!;
+    const record=await deps.credentialRepo.getById(id);
+    expect(record!.recipientEmailEnc).not.toContain('inert@example.test');
+    expect(record!.canonicalPayload).not.toContain('inert@example.test');
+    now=Date.parse('2026-09-14T09:15:00+05:30');await dispatchDueEmails(deps,'scheduled-upload');
+    expect(bodies).toHaveLength(1);expect(JSON.parse(bodies[0]!)).toMatchObject({kind:'upload',to:'inert@example.test'});
+    expect(bodies[0]).not.toContain('inert-download-password');
+  } finally {clock.mockRestore();}
 });

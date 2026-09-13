@@ -327,3 +327,15 @@ describe('in-memory CredentialRepository', () => {
     });
   });
 });
+
+it('scans the outbox by due time and drops terminal outcomes from the queue',async()=>{
+  const repo=createInMemoryCredentialRepository();
+  const delivery:DocumentEmailDelivery={status:'queued',provider:'oci',encryptedMessage:'',createdAt:1,updatedAt:1,attempts:0,leaseId:'',leaseUntil:0,scheduledFor:200,nextAttemptAt:200};
+  await repo.create({...makeRecord(),emailDelivery:delivery});
+  expect(await repo.listDueEmails(199,4)).toHaveLength(0);
+  const due=await repo.listDueEmails(200,4);expect(due).toHaveLength(1);
+  expect(due[0]!.emailDelivery).toEqual(delivery);
+  const {nextAttemptAt:_,...rest}=delivery;
+  expect(await repo.compareAndSetEmailDelivery(due[0]!.id,delivery,{...rest,status:'cancelled'})).toBe(true);
+  expect(await repo.listDueEmails(999,4)).toHaveLength(0);
+});

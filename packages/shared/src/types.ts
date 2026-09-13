@@ -197,7 +197,11 @@ export interface Section63Metadata {
  */
 /** Private email delivery state; never part of a signed/public document projection. */
 export interface DocumentEmailDelivery {
-  status: 'sending' | 'accepted' | 'rejected' | 'uncertain' | 'outcome_unknown';
+  status: 'queued' | 'cancelled' | 'sending' | 'accepted' | 'rejected' | 'uncertain' | 'outcome_unknown';
+  /** Private UTC instants; the UI always renders Asia/Kolkata. */
+  scheduledFor?: number;
+  /** Indexed outbox cursor. Absent on terminal outcomes. */
+  nextAttemptAt?: number;
   provider: 'resend' | 'pactmail' | 'oci';
   encryptedMessage: string;
   createdAt: number;

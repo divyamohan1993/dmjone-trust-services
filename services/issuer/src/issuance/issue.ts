@@ -1,3 +1,4 @@
+import { initialEmailDelivery } from '../email/schedule.js';
 /**
  * The issuance pipeline — the one place the certificate is produced.
  *
@@ -107,7 +108,9 @@ export async function issueCredential(
   const passwordHash = await deps.passwordHasher.hash(input.password);
 
   // 7. Assemble + persist the canonical record (status 'valid'; no revokedAt yet).
+  const emailDelivery = initialEmailDelivery(deps, input.recipientEmail, input.emailSendAt);
   const record: CredentialRecord = {
+    ...(emailDelivery && { emailDelivery }),
     id: credentialId,
     content,
     status: 'valid',

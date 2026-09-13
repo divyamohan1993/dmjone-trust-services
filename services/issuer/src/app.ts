@@ -1,3 +1,4 @@
+import { registerEmailDispatchRoute } from './routes/email-dispatch.js';
 /**
  * @dmjone/issuer — admin/issuing service (Stream B).
  *
@@ -62,6 +63,7 @@ export function createIssuerApp(deps: IssuerDeps): Hono<IssuerHonoEnv> {
   });
 
   registerHealthRoutes(app, deps);
+  registerEmailDispatchRoute(app, deps);
   registerAuthRoutes(app, deps);
   registerCredentialRoutes(app, deps);
   registerLetterRoutes(app, deps);

@@ -363,7 +363,7 @@ function renderRows(items){
     tr.appendChild(cell(it.recipientName || it.label || ''));
     tr.appendChild(cell(it.type || it.kind || ''));
     tr.appendChild(cell(it.status, {badge:true}));
-    tr.appendChild(cell(it.email ? emailStatus(it.email.status) : 'Not requested'));
+    tr.appendChild(cell(it.email ? emailStatus(it.email) : 'Not requested'));
     var actions = document.createElement('td');
     if(it.status !== 'revoked'){
       var btn = document.createElement('button');
@@ -372,12 +372,22 @@ function renderRows(items){
       btn.setAttribute('data-revoke', it.credentialId);
       actions.appendChild(btn);
     }
+    if(it.email && it.email.status==='queued' && it.status!=='revoked'){
+      var cancel = document.createElement('button'); cancel.type='button'; cancel.className='secondary';
+      cancel.textContent='Cancel email'; cancel.addEventListener('click',function(){
+        if(!window.confirm('Cancel this scheduled email? The generated document will remain available.')) return;
+        cancel.disabled=true;
+        api('/api/credentials/'+encodeURIComponent(it.credentialId)+'/email/cancel',{}).then(function(){
+          setStatus('Scheduled email cancelled.'); return refreshList();
+        }).catch(function(e){setStatus(e.message,true);cancel.disabled=false;});
+      }); actions.appendChild(cancel);
+    }
     if(it.email && it.email.canRetry && it.status !== 'revoked'){
       var retry = document.createElement('button'); retry.type = 'button'; retry.className = 'secondary';
       retry.textContent = 'Retry email'; retry.addEventListener('click', function(){
         retry.disabled = true;
         api('/api/credentials/'+encodeURIComponent(it.credentialId)+'/email/retry', {}).then(function(j){
-          setStatus('Document '+it.credentialId+': '+emailStatus(j.email.status)); return refreshList();
+          setStatus('Document '+it.credentialId+': '+emailStatus(j.email)); return refreshList();
         }).catch(function(e){setStatus(e.message,true); retry.disabled=false;});
       }); actions.appendChild(retry);
     }
@@ -406,24 +416,48 @@ function buildPayload(form, wantPassword){
   // attestation rides ISSUE only (gated on wantPassword); the preview schema
   // omits both password and attestation, so preview must NOT send it.
   if(wantPassword){ payload.password = data.get('password'); payload.attestation = true;
-    if(data.get('sendEmail')) payload.recipientEmail = String(data.get('recipientEmail')||'').trim();
+    addEmailPayload(form,payload);
   }
   var closing = String(data.get('closingLine')||'').trim();
   if(closing) payload.closingLine = closing;
   return payload;
 }
-function emailStatus(status){
-  return {pending:'Not sent yet', sending:'Sending', accepted:'Accepted by mail provider', rejected:'Email not sent', uncertain:'Delivery unconfirmed — retry email', outcome_unknown:'Delivery unconfirmed — check with the mail provider', not_queued:'Email not queued', quota_limited:'Email not sent — free sending limit reached; retry later'}[status] || status;
+function formatEmailTime(value){
+  return new Intl.DateTimeFormat('en-IN',{timeZone:'Asia/Kolkata',dateStyle:'medium',timeStyle:'short'}).format(new Date(value))+' IST';
+}
+function emailStatus(email){
+  var status = email.status;
+  if(status==='queued') return 'Scheduled for '+formatEmailTime(email.nextAttemptAt || email.scheduledFor);
+  if(status==='quota_limited') return 'Queued — sending limit reached; next check '+formatEmailTime(email.nextAttemptAt);
+  return {pending:'Not sent yet', cancelled:'Email cancelled', sending:'Sending', accepted:'Accepted by mail provider', rejected:'Email not sent', uncertain:'Delivery unconfirmed — retry email', outcome_unknown:'Delivery unconfirmed — check with the mail provider', not_queued:'Email not queued'}[status] || status;
+}
+function addEmailPayload(form,payload){
+  var data = new FormData(form);
+  if(!data.get('sendEmail')) return;
+  payload.recipientEmail = String(data.get('recipientEmail')||'').trim();
+  if(data.get('emailDeliveryMode')==='scheduled'){
+    var value = String(data.get('emailSendAt')||'');
+    // datetime-local has no zone. Treat the wall-clock input as IST explicitly,
+    // never as the browser/device's timezone.
+    if(value) payload.emailSendAt = new Date(value+':00+05:30').toISOString();
+  }
 }
 function syncEmailFields(form){
   var toggle = form.querySelector('[name="sendEmail"]'), input = form.querySelector('[name="recipientEmail"]');
   if(toggle && input){ input.disabled = !toggle.checked; input.required = toggle.checked; }
+  var mode = form.querySelector('[name="emailDeliveryMode"]'), at = form.querySelector('[name="emailSendAt"]');
+  var wrap = form.querySelector('[data-email-schedule]');
+  if(mode && at && toggle){
+    mode.disabled = !toggle.checked;
+    var scheduled = toggle.checked && mode.value==='scheduled';
+    at.disabled = !scheduled; at.required = scheduled; if(wrap) wrap.hidden = !scheduled;
+  }
 }
 function setGenerating(form, busy){
   form.dataset.generating = busy ? 'yes' : '';
   var submit = form.querySelector('button[type="submit"]'); if(submit) submit.disabled = busy;
 }
-function generatedMessage(id, email){ return 'Generated '+id+'.'+(email ? ' '+emailStatus(email.status)+'.' : ''); }
+function generatedMessage(id, email){ return 'Generated '+id+'.'+(email ? ' '+emailStatus(email)+'.' : ''); }
 function issue(form){
   if(form.dataset.generating) return;
   if(!attestChecked('f-attest')){ setStatus(ATTEST_MSG, true); return; }
@@ -460,7 +494,7 @@ function buildLetterPayload(form, wantPassword){
   // attestation rides ISSUE only (gated on wantPassword); the letter preview
   // schema omits both password and attestation, so preview must NOT send it.
   if(wantPassword){ payload.password = data.get('password'); payload.attestation = true;
-    if(data.get('sendEmail')) payload.recipientEmail = String(data.get('recipientEmail')||'').trim();
+    addEmailPayload(form,payload);
   }
   return payload;
 }
@@ -941,10 +975,13 @@ if(keyAddForm){
     form.addEventListener('submit', function(ev){ ev.preventDefault(); changePasskey(kind, form); });
   });
 }
-['issue-form','letter-form'].forEach(function(id){
+['issue-form','letter-form','upload-form'].forEach(function(id){
   var form = document.getElementById(id); if(!form) return;
   var toggle = form.querySelector('[name="sendEmail"]');
   if(toggle) toggle.addEventListener('change',function(){syncEmailFields(form);});
+  var mode = form.querySelector('[name="emailDeliveryMode"]');
+  if(mode) mode.addEventListener('change',function(){syncEmailFields(form);});
+  syncEmailFields(form);
 });
 var issueForm = document.getElementById('issue-form');
 if(issueForm) issueForm.addEventListener('submit', function(ev){ ev.preventDefault(); issue(issueForm); });
@@ -1265,6 +1302,7 @@ function previewUpload(){
 // fetch (api() would JSON-parse and throw); on success read the header, save the
 // blob as <id>.pdf, surface the id, and refresh the issued list.
 function signUpload(){
+  var form=uEl('upload-form'); if(form.dataset.generating || !form.reportValidity()) return;
   if(!uploadPdfBase64){ setStatus('Choose a PDF first.', true); return; }
   if(!attestChecked('upload-attest')){ setStatus(ATTEST_MSG, true); return; }
   var pwEl = uEl('upload-pw'); var password = pwEl ? pwEl.value : '';
@@ -1278,6 +1316,8 @@ function signUpload(){
     placeHandwrittenSignature: on, password: password, attestation: true
   };
   if(on) payload.signaturePlacements = places;
+  addEmailPayload(form,payload);
+  setGenerating(form,true);
   setStatus('Signing & sealing the document…');
   return fetch('/api/uploads', {
     method:'POST', credentials:'same-origin',
@@ -1289,16 +1329,17 @@ function signUpload(){
       });
     }
     var id = r.headers.get('X-Document-Id') || 'document';
+    var email = JSON.parse(r.headers.get('X-Email-Delivery') || 'null');
     return r.blob().then(function(blob){
       var url = URL.createObjectURL(blob);
       var a = document.createElement('a');
       a.href = url; a.download = id + '.pdf';
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      setStatus('Signed & downloaded ' + id + '.');
+      setStatus('Signed & downloaded ' + id + '.'+(email ? ' '+emailStatus(email)+'.' : ''));
       return refreshList();
     });
-  }).catch(function(e){ setStatus('Sign failed: ' + e.message, true); });
+  }).catch(function(e){ setStatus('Signing could not be confirmed: ' + e.message+'. Check Issued credentials before trying again.', true); }).finally(function(){setGenerating(form,false);});
 }
 // --- pointer drag / resize of the signature box (CSSOM only) -----------------
 // A small state object tracks an in-flight pointer gesture: 'move' repositions

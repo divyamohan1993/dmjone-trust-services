@@ -50,6 +50,10 @@ export class FakeCredentialRepo implements CredentialRepository {
   readonly records = new Map<string, CredentialRecord>();
   createCount = 0;
 
+  async listDueEmails(now: number, limit: number): Promise<CredentialRecord[]> {
+    return [...this.records.values()].filter(r => (r.emailDelivery?.nextAttemptAt ?? Infinity) <= now)
+      .sort((a,b) => a.emailDelivery!.nextAttemptAt! - b.emailDelivery!.nextAttemptAt!).slice(0,limit).map(r => structuredClone(r));
+  }
   async create(record: CredentialRecord): Promise<void> {
     this.records.set(record.id, structuredClone(record));
     this.createCount += 1;
@@ -80,7 +84,7 @@ export class FakeCredentialRepo implements CredentialRepository {
   }
   async compareAndSetEmailDelivery(id: string, expected: DocumentEmailDelivery | null, next: DocumentEmailDelivery): Promise<boolean> {
     const record = this.records.get(id);
-    if (!record || record.erased || (next.status === 'sending' && record.status !== 'valid')) return false;
+    if (!record || record.erased || ((next.status === 'sending' || next.status === 'queued') && record.status !== 'valid')) return false;
     if (canonicalJson(record.emailDelivery ?? null) !== canonicalJson(expected)) return false;
     record.emailDelivery = structuredClone(next); return true;
   }

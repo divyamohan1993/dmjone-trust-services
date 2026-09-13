@@ -23,9 +23,13 @@ export function createInMemoryCredentialRepository(): CredentialRepository {
   const records = new Map<string, CredentialRecord>();
 
   return {
+    async listDueEmails(now, limit) {
+      return [...records.values()].filter(r => (r.emailDelivery?.nextAttemptAt ?? Infinity) <= now)
+        .sort((a,b) => a.emailDelivery!.nextAttemptAt! - b.emailDelivery!.nextAttemptAt!).slice(0,limit).map(r => structuredClone(r));
+    },
     async compareAndSetEmailDelivery(id, expected, next) {
       const record = records.get(id);
-      if (!record || record.erased || (next.status === 'sending' && record.status !== 'valid')) return false;
+      if (!record || record.erased || ((next.status === 'sending' || next.status === 'queued') && record.status !== 'valid')) return false;
       if (canonicalJson(record.emailDelivery ?? null) !== canonicalJson(expected)) return false;
       record.emailDelivery = structuredClone(next);
       return true;

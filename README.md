@@ -74,7 +74,7 @@ CNAMEs, or run [`infra/autoconfig.sh`](infra/autoconfig.sh) for a one-command de
 
 For lost passkeys or recovery codes, see [the recovery runbook](docs/admin-recovery.md).
 
-For outgoing certificate and letter emails, see [the sending integration contract](docs/pactmail-delivery-api.md). Production uses OCI Email Delivery in Phoenix with guarded submission limits; see [OCI setup and limits](docs/oci-email-setup.md).
+For outgoing certificate, letter, and uploaded-document emails, see [the sending integration contract](docs/pactmail-delivery-api.md). Production uses OCI Email Delivery in Phoenix with guarded submission limits; see [OCI setup and limits](docs/oci-email-setup.md).
 
 ## Status
 
@@ -84,3 +84,5 @@ see [the court-readiness assessment](docs/court-readiness-assessment.md) for whe
 this stands on cryptographic integrity vs. Indian statutory recognition, and
 [CHANGELOG.md](CHANGELOG.md) for the log. Real Bitcoin/OpenTimestamps anchoring
 and a CCA-licensed signing path remain scoped, not yet shipped.
+
+Document email delivery follows Monday–Friday, 9 AM–5 PM IST. Choose an explicit IST time or let the app queue for the next working time. See [scheduling and operations](docs/email-scheduling.md).

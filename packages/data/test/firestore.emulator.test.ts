@@ -48,6 +48,24 @@ describe.skipIf(!EMULATOR)('Firestore stores (emulator) — parity with in-memor
     await client.terminate();
   });
 
+  it('persists the email outbox and atomically removes a terminal cursor',async()=>{
+    const repo=createFirestoreCredentialRepository(client);
+    const record=makeRecord({id:`DMJ-IC-20260913-${rnd()}`});
+    const queued={status:'queued' as const,provider:'oci' as const,encryptedMessage:'',createdAt:1,updatedAt:1,attempts:0,leaseId:'',leaseUntil:0,scheduledFor:200,nextAttemptAt:200};
+    await repo.create({...record,emailDelivery:queued});
+    expect((await repo.listDueEmails(199,10)).find(r=>r.id===record.id)).toBeUndefined();
+    expect((await repo.listDueEmails(200,10)).find(r=>r.id===record.id)?.emailDelivery).toEqual(queued);
+    const claimed={...queued,status:'sending' as const,attempts:1,leaseId:'winner',leaseUntil:60000,nextAttemptAt:60000};
+    expect(await Promise.all([
+      repo.compareAndSetEmailDelivery(record.id,queued,claimed),
+      repo.compareAndSetEmailDelivery(record.id,queued,{...claimed,leaseId:'other'}),
+    ])).toEqual(expect.arrayContaining([true,false]));
+    const current=(await repo.getById(record.id))!.emailDelivery!;
+    const {nextAttemptAt:_,...rest}=current;
+    expect(await repo.compareAndSetEmailDelivery(record.id,current,{...rest,status:'accepted'})).toBe(true);
+    expect((await repo.listDueEmails(999999,10)).find(r=>r.id===record.id)).toBeUndefined();
+  });
+
   it('credential CRUD + revokedAt invariant', async () => {
     const repo = createFirestoreCredentialRepository(client);
     const id = `DMJ-IC-20260604-${rnd()}`;

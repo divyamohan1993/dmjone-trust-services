@@ -1,3 +1,4 @@
+import { initialEmailDelivery } from '../email/schedule.js';
 /**
  * The upload-&-attest pipeline (Mode 3, spec §C.3) — the new subsystem.
  *
@@ -148,9 +149,12 @@ export async function attestUpload(
   const passwordHash = await deps.passwordHasher.hash(input.password);
 
   // 8. Assemble + persist the canonical record (kind:'upload').
+  const emailDelivery = initialEmailDelivery(deps, input.recipientEmail, input.emailSendAt);
   const record: CredentialRecord = {
+    ...(emailDelivery && { emailDelivery }),
     id: documentId,
     kind: 'upload',
+    ...(input.recipientEmail && {recipientEmailEnc:deps.secretSealer.sealString(input.recipientEmail)}),
     content: attestation,
     status: 'valid',
     createdAt: now,

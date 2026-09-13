@@ -1,3 +1,4 @@
+import { initialEmailDelivery } from '../email/schedule.js';
 /**
  * The letterhead-letter issuance pipeline (Mode 2, spec §B.3).
  *
@@ -112,7 +113,9 @@ export async function issueLetter(
   const passwordHash = await deps.passwordHasher.hash(input.password);
 
   // 8. Assemble + persist the canonical record (kind:'letter').
+  const emailDelivery = initialEmailDelivery(deps, input.recipientEmail, input.emailSendAt);
   const record: CredentialRecord = {
+    ...(emailDelivery && { emailDelivery }),
     id: documentId,
     kind: 'letter',
     content,

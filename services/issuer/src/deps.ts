@@ -45,6 +45,8 @@ export interface SecretSealer {
 }
 
 export interface IssuerDeps {
+  /** Verifies Google-signed OIDC identity, audience, and the dedicated account. */
+  verifyEmailScheduler?: (token: string) => Promise<boolean>;
   env: AppEnv;
   emailSender?: DocumentEmailSender;
   emailQuota?: EmailQuotaRepository;

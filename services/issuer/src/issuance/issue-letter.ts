@@ -53,7 +53,7 @@ export interface IssueLetterOutcome {
 export async function issueLetter(
   deps: IssuerDeps,
   input: IssueLetterInput,
-  ctx: { requestId: string; actor: string },
+  ctx: { requestId: string; actor: string; draftId?: string },
 ): Promise<IssueLetterOutcome> {
   const now = new Date().toISOString();
 
@@ -115,6 +115,7 @@ export async function issueLetter(
   // 8. Assemble + persist the canonical record (kind:'letter').
   const emailDelivery = initialEmailDelivery(deps, input.recipientEmail, input.emailSendAt);
   const record: CredentialRecord = {
+    ...(ctx.draftId && {sourceDraftId:ctx.draftId}),
     ...(emailDelivery && { emailDelivery }),
     id: documentId,
     kind: 'letter',

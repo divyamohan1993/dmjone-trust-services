@@ -1,3 +1,4 @@
+import {saveDraft,dispatchDueDrafts,openDraft,getDraftInput} from '../src/drafts/service.js';
 /**
  * Mode 3 — upload-&-attest routes: inspect / preview / sign.
  *
@@ -524,4 +525,22 @@ it('queues an uploaded PDF and sends its private link at the chosen IST time', a
     expect(bodies).toHaveLength(1);expect(JSON.parse(bodies[0]!)).toMatchObject({kind:'upload',to:'inert@example.test'});
     expect(bodies[0]).not.toContain('inert-download-password');
   } finally {clock.mockRestore();}
+});
+
+it('keeps uploaded review drafts encrypted, editable and unsent until scheduled',async()=>{
+  let now=Date.parse('2026-09-13T12:00:00+05:30');const clock=vi.spyOn(Date,'now').mockImplementation(()=>now);
+  try{
+    const deps=buildDeps(),send=vi.fn(async()=>({status:'accepted' as const,providerId:'inert-id'}));
+    deps.emailSender={provider:'resend',prepare:JSON.stringify,send};
+    const input={pdfBase64:ONE_PAGE_PDF_B64,originalFilename:'review.pdf',password:'inert-review-password',attestation:true as const,recipientEmail:'inert@example.test',emailSendAt:'2026-09-14T09:15:00+05:30'};
+    const draft=await saveDraft(deps,{kind:'upload',input,schedule:false},'save');
+    const raw=(await deps.draftRepo!.get(draft.id))!,opened=openDraft(deps,raw);
+    expect(opened.uploadBlobKey).toBeTruthy();
+    const encrypted=await deps.blobStore.get(opened.uploadBlobKey!,'certificate');expect(Buffer.from(encrypted!).toString()).not.toContain(ONE_PAGE_PDF_B64.slice(0,60));
+    expect((await getDraftInput(deps,raw)).pdfBase64).toBe(ONE_PAGE_PDF_B64);
+    await saveDraft(deps,{id:draft.id,revision:draft.revision,kind:'upload',input,schedule:true},'schedule');
+    expect(await deps.blobStore.get(opened.uploadBlobKey!,'certificate')).toBeNull();expect(send).not.toHaveBeenCalled();
+    now=Date.parse(input.emailSendAt);await dispatchDueDrafts(deps,'due');expect(send).toHaveBeenCalledTimes(1);
+    expect((await deps.draftRepo!.get(draft.id))?.state).toBe('issued');
+  }finally{clock.mockRestore();}
 });

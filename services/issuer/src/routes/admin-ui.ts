@@ -284,7 +284,7 @@ ${provisioned
 function emailFields(prefix: string, enabled: boolean): ReturnType<typeof html> {
   return html`<fieldset class="email-fields">
     <legend>Email delivery</legend>
-    ${enabled ? html`<label class="email-toggle"><input type="checkbox" id="${prefix}-send-email" name="sendEmail" checked /> Automatically email the recipient during working hours</label>
+    ${enabled ? html`<label class="email-toggle"><input type="checkbox" id="${prefix}-send-email" name="sendEmail" checked /> Email the recipient after review and scheduling</label>
       <label for="${prefix}-email">Recipient email</label>
       <input id="${prefix}-email" type="email" name="recipientEmail" maxlength="254" autocomplete="off" required />
       <label for="${prefix}-delivery-mode">Delivery time</label>
@@ -360,6 +360,7 @@ function certificatePanel(emailEnabled: boolean): ReturnType<typeof html> {
     ${emailFields('f', emailEnabled)}
     ${attestationRow('f-attest')}
     <div class="actions">
+      <button type="button" class="secondary" data-action="save-draft" data-kind="certificate">Save draft</button>
       <button type="submit">Generate certificate</button>
     </div>
   </form>
@@ -407,6 +408,7 @@ function letterheadPanel(emailEnabled: boolean): ReturnType<typeof html> {
     ${emailFields('lf', emailEnabled)}
     ${attestationRow('lf-attest')}
     <div class="actions">
+      <button type="button" class="secondary" data-action="save-draft" data-kind="letter">Save draft</button>
       <button type="submit">Generate letter</button>
     </div>
   </form>
@@ -477,6 +479,7 @@ function uploadPanel(emailEnabled: boolean): ReturnType<typeof html> {
     ${attestationRow('upload-attest')}
     <div class="actions">
       <button type="button" class="secondary" data-action="upload-preview">Preview exact PDF</button>
+      <button type="button" class="secondary" data-action="save-draft" data-kind="upload">Save draft</button>
       <button type="submit">Sign &amp; download</button>
     </div>
   </form>
@@ -486,7 +489,7 @@ function uploadPanel(emailEnabled: boolean): ReturnType<typeof html> {
 
 /** Document workspace; account security has its own authenticated page. */
 function dashboardBody(emailEnabled: boolean, ociBudget: boolean): ReturnType<typeof html> {
-  return html`<h1>Issue a certificate</h1>
+  return html`<h1>Create a document</h1>
 <p class="lede">Compose a fresh credential. Each issuance is signed, logged, and sealed.</p>
 ${ociBudget ? html`<p class="muted">Email sending is capped at ${OCI_EMAIL_DAILY_LIMIT} submissions per rolling 24 hours and ${OCI_EMAIL_MONTHLY_LIMIT.toLocaleString('en-US')} per UTC calendar month. Document generation continues when the email limit is reached.</p>` : ''}
 <p class="muted" id="status" role="status" aria-live="polite"></p>
@@ -516,6 +519,16 @@ ${ociBudget ? html`<p class="muted">Email sending is capped at ${OCI_EMAIL_DAILY
   ${uploadPanel(emailEnabled)}
 </div>
 
+<div class="card">
+  ${STUDS}
+  <h2>Drafts &amp; scheduled delivery</h2>
+  <p class="muted">Save a draft, preview it and make your changes. Choose Schedule send after review. Review / edit pauses a scheduled delivery while you work. The final version is signed when delivery starts.</p>
+  <div class="actions"><button type="button" class="secondary" data-action="refresh-drafts">Refresh drafts</button></div>
+  <div class="issued-table-scroll" role="region" aria-label="Drafts and scheduled documents" tabindex="0">
+    <table><thead><tr><th>Document</th><th>Recipient email</th><th>Status</th><th>Send time (IST)</th><th>Actions</th></tr></thead>
+    <tbody id="draft-rows"><tr><td colspan="5">Loading…</td></tr></tbody></table>
+  </div>
+</div>
 <div class="card">
   ${STUDS}
   <h2>Issued credentials</h2>

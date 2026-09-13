@@ -1,3 +1,4 @@
+import {registerDraftRoutes} from './routes/drafts.js';
 import { registerEmailDispatchRoute } from './routes/email-dispatch.js';
 /**
  * @dmjone/issuer — admin/issuing service (Stream B).
@@ -67,6 +68,7 @@ export function createIssuerApp(deps: IssuerDeps): Hono<IssuerHonoEnv> {
   registerAuthRoutes(app, deps);
   registerCredentialRoutes(app, deps);
   registerLetterRoutes(app, deps);
+  registerDraftRoutes(app, deps);
   registerUploadRoutes(app, deps);
   registerSuperAdminRoutes(app, deps);
   registerAdminUiRoutes(app, deps);

@@ -62,7 +62,8 @@ describe('GET /admin (server-rendered, no CDN)', () => {
     const cookie = await mintSessionCookie(deps.env);
     const res = await app.request('/admin', { headers: { cookie } });
     const body = await res.text();
-    expect(body).toContain('Issue a certificate');
+    expect(body).toContain('Create a document');
+    expect(body).toContain('id="draft-rows"');
     expect(body).toContain('id="issue-form"');
     expect(body).toContain('Issued credentials');
     // The recipient-name input the issuance form posts.

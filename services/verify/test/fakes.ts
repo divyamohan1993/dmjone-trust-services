@@ -170,6 +170,7 @@ export class FakeCredentialRepository implements CredentialRepository {
     for (const r of records) this.byId.set(r.id, r);
   }
 
+  async getByDraftId(): Promise<CredentialRecord | null> {return null;}
   async listDueEmails(): Promise<CredentialRecord[]> { return []; }
 
   add(record: CredentialRecord): void {

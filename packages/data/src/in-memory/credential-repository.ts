@@ -23,6 +23,7 @@ export function createInMemoryCredentialRepository(): CredentialRepository {
   const records = new Map<string, CredentialRecord>();
 
   return {
+    async getByDraftId(draftId) {const record=[...records.values()].find(r=>r.sourceDraftId===draftId);return record?structuredClone(record):null;},
     async listDueEmails(now, limit) {
       return [...records.values()].filter(r => (r.emailDelivery?.nextAttemptAt ?? Infinity) <= now)
         .sort((a,b) => a.emailDelivery!.nextAttemptAt! - b.emailDelivery!.nextAttemptAt!).slice(0,limit).map(r => structuredClone(r));

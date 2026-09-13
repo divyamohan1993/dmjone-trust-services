@@ -213,6 +213,7 @@ export interface DocumentEmailDelivery {
 }
 
 export interface CredentialRecord {
+  sourceDraftId?: string;
   /** Encrypted delivery address, kept out of content and public verification responses. */
   recipientEmailEnc?: string;
   emailDelivery?: DocumentEmailDelivery;
@@ -405,4 +406,20 @@ export interface AuditEvent {
   prevHash: string;
   hash: string;
   meta?: Record<string, unknown>;
+}
+
+/** Private editable document content, encrypted until final issuance. */
+export interface DocumentDraft {
+  id: string;
+  kind: DocumentKind;
+  state: 'draft' | 'scheduled' | 'issuing' | 'issued' | 'needs_attention';
+  encryptedInput: string;
+  revision: number;
+  createdAt: number;
+  updatedAt: number;
+  scheduledFor?: number;
+  nextAttemptAt?: number;
+  documentId?: string;
+  /** Existing withdrawn document from which an operator imported a review draft. */
+  sourceDocumentId?: string;
 }

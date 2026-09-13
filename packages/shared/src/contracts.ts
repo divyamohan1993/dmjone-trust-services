@@ -162,6 +162,7 @@ export interface PasswordHasher {
 // ─────────────────────────────── Data (Stream D) ───────────────────────────
 
 export interface CredentialRepository {
+  getByDraftId(draftId: string): Promise<CredentialRecord | null>;
   /** Durable outbox scan; includes expired sending leases for crash recovery. */
   listDueEmails(now: number, limit: number): Promise<CredentialRecord[]>;
   /** Atomic delivery lease/outcome update; erased records can never regain email data. */
@@ -277,4 +278,12 @@ export interface Section63Generator {
 /** Conservative OCI email submission budget, persisted across instances/restarts. */
 export interface EmailQuotaRepository {
   reserve(now: number): Promise<boolean>;
+}
+
+export interface DocumentDraftRepository {
+  create(draft: import('./types.js').DocumentDraft): Promise<void>;
+  get(id: string): Promise<import('./types.js').DocumentDraft | null>;
+  compareAndSet(id: string, revision: number, next: import('./types.js').DocumentDraft): Promise<boolean>;
+  list(limit: number): Promise<import('./types.js').DocumentDraft[]>;
+  listDue(now: number, limit: number): Promise<import('./types.js').DocumentDraft[]>;
 }

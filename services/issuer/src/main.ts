@@ -55,6 +55,7 @@ async function main(): Promise<void> {
     ...(verifyEmailScheduler && { verifyEmailScheduler }),
     ...(emailSender && { emailSender }),
     emailQuota: stores.emailQuota,
+    draftRepo: stores.drafts,
     env,
     logger,
     credentialRepo: stores.credentials,

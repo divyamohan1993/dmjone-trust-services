@@ -1,3 +1,4 @@
+import {createInMemoryDocumentDraftRepository} from '@dmjone/data';
 import type { DocumentEmailDelivery } from '@dmjone/shared';
 import { canonicalJson } from '@dmjone/shared';
 /**
@@ -50,6 +51,7 @@ export class FakeCredentialRepo implements CredentialRepository {
   readonly records = new Map<string, CredentialRecord>();
   createCount = 0;
 
+  async getByDraftId(draftId: string): Promise<CredentialRecord | null> { return structuredClone([...this.records.values()].find(r=>r.sourceDraftId===draftId)??null); }
   async listDueEmails(now: number, limit: number): Promise<CredentialRecord[]> {
     return [...this.records.values()].filter(r => (r.emailDelivery?.nextAttemptAt ?? Infinity) <= now)
       .sort((a,b) => a.emailDelivery!.nextAttemptAt! - b.emailDelivery!.nextAttemptAt!).slice(0,limit).map(r => structuredClone(r));
@@ -454,6 +456,7 @@ export function buildDeps(opts: {
     env: makeTestEnv(opts.env),
     logger: makeFakeLogger(),
     credentialRepo: new FakeCredentialRepo(),
+    draftRepo: createInMemoryDocumentDraftRepository(),
     blobStore: new FakeBlobStore(trace),
     logRepo,
     anchorRepo: new FakeAnchorRepo(),

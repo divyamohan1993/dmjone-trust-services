@@ -30,3 +30,5 @@ export * from './in-memory/index.js';
 export * from './firestore/index.js';
 
 export { createInMemoryEmailQuotaRepository, createFirestoreEmailQuotaRepository, reserveEmailQuota, OCI_EMAIL_DAILY_LIMIT, OCI_EMAIL_MONTHLY_LIMIT } from './email-quota.js';
+
+export {createInMemoryDocumentDraftRepository,createFirestoreDocumentDraftRepository} from './document-drafts.js';

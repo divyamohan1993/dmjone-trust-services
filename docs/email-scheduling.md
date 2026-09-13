@@ -11,13 +11,21 @@ set the private download password, and preview the letter. In **Email delivery**
   (but excluding) 17:00. This is always Asia/Kolkata, even on a device abroad.
   For example, 14 September 2026 at 09:15 IST is `2026-09-14T03:45:00Z`.
 
-Generate the document to commit its schedule. The issued table shows the due
-time and offers **Cancel email** while it is queued. Cancelling email keeps the
-signed document; revoking or erasing prevents subsequent queued dispatch. Mail
-already submitted cannot be recalled. Changing a form after generation does not
-change its queued message. Email is enabled by default; disabling it generates
-without delivery. These rules cover certificates, letters and uploaded PDFs.
-The recipient gets a secure download link from contact@dmj.one; share the
+Use **Save draft** to retain editable content without issuance or delivery. Use the
+existing exact-PDF preview to review the appearance. Confirm the attestation and
+choose **Schedule send** after review. The **Drafts & scheduled delivery** table
+shows its status and time. **Review / edit** atomically pauses a scheduled draft
+before opening the editor; save or schedule it again when ready. Stale browser
+tabs cannot overwrite a newer revision. Once delivery starts, editing is locked.
+The existing signing and verification pipelines issue the latest reviewed version
+at the scheduled working time. Uploaded PDFs keep their original content and
+signature-placement behavior. Generate-without-email paths remain available.
+
+New drafts are separate from already issued, immutable documents. The existing
+direct issuance APIs still secure a document immediately; their email outbox
+supports cancellation, but an issued document is not edited in place. Revoking
+or erasing prevents subsequent queued delivery. Mail already submitted cannot be
+recalled. The recipient gets a secure link from contact@dmj.one; share the
 password separately.
 
 The chosen time is the earliest submission time, not a guaranteed inbox arrival
@@ -27,6 +35,23 @@ working window, it resumes the next weekday. To keep SMTP within the window,
 submissions with fewer than 35 seconds remaining before 17:00 are deferred.
 
 ## Durable outbox and security
+
+`document_drafts/{uuid}` holds AES-GCM-encrypted input (including the private
+recipient and download password), an optimistic revision number, and draft /
+scheduled / issuing / issued / needs_attention state. Uploaded input PDFs are
+also encrypted, then chunked through the existing BlobStore using per-version
+random storage keys. Replaced upload versions are removed after the replacement
+is durable. Issued drafts discard their duplicate private input; the credential
+record remains authoritative. Erasure also purges retained failed-draft copies.
+
+The same authenticated Scheduler trigger processes at most one due draft and
+four existing email-outbox entries concurrently. A transactional claim freezes
+the reviewed draft before invoking the unchanged issuance pipeline. The private
+`sourceDraftId` links the resulting credential for crash reconciliation. An
+expired issuance claim is inspected for completed artifacts; it is never blindly
+reissued. Failures requiring operator attention are visible in the drafts list.
+All draft API reads/writes require an admin session; mutations require JSON and
+the issuer origin when Origin is supplied. Private draft responses are no-store.
 
 `credentials/{id}.emailDelivery` is committed with the encrypted recipient when
 the document is stored. No in-process timer or open browser is needed. The

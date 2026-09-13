@@ -50,7 +50,7 @@ export interface IssueOutcome {
 export async function issueCredential(
   deps: IssuerDeps,
   input: IssueCredentialInput,
-  ctx: { requestId: string; actor: string },
+  ctx: { requestId: string; actor: string; draftId?: string },
 ): Promise<IssueOutcome> {
   const now = new Date().toISOString();
 
@@ -110,6 +110,7 @@ export async function issueCredential(
   // 7. Assemble + persist the canonical record (status 'valid'; no revokedAt yet).
   const emailDelivery = initialEmailDelivery(deps, input.recipientEmail, input.emailSendAt);
   const record: CredentialRecord = {
+    ...(ctx.draftId && {sourceDraftId:ctx.draftId}),
     ...(emailDelivery && { emailDelivery }),
     id: credentialId,
     content,

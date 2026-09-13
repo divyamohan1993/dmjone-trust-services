@@ -55,6 +55,7 @@ export function rowToCredential(row: CredentialRow): CredentialRecord {
   // on the wrong branch (ML-DSA fails → "unknown"). Stored by the spread in
   // credentialToRow; restored here. Absent ⇒ legacy certificate (correct default).
   if (row.kind !== undefined) out.kind = row.kind;
+  if (row.sourceDraftId !== undefined) out.sourceDraftId = row.sourceDraftId;
   if (row.recipientEmailEnc !== undefined) out.recipientEmailEnc = row.recipientEmailEnc;
   if (row.emailDelivery !== undefined) out.emailDelivery = row.emailDelivery;
   if (row.revokedAt !== undefined) out.revokedAt = row.revokedAt;

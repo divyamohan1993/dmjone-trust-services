@@ -7,6 +7,7 @@
 
 import type {
   EmailQuotaRepository,
+  DocumentDraftRepository,
   AdminRepository,
   AnchorRepository,
   AuditLog,
@@ -17,6 +18,7 @@ import type {
 } from '@dmjone/shared';
 
 export interface DataStores {
+  drafts: DocumentDraftRepository;
   emailQuota: EmailQuotaRepository;
   credentials: CredentialRepository;
   blobs: BlobStore;

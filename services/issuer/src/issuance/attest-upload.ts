@@ -67,7 +67,7 @@ export async function attestUpload(
   deps: IssuerDeps,
   input: SignUploadInput,
   pdfBytes: Uint8Array,
-  ctx: { requestId: string; actor: string },
+  ctx: { requestId: string; actor: string; draftId?: string },
 ): Promise<AttestUploadOutcome> {
   const now = new Date().toISOString();
   // The upload schema carries no issue date; derive one server-side and thread
@@ -151,6 +151,7 @@ export async function attestUpload(
   // 8. Assemble + persist the canonical record (kind:'upload').
   const emailDelivery = initialEmailDelivery(deps, input.recipientEmail, input.emailSendAt);
   const record: CredentialRecord = {
+    ...(ctx.draftId && {sourceDraftId:ctx.draftId}),
     ...(emailDelivery && { emailDelivery }),
     id: documentId,
     kind: 'upload',

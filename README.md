@@ -85,4 +85,4 @@ this stands on cryptographic integrity vs. Indian statutory recognition, and
 [CHANGELOG.md](CHANGELOG.md) for the log. Real Bitcoin/OpenTimestamps anchoring
 and a CCA-licensed signing path remain scoped, not yet shipped.
 
-Document email delivery follows Monday–Friday, 9 AM–5 PM IST. Choose an explicit IST time or let the app queue for the next working time. See [scheduling and operations](docs/email-scheduling.md).
+Save, preview and edit document drafts before choosing **Schedule send**. Opening a scheduled draft for review pauses delivery. The final reviewed version is issued during Monday–Friday, 9 AM–5 PM IST. Choose an explicit IST time or the next working time. See [scheduling and operations](docs/email-scheduling.md).

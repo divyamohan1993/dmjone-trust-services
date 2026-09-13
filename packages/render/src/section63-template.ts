@@ -1,3 +1,4 @@
+import {PAPER_STYLE,PAPER_DECORATION} from './paper-style.js';
 /**
  * Pure HTML builder for the Bharatiya Sakshya Adhiniyam, 2023 — §63 Certificate
  * of Authenticity (the statutory certificate accompanying electronic-record
@@ -61,7 +62,7 @@ const SECTION63_CSS = `
   html,body{ background:var(--paper); }
   body{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   .page{
-    width:174mm; margin:0 auto; background:var(--paper);
+    width:174mm; margin:0 auto; background:transparent;
     font-family:var(--serif); color:var(--ink); font-size:10.5pt; line-height:1.5;
   }
   .doc{ display:block; }
@@ -237,8 +238,10 @@ export function buildSection63Html(record: CredentialRecord, meta: Section63Meta
 <style>
 ${fontCss}
 ${SECTION63_CSS}
+${PAPER_STYLE}
 </style></head>
 <body>
+${PAPER_DECORATION}
   <div class="page">
     <div class="doc">
 

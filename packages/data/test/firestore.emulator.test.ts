@@ -1,3 +1,4 @@
+import {createFirestoreDocumentDraftRepository} from '../src/document-drafts.js';
 /**
  * Emulator-gated parity tests for the Firestore-backed stores.
  *
@@ -64,6 +65,20 @@ describe.skipIf(!EMULATOR)('Firestore stores (emulator) — parity with in-memor
     const {nextAttemptAt:_,...rest}=current;
     expect(await repo.compareAndSetEmailDelivery(record.id,current,{...rest,status:'accepted'})).toBe(true);
     expect((await repo.listDueEmails(999999,10)).find(r=>r.id===record.id)).toBeUndefined();
+  });
+
+  it('persists editable drafts, rejects competing claims and locates their issued records',async()=>{
+    const repo=createFirestoreDocumentDraftRepository(client),credentials=createFirestoreCredentialRepository(client);
+    const id='draft-'+rnd();
+    const draft={id,kind:'letter' as const,state:'scheduled' as const,encryptedInput:'sealed',revision:1,createdAt:1,updatedAt:1,scheduledFor:10,nextAttemptAt:10};
+    await repo.create(draft);expect((await repo.listDue(10,10)).some(d=>d.id===id)).toBe(true);
+    const outcomes=await Promise.all([repo.compareAndSet(id,1,{...draft,state:'issuing',revision:2}),repo.compareAndSet(id,1,{...draft,state:'draft',revision:2})]);
+    expect(outcomes.filter(Boolean)).toHaveLength(1);
+    const current=(await repo.get(id))!;const {nextAttemptAt:_,...rest}=current;
+    expect(await repo.compareAndSet(id,2,{...rest,state:'draft',revision:3})).toBe(true);
+    expect((await repo.listDue(10,10)).some(d=>d.id===id)).toBe(false);
+    const record=makeRecord({id:`DMJ-IC-20260914-${rnd()}`});await credentials.create({...record,sourceDraftId:id});
+    expect((await credentials.getByDraftId(id))?.id).toBe(record.id);
   });
 
   it('credential CRUD + revokedAt invariant', async () => {

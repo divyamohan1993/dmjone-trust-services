@@ -401,6 +401,88 @@ function refreshList(){
     .then(function(j){ renderRows(j.items||[]); })
     .catch(function(e){ setStatus('Could not load list: '+e.message, true); });
 }
+function draftUploadPayload(form){
+  if(!uploadPdfBase64) throw new Error('Choose a PDF first.');
+  var places=placingSignature()?uploadPlacements():[];
+  var payload={pdfBase64:uploadPdfBase64,originalFilename:uploadFilename,placeHandwrittenSignature:places.length>0,
+    password:new FormData(form).get('password'),attestation:true};
+  if(places.length)payload.signaturePlacements=places;
+  addEmailPayload(form,payload);return payload;
+}
+function saveDraftForm(form,kind,schedule){
+  if(form.dataset.generating)return;
+  var attestationId=kind==='letter'?'lf-attest':kind==='certificate'?'f-attest':'upload-attest';
+  if(schedule && !attestChecked(attestationId)){setStatus(ATTEST_MSG,true);return;}
+  var payload;
+  try{payload=kind==='letter'?buildLetterPayload(form,true):kind==='certificate'?buildPayload(form,true):draftUploadPayload(form);}catch(e){setStatus(e.message,true);return;}
+  if(!payload.password || payload.password.length<8){setStatus('Choose a download password of at least 8 characters before saving.',true);return;}
+  if(!form.dataset.draftId){form.dataset.draftId=crypto.randomUUID();form.dataset.draftRevision='0';}
+  setGenerating(form,true);setStatus(schedule?'Scheduling the reviewed draft…':'Saving draft — no email will be sent…');
+  return api('/api/drafts',{id:form.dataset.draftId,revision:Number(form.dataset.draftRevision),kind:kind,input:payload,action:schedule?'schedule':'save'})
+    .then(function(j){
+      form.dataset.draftRevision=String(j.draft.revision);
+      if(schedule){
+        setStatus('Scheduled for '+formatEmailTime(j.draft.scheduledFor)+'. Use Review / edit to pause delivery and change this draft.');
+        form.reset();delete form.dataset.draftId;delete form.dataset.draftRevision;
+        if(kind==='letter'){resetEditor(letterRoot());letterRoot().setAttribute('data-scope','');}
+        else if(kind==='certificate'){resetEditor();syncEcho();}
+        else{uploadPdfBase64=null;uploadPages=[];uploadFilename='';sigBoxes={};uEl('upload-meta').textContent='No file selected.';syncUploadPlacement();}
+        syncEmailFields(form);
+      }else setStatus('Draft saved. Review the preview, make any changes, then choose Schedule send. Nothing is scheduled yet.');
+      return refreshDrafts();
+    }).catch(function(e){setStatus('Draft update could not be confirmed: '+e.message+'. Refresh drafts before retrying.',true);})
+    .finally(function(){setGenerating(form,false);});
+}
+function fillDraftForm(d){
+  var kind=d.kind,input=d.input;
+  var form=document.getElementById(kind==='letter'?'letter-form':kind==='certificate'?'issue-form':'upload-form');
+  var prefix=kind==='letter'?'lf':kind==='certificate'?'f':'upload';
+  selectMode(document.getElementById('tab-'+(kind==='letter'?'letterhead':kind)),false);
+  form.reset();form.dataset.draftId=d.id;form.dataset.draftRevision=String(d.revision);
+  if(kind==='letter'){
+    applyLetterTemplate({id:input.scope?'internship-draft':'custom-draft',letter:input});setVal('lf-date',input.issueDate);
+  }else if(kind==='certificate'){
+    applyCertTemplate({cert:input});setVal('f-recipient',input.recipientName);setVal('f-date',input.issueDate);
+  }
+  setVal(prefix+'-pw',input.password||'');setVal(prefix+'-email',input.recipientEmail||'');
+  var toggle=form.querySelector('[name="sendEmail"]');if(toggle)toggle.checked=!!input.recipientEmail;
+  var mode=form.querySelector('[name="emailDeliveryMode"]'),at=form.querySelector('[name="emailSendAt"]');
+  if(mode && at){
+    mode.value=input.emailSendAt?'scheduled':'automatic';
+    if(input.emailSendAt)at.value=new Date(Date.parse(input.emailSendAt)+330*60000).toISOString().slice(0,16);
+  }
+  var attestation=form.querySelector('[name="attestation"]');if(attestation)attestation.checked=false;
+  syncEmailFields(form);
+  var ready=Promise.resolve();
+  if(kind==='upload'){
+    uploadPdfBase64=input.pdfBase64;uploadFilename=input.originalFilename;sigBoxes={};activeSigPage=1;
+    (input.signaturePlacements||[]).forEach(function(p){sigBoxes[p.page]={xPct:p.xPct,yPct:p.yPct,wPct:p.wPct};});
+    uEl('upload-place').checked=!!input.placeHandwrittenSignature;
+    ready=api('/api/uploads/inspect',{pdfBase64:uploadPdfBase64}).then(function(j){uploadPages=j.pages;fillUploadPages();syncUploadPlacement();uEl('upload-meta').textContent=uploadFilename+' — '+j.pageCount+' pages';});
+  }
+  return ready.then(function(){form.scrollIntoView({behavior:'smooth',block:'start'});setStatus('Draft opened for review. Delivery is paused. Preview, edit and save, then choose Schedule send when ready.');});
+}
+function refreshDrafts(){
+  var rows=document.getElementById('draft-rows');if(!rows)return Promise.resolve();
+  return fetch('/api/drafts',{credentials:'same-origin'}).then(function(r){if(!r.ok)throw new Error('Could not load drafts');return r.json();}).then(function(j){
+    rows.replaceChildren();
+    if(!j.items.length){var empty=document.createElement('tr'),td=cell('No drafts yet. Save a draft in any document tab.');td.colSpan=5;empty.appendChild(td);rows.appendChild(empty);}
+    j.items.forEach(function(d){
+      var tr=document.createElement('tr');tr.appendChild(cell(d.label));tr.appendChild(cell(d.recipientEmail||'Not selected'));
+      tr.appendChild(cell({draft:'Draft — not scheduled',scheduled:'Scheduled',issuing:'Delivery starting',issued:'Issued',needs_attention:'Needs attention — not reissued automatically'}[d.state]||d.state));
+      tr.appendChild(cell(d.scheduledFor?formatEmailTime(d.scheduledFor):'Not scheduled'));
+      var actions=document.createElement('td');
+      if(d.state==='draft'||d.state==='scheduled'){
+        var edit=document.createElement('button');edit.type='button';edit.className='secondary';edit.textContent=d.state==='scheduled'?'Review / edit (pauses send)':'Review / edit';
+        edit.addEventListener('click',function(){edit.disabled=true;api('/api/drafts/'+encodeURIComponent(d.id)+'/pause',{revision:d.revision})
+          .then(fillDraftForm).then(refreshDrafts).catch(function(e){setStatus(e.message,true);edit.disabled=false;});});actions.appendChild(edit);
+      }
+      if(d.verifyUrl){var link=document.createElement('a');link.href=d.verifyUrl;link.target='_blank';link.rel='noopener';link.textContent='View issued document';actions.appendChild(link);}
+      tr.appendChild(actions);rows.appendChild(tr);
+    });
+  }).catch(function(e){setStatus(e.message,true);});
+}
+
 // Build the issue/preview payload from the form fields + the live body editor.
 // The body comes ONLY from the serialiser (the #f-body textarea is gone): the
 // contenteditable HTML never leaves the browser, only the serialised in-band
@@ -445,6 +527,8 @@ function addEmailPayload(form,payload){
 function syncEmailFields(form){
   var toggle = form.querySelector('[name="sendEmail"]'), input = form.querySelector('[name="recipientEmail"]');
   if(toggle && input){ input.disabled = !toggle.checked; input.required = toggle.checked; }
+  var submit=form.querySelector('button[type="submit"]');
+  if(submit && toggle){ if(!submit.dataset.generateLabel)submit.dataset.generateLabel=submit.textContent; submit.textContent=toggle.checked?'Schedule send':submit.dataset.generateLabel; }
   var mode = form.querySelector('[name="emailDeliveryMode"]'), at = form.querySelector('[name="emailSendAt"]');
   var wrap = form.querySelector('[data-email-schedule]');
   if(mode && at && toggle){
@@ -459,6 +543,7 @@ function setGenerating(form, busy){
 }
 function generatedMessage(id, email){ return 'Generated '+id+'.'+(email ? ' '+emailStatus(email)+'.' : ''); }
 function issue(form){
+  if(new FormData(form).get('sendEmail')) return saveDraftForm(form,'certificate',true);
   if(form.dataset.generating) return;
   if(!attestChecked('f-attest')){ setStatus(ATTEST_MSG, true); return; }
   setGenerating(form,true); setStatus('Generating and securing certificate…');
@@ -499,6 +584,7 @@ function buildLetterPayload(form, wantPassword){
   return payload;
 }
 function issueLetter(form){
+  if(new FormData(form).get('sendEmail')) return saveDraftForm(form,'letter',true);
   if(form.dataset.generating) return;
   if(!attestChecked('lf-attest')){ setStatus(ATTEST_MSG, true); return; }
   setGenerating(form,true); setStatus('Generating and securing letter…');
@@ -954,6 +1040,8 @@ document.addEventListener('click', function(ev){
   else if(action==='key-dialog-cancel') actionEl.closest('dialog').close();
   else if(action==='recover') recover();
   else if(action==='refresh-list') refreshList();
+  else if(action==='refresh-drafts') refreshDrafts();
+  else if(action==='save-draft') saveDraftForm(actionEl.closest('form'),actionEl.getAttribute('data-kind'),false);
   // add-para / preview are shared by both composers — resolve which editor/form
   // owns the clicked button from its .composer / <form> ancestor.
   else if(action==='add-para') addPara(editorIn(composerOf(actionEl)));
@@ -1302,6 +1390,7 @@ function previewUpload(){
 // fetch (api() would JSON-parse and throw); on success read the header, save the
 // blob as <id>.pdf, surface the id, and refresh the issued list.
 function signUpload(){
+  var draftForm=uEl('upload-form'); if(new FormData(draftForm).get('sendEmail')) return saveDraftForm(draftForm,'upload',true);
   var form=uEl('upload-form'); if(form.dataset.generating || !form.reportValidity()) return;
   if(!uploadPdfBase64){ setStatus('Choose a PDF first.', true); return; }
   if(!attestChecked('upload-attest')){ setStatus(ATTEST_MSG, true); return; }
@@ -1467,5 +1556,6 @@ function uploadBoxKeydown(ev){
 
 // Initial list load on the dashboard.
 if(document.getElementById('cred-rows')) refreshList();
+refreshDrafts();
 })();`;
 }

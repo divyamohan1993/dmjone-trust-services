@@ -1,3 +1,4 @@
+import {createInMemoryDocumentDraftRepository} from '../document-drafts.js';
 import { createInMemoryEmailQuotaRepository } from '../email-quota.js';
 /**
  * In-memory persistence implementations (Stream D). First-class deliverables:
@@ -26,6 +27,7 @@ export { createInMemorySecretStore } from './secret-store.js';
 /** Construct a complete, independent set of in-memory stores. */
 export function createInMemoryStores(): DataStores {
   return {
+    drafts: createInMemoryDocumentDraftRepository(),
     emailQuota: createInMemoryEmailQuotaRepository(),
     credentials: createInMemoryCredentialRepository(),
     blobs: createInMemoryBlobStore(),

@@ -1,3 +1,4 @@
+import {eraseSourceDraft} from '../drafts/service.js';
 import { validateEmailSchedule } from '../email/schedule.js';
 import { emailAfterIssuance, requireEmailRequest, requireEmailConfiguration, emailSummary, sendDocumentEmail } from '../email/delivery.js';
 /**
@@ -280,6 +281,7 @@ export function registerCredentialRoutes(app: Hono<IssuerHonoEnv>, deps: IssuerD
     if (!existing) {
       throw new AppError(ERROR_CODE.CREDENTIAL_NOT_FOUND, 'No such credential', 404);
     }
+    if (existing.sourceDraftId) await eraseSourceDraft(deps,existing.sourceDraftId);
     if (existing.erased) {
       // Idempotent: already a tombstone.
       return c.json({ credentialId, erased: true, erasedAt: existing.erasedAt });

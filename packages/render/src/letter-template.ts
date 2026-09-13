@@ -1,3 +1,4 @@
+import {PAPER_STYLE,PAPER_DECORATION} from './paper-style.js';
 /**
  * Pure HTML builder for the dmj.one **letterhead letter** (Mode 2).
  *
@@ -58,7 +59,7 @@ const LETTER_CSS = `
   html,body{ background:var(--paper); }
   body{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   .page{
-    width:170mm; margin:0 auto; background:var(--paper);
+    width:170mm; margin:0 auto; background:transparent;
     font-family:var(--serif); color:var(--ink); font-size:11pt; line-height:1.55;
   }
 
@@ -69,13 +70,17 @@ const LETTER_CSS = `
   .masthead .logo{ width:22mm; height:22mm; display:block; flex:0 0 auto;
     filter:drop-shadow(0 1mm 1.8mm rgba(120,90,40,.16)); }
   .masthead .ident{ flex:1; }
-  .masthead .org{ font-family:var(--display); font-weight:700; font-size:18pt;
+  .masthead .org{ font-family:var(--display); font-weight:700; font-size:22pt;
     letter-spacing:.02em; color:var(--ink); line-height:1.1; }
   .masthead .descriptor{ font-family:var(--label); font-size:8.4pt; letter-spacing:.20em;
     text-transform:uppercase; color:var(--gold-deep); margin-top:1.4mm; }
   .masthead .contact{ font-family:var(--label); font-size:8pt; letter-spacing:.10em;
     color:var(--ink-soft); margin-top:1.4mm; }
 
+  .welcome{font-family:var(--display);font-size:23pt;font-weight:600;line-height:1.15;
+    color:var(--gold-deep);margin:1mm 0 5mm;text-align:center;break-inside:avoid;}
+  .welcome small{display:block;font-family:var(--label);font-weight:400;font-size:8pt;
+    letter-spacing:.22em;text-transform:uppercase;color:var(--ink-soft);margin-top:2mm;}
   /* ===== ref / date row ===== */
   .refrow{ display:flex; justify-content:space-between; font-family:var(--label);
     font-size:9pt; letter-spacing:.05em; color:var(--ink-soft); margin-bottom:6mm; }
@@ -95,7 +100,7 @@ const LETTER_CSS = `
 
   /* ===== body ===== */
   .body{ text-align:justify; text-justify:inter-word; }
-  .body p{ font-family:var(--serif); font-size:11pt; line-height:1.62; color:var(--ink);
+  .body p{ font-family:var(--serif); font-size:11pt; line-height:1.55; color:var(--ink);
     margin-bottom:3mm; }
   .body strong{ font-weight:600; }
   .body em{ font-style:italic; }
@@ -108,6 +113,8 @@ const LETTER_CSS = `
   .body p.pa-right{ text-align:right; }
   .body p.pa-justify{ text-align:justify; text-justify:inter-word; }
 
+  .closing-group{break-inside:avoid;}
+  .body p{orphans:3;widows:3;}
   /* ===== valediction + signature block (kept whole across page breaks) ===== */
   .sigblock{ margin-top:9mm; break-inside:avoid; }
   .sigblock .valediction{ font-family:var(--serif); font-size:11pt; color:var(--ink);
@@ -122,7 +129,7 @@ const LETTER_CSS = `
 
   /* ===== footer: verify line + QR card (kept together) ===== */
   .foot{ margin-top:10mm; padding-top:4mm; border-top:.6pt solid var(--gold-soft); }
-  .verifycard{ display:flex; align-items:center; gap:5mm; break-inside:avoid; }
+  .verifycard{ display:flex; align-items:center; gap:5mm; break-inside:avoid; padding:3mm 4mm; border:.5pt solid var(--gold-soft); border-radius:2mm; background:rgba(255,253,251,.8); }
   .verifycard .qr{ width:20mm; height:20mm; padding:1.6mm; background:#fff;
     border:.8pt solid var(--gold-soft); border-radius:1.2mm; flex:0 0 auto;
     box-shadow:0 1mm 2mm rgba(120,90,40,.12); }
@@ -179,12 +186,13 @@ export function buildLetterHtml(input: LetterTemplateInput): string {
   // FIRST, then the inline marks compiled to <strong>/<em>/<u>). The class is
   // always one of four fixed literals (never user data), so its interpolation
   // is safe (CSP-safe — no inline style attribute is ever emitted).
-  const bodyParas = content.bodyParagraphs
+  const bodyBlocks = content.bodyParagraphs
     .map((p) => {
       const { html, alignClass } = compileParagraph(p);
       return `<p class="${alignClass}">${html}</p>`;
-    })
-    .join('');
+    });
+  const bodyParas = bodyBlocks.slice(0, -2).join('');
+  const closingParas = bodyBlocks.slice(-2).join('');
 
   // Optional valediction (e.g. "Sincerely,").
   const valediction = content.valediction !== undefined ? content.valediction.trim() : '';
@@ -198,8 +206,10 @@ export function buildLetterHtml(input: LetterTemplateInput): string {
 <style>
 ${fontCss}
 ${LETTER_CSS}
+${PAPER_STYLE}
 </style></head>
 <body>
+  ${PAPER_DECORATION}
   <div class="page">
 
     <!-- ===== MASTHEAD / LETTERHEAD ===== -->
@@ -211,6 +221,8 @@ ${LETTER_CSS}
         <div class="contact">dmj.one &nbsp;&middot;&nbsp; contact@dmj.one &nbsp;&middot;&nbsp; +91 79799 30293</div>
       </div>
     </div>
+
+    ${/internship.*offer|offer.*internship/i.test(content.subject ?? '') ? '<div class="welcome">An invitation to grow.<small>Learn with purpose &middot; Build with confidence</small></div>' : ''}
 
     <!-- ===== REF / DATE ===== -->
     <div class="refrow"><span class="ref">${refHtml}</span><span class="date">Date of Issue: ${issueDate}</span></div>
@@ -225,6 +237,8 @@ ${LETTER_CSS}
     <!-- ===== BODY ===== -->
     <div class="body">${bodyParas}</div>
 
+    <div class="closing-group">
+    <div class="body">${closingParas}</div>
     <!-- ===== VALEDICTION + SIGNATURE ===== -->
     <div class="sigblock">
       ${valedictionHtml}
@@ -246,6 +260,7 @@ ${LETTER_CSS}
         </div>
       </div>
       <div class="motto">Dream &middot; Manifest &middot; Journey &middot; Together as One</div>
+    </div>
     </div>
 
   </div>

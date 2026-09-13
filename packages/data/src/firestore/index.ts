@@ -1,3 +1,4 @@
+import {createFirestoreDocumentDraftRepository} from '../document-drafts.js';
 import { createFirestoreEmailQuotaRepository } from '../email-quota.js';
 /**
  * Firestore + Secret Manager persistence implementations (Stream D, production).
@@ -36,6 +37,7 @@ export { BLOB_CHUNK_COLLECTIONS, COLLECTIONS, DOC_IDS, seqDocId } from './paths.
 export function createFirestoreStores(env: FirestoreEnv): DataStores {
   const db: Firestore = createFirestore(env);
   return {
+    drafts: createFirestoreDocumentDraftRepository(db),
     emailQuota: createFirestoreEmailQuotaRepository(db),
     credentials: createFirestoreCredentialRepository(db),
     blobs: createFirestoreBlobStore(db),

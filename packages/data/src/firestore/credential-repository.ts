@@ -24,6 +24,7 @@ export function createFirestoreCredentialRepository(db: Firestore): CredentialRe
   const col = db.collection(COLLECTIONS.credentials);
 
   return {
+    async getByDraftId(draftId) {const snap=await col.where('sourceDraftId','==',draftId).limit(1).get();return snap.docs[0]?rowToCredential(snap.docs[0].data() as CredentialRow):null;},
     async listDueEmails(now, limit) {
       // A single-field range uses Firestore's automatic index, no composite index.
       const snap = await col.where('emailDelivery.nextAttemptAt', '<=', now)

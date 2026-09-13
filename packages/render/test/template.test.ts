@@ -76,7 +76,7 @@ describe('buildCertificateHtml', () => {
     expect(html).toContain('class="corner tl"');
     expect(html).toContain('class="corner br"');
     expect(html).toContain('class="wash"');
-    expect(html).toContain('Dream &middot; Manifest &middot; Journey &middot; Together as One');
+    expect(html).toContain('Dream, Manifest, and Journey, Together as one!');
   });
 
   it('omits the optional closing line element when closingLine is absent', () => {

@@ -78,3 +78,10 @@ page before signing, preserving text margins, links and per-page signatures.
 Physical edge-to-edge printing requires a printer supporting borderless A4.
 Letter punctuation uses a plain hyphen in place of an em dash; credentials such
 as passwords are preserved exactly. Certificate rendering remains unchanged.
+
+The NDA carries the candidate name and any explicitly labelled date-of-birth or
+masked Aadhaar/PAN lines from the offer. Supply masked identity text only when
+needed; full identity numbers are not required to issue or verify these documents.
+New correspondence renders the rupee sign as `INR` to avoid missing font glyphs.
+The recipient email uses the public verifier's unguessable document links; issuer
+admin links are confined to clearly labelled owner previews before issuance.

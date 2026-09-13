@@ -12,7 +12,7 @@ import {createResendEmailSender,messageText,type DocumentEmailAttachment} from '
 let now:number;
 beforeEach(()=>{now=Date.parse('2026-09-14T09:00:00+05:30');vi.spyOn(Date,'now').mockImplementation(()=>now);});
 afterEach(()=>vi.restoreAllMocks());
-const input={issueDate:'2026-09-14',recipientLines:['Asha Test'],subject:'Internship Offer — MERN & Applied AI',salutation:'Dear Asha,',bodyParagraphs:['We offer a learning internship.'],attestation:true as const,password:'inert-private-password',recipientEmail:'inert@example.test'};
+const input={issueDate:'2026-09-14',recipientLines:['Asha Test','Date of birth: 01 January 2000','Aadhaar (masked): XXXX XXXX 0000 | PAN (masked): XXXXXX000X','Example postal address'],subject:'Internship Offer — MERN & Applied AI',salutation:'Dear Asha,',bodyParagraphs:['We offer a learning internship.'],attestation:true as const,password:'inert-private-password',recipientEmail:'inert@example.test'};
 function fixture(){
  const deps=buildDeps(),sent:{body:string;attachments:DocumentEmailAttachment[]}[]=[];
  deps.emailQuota={reserve:async()=>true};deps.emailSender={provider:'oci',prepare:JSON.stringify,send:async(body,_key,attachments=[])=>{sent.push({body,attachments});return {status:'accepted',providerId:'inert-id'};}};
@@ -27,6 +27,7 @@ describe('offer and NDA packet',()=>{
   const parent=(await deps.credentialRepo.getById(documentId))!,nda=(await deps.credentialRepo.getById(parent.nda!.documentId))!;
   expect(nda.recipientEmailEnc).toBeUndefined();expect(nda.emailDelivery).toBeUndefined();
   expect(nda.content.bodyParagraphs).toEqual(DEFAULT_NDA_PARAGRAPHS);
+  expect(nda.content.recipientLines).toEqual(input.recipientLines.slice(0,3));
   expect(parent.content.bodyParagraphs).toContain(ndaEnclosureLine(nda.id,nda.pdfSha256));
   expect(parent.canonicalPayload).toContain(nda.pdfSha256);expect(parent.content.bodyParagraphs).toContain(OFFER_SIGNING_INSTRUCTIONS);expect(parent.content.bodyParagraphs).toContain(OFFER_POLICY_NOTICE);
   expect(await emailAfterIssuance(deps,documentId,input.recipientEmail,'mail')).toMatchObject({status:'accepted'});

@@ -37,7 +37,7 @@ export const IDENTITY = {
   name: 'dmj.one',
   trustService: 'dmj.one Trust Services',
   descriptor: 'Educational Platform · Independent Learning Initiative',
-  motto: 'Dream · Manifest · Journey · Together as One',
+  motto: 'Dream, Manifest, and Journey, Together as one!',
   email: 'contact@dmj.one',
   phone: '+91 79799 30293',
 } as const;

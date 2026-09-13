@@ -243,7 +243,7 @@ ${CERTIFICATE_CSS}
 
     <!-- ===== FOOTER ===== -->
     <div class="foot">
-      <div class="motto">Dream &middot; Manifest &middot; Journey &middot; Together as One</div>
+      <div class="motto">Dream, Manifest, and Journey, Together as one!</div>
       <div class="verify">Verify this credential at <b>dmj.one/verify</b> &nbsp;&middot;&nbsp; Credential ID: ${credentialId}</div>
       <div class="disclosure">Issued by dmj.one, an independent educational initiative.</div>
       <div class="contact">dmj.one &nbsp;&middot;&nbsp; contact@dmj.one &nbsp;&middot;&nbsp; +91 79799 30293</div>

@@ -228,7 +228,7 @@ ${PAPER_STYLE}
       </div>
     </div>
 
-    ${/internship.*offer|offer.*internship/i.test(content.subject ?? '') ? '<div class="welcome">An invitation to grow.<small>Learn with purpose &middot; Build with confidence</small></div>' : ''}
+    ${/internship.*offer|offer.*internship/i.test(content.subject ?? '') ? '<div class="welcome">An invitation to grow.<small>Dream, Manifest, and Journey, Together as one!</small></div>' : ''}
 
     <!-- ===== REF / DATE ===== -->
     <div class="refrow"><span class="ref">${refHtml}</span><span class="date">Date of Issue: ${issueDate}</span></div>
@@ -266,7 +266,7 @@ ${PAPER_STYLE}
           <div class="url">Verify this document at <b>verify.dmj.one</b> &nbsp;&middot;&nbsp; Document ID: ${documentId}</div>
         </div>
       </div>
-      <div class="motto">Dream &middot; Manifest &middot; Journey &middot; Together as One</div>
+      <div class="motto">Dream, Manifest, and Journey, Together as one!</div>
     </div>
     </div>
 

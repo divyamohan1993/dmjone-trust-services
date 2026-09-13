@@ -22,14 +22,14 @@ export function ndaEnclosureLine(id:string,sha256:string):string{return `Enclosu
 export function buildNdaInput(offer:Omit<IssueLetterInput,'attestation'|'password'> & {password?:string}):IssueLetterInput{
  const terms=[...(offer.ndaBodyParagraphs??DEFAULT_NDA_PARAGRAPHS)];
  if(!terms.some(p=>p.includes(TERMS_URL)&&p.includes(PRIVACY_URL)))terms.push(OFFER_POLICY_NOTICE);
- return {issueDate:offer.issueDate,reference:'Confidentiality and onboarding',recipientLines:offer.recipientLines.slice(0,1),subject:'Non-disclosure agreement',
+ return {issueDate:offer.issueDate,reference:'Confidentiality and onboarding',recipientLines:offer.recipientLines.filter((line,index)=>index===0 || /^(?:Date of birth:|Aadhaar \(masked\):|PAN \(masked\):)/i.test(line)),subject:'Non-disclosure agreement',
   salutation:'Please read and sign this agreement.',bodyParagraphs:terms,
   password:offer.password??'preview-only-not-a-download-password',attestation:true};
 }
 
 /** House typography for newly prepared correspondence. Historical signed records remain unchanged. */
 export function normalizeLetterPunctuation<T>(value:T):T{
- if(typeof value==='string')return value.replace(/\s*—\s*/g,' - ') as T;
+ if(typeof value==='string')return value.replace(/\s*—\s*/g,' - ').replace(/₹\s*/g,'INR ') as T;
  if(Array.isArray(value))return value.map(v=>normalizeLetterPunctuation(v)) as T;
  if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).map(([key,v])=>[key,['password','recipientEmail','emailSendAt'].includes(key)?v:normalizeLetterPunctuation(v)])) as T;
  return value;

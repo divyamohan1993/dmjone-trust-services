@@ -39,8 +39,8 @@ describe('reuse for a new candidate',()=>{
   expect(result.status).toBe(201);const json=await result.json();expect(json.newCandidate).toBe(true);expect(json.input.recipientEmail).toBeUndefined();
  });
  it('normalizes correspondence punctuation without modifying passwords or delivery identifiers',async()=>{
-  const raw={...input,password:'private—password'};const normalized=normalizeLetterPunctuation(raw);
-  expect(normalized.subject).toBe('Internship Offer - MERN');expect(normalized.password).toBe(raw.password);
+  const raw={...input,password:'private₹—password'};const normalized=normalizeLetterPunctuation(raw);
+  expect(normalized.subject).toBe('Internship Offer - MERN');expect(normalizeLetterPunctuation('Stipend: ₹0')).toBe('Stipend: INR 0');expect(normalized.password).toBe(raw.password);
   const deps=buildDeps();const d=await saveDraft(deps,{kind:'letter',input:raw,schedule:false},'punctuation');
   const saved=await getDraftInput(deps,(await deps.draftRepo!.get(d.id))!);expect(saved.subject).not.toContain('—');expect(saved.password).toBe(raw.password);
  });

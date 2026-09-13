@@ -34,7 +34,8 @@ The email and PDFs instruct the applicant to:
 1. Read the offer, NDA and linked website policies.
 2. Sign and date every page of both documents.
 3. Email both signed copies to contact@dmj.one.
-4. Then enroll at https://timesheet.dmj.one and await written start confirmation.
+4. Then enroll at https://timesheet.dmj.one to begin.
+5. Complete an accurate timesheet entry every working day during the engagement.
 
 Cloudflare inbound forwarding remains in place. Receipt, identity and completeness
 of signed returns require the owner's review of the incoming email; this change
